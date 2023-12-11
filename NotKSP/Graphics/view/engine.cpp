@@ -158,8 +158,8 @@ void Graphics::Engine::make_pipelines() {
 
 	//Sky
 	pipelineBuilder.set_overwrite_mode(false);
-	pipelineBuilder.specify_vertex_shader("GraphicsEngine/shaders/sky_vertex.spv");
-	pipelineBuilder.specify_fragment_shader("GraphicsEngine/shaders/sky_fragment.spv");
+	pipelineBuilder.specify_vertex_shader("Graphics/shaders/sky_vertex.spv");
+	pipelineBuilder.specify_fragment_shader("Graphics/shaders/sky_fragment.spv");
 	pipelineBuilder.specify_swapchain_extent(swapchainExtent);
 	pipelineBuilder.clear_depth_attachment();
 	pipelineBuilder.add_descriptor_set_layout(frameSetLayout[pipelineType::SKY]);
@@ -178,8 +178,8 @@ void Graphics::Engine::make_pipelines() {
 	pipelineBuilder.specify_vertex_format(
 		vkMesh::getPosColorBindingDescription(),
 		vkMesh::getPosColorAttributeDescriptions());
-	pipelineBuilder.specify_vertex_shader("GraphicsEngine/shaders/vertex.spv");
-	pipelineBuilder.specify_fragment_shader("GraphicsEngine/shaders/fragment.spv");
+	pipelineBuilder.specify_vertex_shader("Graphics/shaders/vertex.spv");
+	pipelineBuilder.specify_fragment_shader("Graphics/shaders/fragment.spv");
 	pipelineBuilder.specify_swapchain_extent(swapchainExtent);
 	pipelineBuilder.specify_depth_attachment(swapchainFrames[0].depthFormat, 1);
 	pipelineBuilder.add_descriptor_set_layout(frameSetLayout[pipelineType::STANDARD]);

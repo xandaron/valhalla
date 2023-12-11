@@ -1,6 +1,6 @@
 #pragma once
-#include "GraphicsEngine/view/engine.h"
-#include "PhysicsEngine/physics_engine.h"
+#include "Graphics/view/engine.h"
+#include "Physics/physics_engine.h"
 
 static class App {
 

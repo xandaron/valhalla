@@ -8,14 +8,15 @@ namespace PhysicsObject {
 
 	public:
 
-		Body(PhysicsData::Vector3D<double> position = PhysicsData::Vector3D<double>(), 
-			 PhysicsData::Vector3D<double> velocity = PhysicsData::Vector3D<double>(), 
-			 double mass = 0,
-			 PhysicsData::Vector3D<double> force = PhysicsData::Vector3D<double>()) {
+		Body(PhysicsData::Vector3D<double> position = PhysicsData::Vector3D<double>(),
+			 PhysicsData::Vector3D<double> velocity = PhysicsData::Vector3D<double>(),
+			 PhysicsData::Vector3D<double> force = PhysicsData::Vector3D<double>(),
+			 double mass = 0)
+		{
 			this->position = position;
 			this->velocity = velocity;
-			this->mass = mass;
 			this->force = force;
+			this->mass = mass;
 		}
 
 		PhysicsData::Vector3D<double> position;

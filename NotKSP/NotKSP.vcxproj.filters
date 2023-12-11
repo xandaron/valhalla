@@ -17,185 +17,185 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\engine.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="app.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\model\scene.cpp">
+    <ClCompile Include="Graphics\model\scene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkUtil\memory.cpp">
+    <ClCompile Include="Graphics\view\vkUtil\memory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\model\vertex_menagerie.cpp">
+    <ClCompile Include="Graphics\model\vertex_menagerie.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\control\logger.cpp">
+    <ClCompile Include="Graphics\control\logger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PhysicsEngine\physics_engine.cpp">
+    <ClCompile Include="Physics\physics_engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkImage\image.cpp">
+    <ClCompile Include="Graphics\view\vkImage\image.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkUtil\single_time_commands.cpp">
+    <ClCompile Include="Graphics\view\vkUtil\single_time_commands.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkInit\descriptors.cpp">
+    <ClCompile Include="Graphics\view\vkInit\descriptors.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkUtil\frame.cpp">
+    <ClCompile Include="Graphics\view\vkUtil\frame.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\cfg.cpp">
+    <ClCompile Include="Graphics\cfg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkMesh\obj_mesh.cpp">
+    <ClCompile Include="Graphics\view\vkMesh\obj_mesh.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkInit\pipeline.cpp">
+    <ClCompile Include="Graphics\view\vkInit\pipeline.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkImage\texture.cpp">
+    <ClCompile Include="Graphics\view\vkImage\texture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkImage\cubemap.cpp">
+    <ClCompile Include="Graphics\view\vkImage\cubemap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkUtil\shaders.cpp">
+    <ClCompile Include="Graphics\view\vkUtil\shaders.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkJob\job.cpp">
+    <ClCompile Include="Graphics\view\vkJob\job.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkJob\worker_thread.cpp">
+    <ClCompile Include="Graphics\view\vkJob\worker_thread.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GraphicsEngine\view\vkUtil\camera.cpp">
+    <ClCompile Include="Graphics\view\vkUtil\camera.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GraphicsEngine\view\engine.h">
+    <ClInclude Include="Graphics\view\engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\cfg.h">
+    <ClInclude Include="Graphics\cfg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkInit\instance.h">
+    <ClInclude Include="Graphics\view\vkInit\instance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\control\logging.h">
+    <ClInclude Include="Graphics\control\logging.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkInit\device.h">
+    <ClInclude Include="Graphics\view\vkInit\device.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkInit\swapchain.h">
+    <ClInclude Include="Graphics\view\vkInit\swapchain.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkUtil\queue_families.h">
+    <ClInclude Include="Graphics\view\vkUtil\queue_families.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkUtil\frame.h">
+    <ClInclude Include="Graphics\view\vkUtil\frame.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkUtil\shaders.h">
+    <ClInclude Include="Graphics\view\vkUtil\shaders.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkInit\framebuffer.h">
+    <ClInclude Include="Graphics\view\vkInit\framebuffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkInit\sync.h">
+    <ClInclude Include="Graphics\view\vkInit\sync.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkInit\pipeline.h">
+    <ClInclude Include="Graphics\view\vkInit\pipeline.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkInit\commands.h">
+    <ClInclude Include="Graphics\view\vkInit\commands.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="app.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkUtil\render_structs.h">
+    <ClInclude Include="Graphics\view\vkUtil\render_structs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\model\scene.h">
+    <ClInclude Include="Graphics\model\scene.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkMesh\mesh.h">
+    <ClInclude Include="Graphics\view\vkMesh\mesh.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkUtil\memory.h">
+    <ClInclude Include="Graphics\view\vkUtil\memory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\model\vertex_menagerie.h">
+    <ClInclude Include="Graphics\model\vertex_menagerie.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PhysicsEngine\vectors.h">
+    <ClInclude Include="Physics\vectors.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PhysicsEngine\physics_engine.h">
+    <ClInclude Include="Physics\physics_engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PhysicsEngine\body.h">
+    <ClInclude Include="Physics\body.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PhysicsEngine\constants.h">
+    <ClInclude Include="Physics\constants.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkInit\descriptors.h">
+    <ClInclude Include="Graphics\view\vkInit\descriptors.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkImage\image.h">
+    <ClInclude Include="Graphics\view\vkImage\image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkImage\stb_image.h">
+    <ClInclude Include="Graphics\view\vkImage\stb_image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkUtil\single_time_commands.h">
+    <ClInclude Include="Graphics\view\vkUtil\single_time_commands.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkMesh\obj_mesh.h">
+    <ClInclude Include="Graphics\view\vkMesh\obj_mesh.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkImage\texture.h">
+    <ClInclude Include="Graphics\view\vkImage\texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkImage\cubemap.h">
+    <ClInclude Include="Graphics\view\vkImage\cubemap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkJob\job.h">
+    <ClInclude Include="Graphics\view\vkJob\job.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkJob\worker_thread.h">
+    <ClInclude Include="Graphics\view\vkJob\worker_thread.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsEngine\view\vkUtil\camera.h">
+    <ClInclude Include="Graphics\view\vkUtil\camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="GraphicsEngine\shaders\fragment.spv">
+    <None Include="Graphics\shaders\fragment.spv">
       <Filter>shaders</Filter>
     </None>
-    <None Include="GraphicsEngine\shaders\shader.frag">
+    <None Include="Graphics\shaders\shader.frag">
       <Filter>shaders</Filter>
     </None>
-    <None Include="GraphicsEngine\shaders\shader.vert">
+    <None Include="Graphics\shaders\shader.vert">
       <Filter>shaders</Filter>
     </None>
-    <None Include="GraphicsEngine\shaders\shader_compile.bat">
+    <None Include="Graphics\shaders\shader_compile.bat">
       <Filter>shaders</Filter>
     </None>
-    <None Include="GraphicsEngine\shaders\vertex.spv">
+    <None Include="Graphics\shaders\vertex.spv">
       <Filter>shaders</Filter>
     </None>
-    <None Include="GraphicsEngine\shaders\sky_shader.vert" />
-    <None Include="GraphicsEngine\shaders\sky_shader.frag" />
+    <None Include="Graphics\shaders\sky_shader.vert" />
+    <None Include="Graphics\shaders\sky_shader.frag" />
   </ItemGroup>
 </Project>

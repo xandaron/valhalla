@@ -1,5 +1,5 @@
 #include "app.h"
-#include "GraphicsEngine/control/logging.h"
+#include "Graphics/control/logging.h"
 
 /**
 * Construct a new App.
@@ -97,16 +97,17 @@ void App::cameraMotion(double delta) {
 	}
 
 	if (middleMouse) {
-
 		double xpos, ypos;
 		glfwGetCursorPos(window, &xpos, &ypos);
 		cameraRotationVector.y = mousePos.y - ypos;
 		cameraRotationVector.z = mousePos.x - xpos;
-		myApp->mousePos = { xpos, ypos };
-		if (cameraRotationVector != glm::vec3({ 0, 0, 0 })) {
-			camera->rotateCamera(cameraRotationVector, delta);
-		}
+		mousePos = { xpos, ypos };
 	}
+	if (cameraRotationVector != glm::vec3({ 0, 0, 0 })) {
+		camera->rotateCamera(cameraRotationVector, delta);
+	}
+	cameraRotationVector.y = 0;
+	cameraRotationVector.z = 0;
 }
 
 /**
