@@ -31,17 +31,15 @@ Graphics::Engine::Engine(int width, int height, GLFWwindow* window) {
 	make_assets();
 	end_worker_threads();
 
-	vkUtil::CameraVectors cameraVectors;
-	cameraVectors.forwards = { 1.0f,  0.0f, 0.0f, 0.0f };
-	cameraVectors.right	   = { 0.0f, -1.0f, 0.0f, 0.0f };
-	cameraVectors.up	   = { 0.0f,  0.0f, 1.0f, 0.0f };
+	vkUtil::CameraView cameraVectors;
 
-	vkUtil::CameraView cameraView;
-	cameraView.eye	  = { -1.0f, 0.0f, 5.0f };
-	cameraView.center = {  1.0f, 0.0f, 5.0f };
-	cameraView.up	  = {  0.0f, 0.0f, 1.0f };
+	cameraVectors.eye	   = { -1.0f,  0.0f, 5.0f };
+	cameraVectors.center   = {  0.0f,  0.0f, 5.0f };
+	cameraVectors.forwards = {  1.0f,  0.0f, 0.0f };
+	cameraVectors.right	   = {  0.0f, -1.0f, 0.0f };
+	cameraVectors.up	   = {  0.0f,  0.0f, 1.0f };
 
-	camera = new vkUtil::Camera(cameraVectors, cameraView);
+	camera = new vkUtil::Camera(cameraVectors);
 }
 
 void Graphics::Engine::make_instance() {
@@ -388,9 +386,13 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Scene* scene) {
 
 	vkUtil::SwapChainFrame& _frame = swapchainFrames[imageIndex];
 
-	memcpy(_frame.cameraVectorWriteLocation, &(camera->cameraVectorData), sizeof(vkUtil::CameraVectors));
-
 	vkUtil::CameraView cameraViewData = camera->cameraViewData;
+	vkUtil::CameraVectors cameraVectorData;
+	cameraVectorData.forwards = { cameraViewData.forwards.x, cameraViewData.forwards.y, cameraViewData.forwards.z, 0 };
+	cameraVectorData.right	  = {    cameraViewData.right.x,    cameraViewData.right.y,    cameraViewData.right.z, 0 };
+	cameraVectorData.up		  = {       cameraViewData.up.x,       cameraViewData.up.y,       cameraViewData.up.z, 0 };
+	memcpy(_frame.cameraVectorWriteLocation, &(cameraVectorData), sizeof(vkUtil::CameraVectors));
+
 	glm::mat4 view = glm::lookAt(cameraViewData.eye, cameraViewData.center, cameraViewData.up);
 
 	glm::mat4 projection = glm::perspective(glm::radians(45.0f), static_cast<float>(swapchainExtent.width) / static_cast<float>(swapchainExtent.height), 0.1f, 100.0f);
@@ -405,7 +407,7 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Scene* scene) {
 	size_t i = 0;
 	for (std::pair<meshTypes, std::vector<glm::vec3>> pair : scene->positions) {
 		for (glm::vec3& position : pair.second) {
-			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0f), position);
+			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0), position);
 		}
 	}
 	memcpy(_frame.modelBufferWriteLocation, _frame.modelTransforms.data(), i * sizeof(glm::mat4));

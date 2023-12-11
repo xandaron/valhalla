@@ -17,8 +17,13 @@ public:
 	int numFrames;
 	float frameTime;
 
-	float cameraDX = 0;
-	float cameraDY = 0;
+	glm::vec3 cameraMovementVector = { 0, 0, 0 };
+	glm::vec3 cameraRotationVector = { 0, 0, 0 };
+	bool middleMouse = false;
+	glm::vec2 mousePos = { 0, 0 };
+
+	
+	App(int width, int height, bool debug);
 
 	bool build_glfw_window(int width, int height, bool debug);
 
@@ -28,13 +33,14 @@ public:
 
 	void calculateFrameRate();
 
-	void increaseCameraSpeed();
-	void decreaseCameraSpeed();
+	void cameraMotion(double delta);
 
-	App(int width, int height, bool debug);
-	~App();
 	void run();
+
+	~App();
 };
+
+extern App* myApp;
 
 static void error_callback(int error, const char* description)
 {
@@ -43,55 +49,104 @@ static void error_callback(int error, const char* description)
 
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	extern App* myApp;
-
-	
-
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
 	}
-
-	if (key == GLFW_KEY_LEFT_SHIFT) {
-		myApp->increaseCameraSpeed();
+	
+	if (key == GLFW_KEY_E) {
+		if (action == GLFW_PRESS) {
+			myApp->cameraRotationVector.x++;
+		}
+		else if (action == GLFW_RELEASE) {
+			myApp->cameraRotationVector.x--;
+		}
 	}
 
-	if (key == GLFW_KEY_LEFT_CONTROL) {
-		myApp->decreaseCameraSpeed();
+	if (key == GLFW_KEY_Q) {
+		if (action == GLFW_PRESS) {
+			myApp->cameraRotationVector.x--;
+		}
+		else if (action == GLFW_RELEASE) {
+			myApp->cameraRotationVector.x++;
+		}
 	}
 
 	if (key == GLFW_KEY_W) {
 		if (action == GLFW_PRESS) {
-			myApp->cameraDX++;
+			myApp->cameraMovementVector.x++;
 		}
 		else if (action == GLFW_RELEASE) {
-			myApp->cameraDX--;
+			myApp->cameraMovementVector.x--;
 		}
 	}
 
 	if (key == GLFW_KEY_S) {
 		if (action == GLFW_PRESS) {
-			myApp->cameraDX--;
+			myApp->cameraMovementVector.x--;
 		}
 		else if (action == GLFW_RELEASE) {
-			myApp->cameraDX++;
+			myApp->cameraMovementVector.x++;
 		}
 	}
 
 	if (key == GLFW_KEY_A) {
 		if (action == GLFW_PRESS) {
-			myApp->cameraDY--;
+			myApp->cameraMovementVector.y--;
 		}
 		else if (action == GLFW_RELEASE) {
-			myApp->cameraDY++;
+			myApp->cameraMovementVector.y++;
 		}
 	}
 
 	if (key == GLFW_KEY_D) {
 		if (action == GLFW_PRESS) {
-			myApp->cameraDY++;
+			myApp->cameraMovementVector.y++;
 		}
 		else if (action == GLFW_RELEASE) {
-			myApp->cameraDY--;
+			myApp->cameraMovementVector.y--;
 		}
+	}
+	
+	if (key == GLFW_KEY_SPACE) {
+		if (action == GLFW_PRESS) {
+			myApp->cameraMovementVector.z++;
+		}
+		else if (action == GLFW_RELEASE) {
+			myApp->cameraMovementVector.z--;
+		}
+	}
+
+	if (key == GLFW_KEY_LEFT_SHIFT) {
+		if (action == GLFW_PRESS) {
+			myApp->cameraMovementVector.z--;
+		}
+		else if (action == GLFW_RELEASE) {
+			myApp->cameraMovementVector.z++;
+		}
+	}
+
+	if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+		myApp->camera->reset();
+	}
+}
+
+static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+	if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+		if (action == GLFW_PRESS) {
+			myApp->middleMouse = true; 
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		}
+		else if (action == GLFW_RELEASE) {
+			myApp->middleMouse = false;
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		}
+	}
+}
+
+static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+	if (!myApp->middleMouse) {
+
 	}
 }

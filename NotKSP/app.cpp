@@ -56,24 +56,19 @@ bool App::build_glfw_window(int width, int height, bool debug) {
 	}
 
 	glfwSetKeyCallback(window, key_callback);
+	glfwSetMouseButtonCallback(window, mouse_button_callback);
+	glfwSetScrollCallback(window, scroll_callback);
 	return true;
 }
 
-/**
-* Start the App's main loop
-*/
-void App::run() {
 
-	while (!glfwWindowShouldClose(window)) {
-		glfwPollEvents();
-		double delta = calculateDeltaTime();
-		calculateFrameRate();
-		camera->moveCamera(cameraDX, cameraDY, delta);
-		graphicsEngine->render(scene);
-	}
+void App::updateTitle(std::string title) {
+
+	glfwSetWindowTitle(window, title.c_str());
 }
 
 double App::calculateDeltaTime() {
+
 	currentTime = glfwGetTime();
 	double delta = currentTime - lastTime;
 	lastTime = currentTime;
@@ -87,38 +82,49 @@ void App::calculateFrameRate() {
 
 	double delta = glfwGetTime() - fpsTimer;
 	if (delta >= 1) {
+		fpsTimer = glfwGetTime();
 		int framerate{ std::max(1, int(numFrames / delta)) };
+		updateTitle(std::to_string(framerate));
 		numFrames = -1;
 		frameTime = float(1000.0 / framerate);
 	}
 	++numFrames;
 }
 
-void App::updateTitle(std::string title) {
-	glfwSetWindowTitle(window, title.c_str());
-}
+void App::cameraMotion(double delta) {
 
-void App::increaseCameraSpeed() {
-
-	if (camera->speed >= 9.9f) {
-		return;
+	if (cameraMovementVector != glm::vec3({ 0, 0, 0 })) {
+		camera->moveCamera(cameraMovementVector, delta);
 	}
 
-	camera->speed += 0.1f;
-	std::string title = std::to_string(camera->speed);
-	updateTitle(title);
-}
+	if (middleMouse) {
 
-void App::decreaseCameraSpeed() {
-
-	if (camera->speed <= 1.1f) {
-		return;
+		double xpos, ypos;
+		glfwGetCursorPos(window, &xpos, &ypos);
+		cameraRotationVector.y = mousePos.y - ypos;
+		cameraRotationVector.z = mousePos.x - xpos;
+		myApp->mousePos = { xpos, ypos };
+		if (cameraRotationVector != glm::vec3({ 0, 0, 0 })) {
+			camera->rotateCamera(cameraRotationVector, delta);
+		}
 	}
-
-	camera->speed -= 0.1f;
-	std::string title = std::to_string(camera->speed);
-	updateTitle(title);
 }
+
+/**
+* Start the App's main loop
+*/
+void App::run() {
+
+	while (!glfwWindowShouldClose(window)) {
+		glfwPollEvents();
+		double delta = calculateDeltaTime();
+		calculateFrameRate();
+		cameraMotion(delta);
+		graphicsEngine->render(scene);
+	}
+}
+
+
 
 /**
 * App destructor.

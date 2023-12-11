@@ -21,6 +21,8 @@ namespace vkUtil {
 	struct CameraView {
 		glm::vec3 eye;
 		glm::vec3 center;
+		glm::vec3 forwards;
+		glm::vec3 right;
 		glm::vec3 up;
 	};
 
@@ -28,15 +30,18 @@ namespace vkUtil {
 
 	public:
 
-		Camera(CameraVectors cameraVectorData, CameraView cameraViewData);
+		Camera(CameraView cameraViewData);
 
-		void moveCamera(float dx, float dy, double delta);
+		void moveCamera(glm::vec3 movementVector, double delta);
 
-		void rotateCamera(float dt, double delta);
+		void rotateCamera(glm::vec3 rotationVector, double delta);
 
-		CameraVectors cameraVectorData;
+		void reset();
+
+		float movementSpeed = 5.0f;
+		float rotationSpeed = 5.0f;
+
 		CameraView cameraViewData;
-
-		float speed = 5.0f;
+		CameraView initialCameraViewData;
 	};
 }
