@@ -38,7 +38,7 @@ namespace vkUtil {
 
 		void reset();
 
-		float movementSpeed = 5.0f;
+		float movementSpeed = 15.0f;
 		float rotationSpeed = 5.0f;
 
 		CameraView cameraViewData;

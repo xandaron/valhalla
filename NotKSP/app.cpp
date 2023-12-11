@@ -61,7 +61,6 @@ bool App::build_glfw_window(int width, int height, bool debug) {
 	return true;
 }
 
-
 void App::updateTitle(std::string title) {
 
 	glfwSetWindowTitle(window, title.c_str());
@@ -123,8 +122,6 @@ void App::run() {
 		graphicsEngine->render(scene);
 	}
 }
-
-
 
 /**
 * App destructor.

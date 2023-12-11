@@ -265,9 +265,9 @@ void Graphics::Engine::make_assets() {
 	//Meshes
 	meshes = new VertexMenagerie();
 	std::unordered_map<meshTypes, std::vector<const char*>> model_filenames = {
-		{meshTypes::GROUND, {"models/ground.obj","models/ground.mtl"}},
-		{meshTypes::GIRL, {"models/girl.obj","models/girl.mtl"}},
-		{meshTypes::SKULL, {"models/skull.obj","models/skull.mtl"}}
+		{meshTypes::GROUND, {"models/ground.obj", "models/ground.mtl"}},
+		{meshTypes::GIRL, {"models/girl.obj", "models/girl.mtl"}},
+		{meshTypes::SKULL, {"models/skull.obj", "models/skull.mtl"}}
 	};
 	std::unordered_map<meshTypes, glm::mat4> preTransforms = {
 		{meshTypes::GROUND, glm::mat4(1.0f)},
@@ -362,10 +362,10 @@ void Graphics::Engine::make_assets() {
 	textureInfo.filenames = { {
 			"textures/sky_front.png",  //x+
 			"textures/sky_back.png",   //x-
-			"textures/sky_left.png",   //y+
-			"textures/sky_right.png",  //y-
-			"textures/sky_bottom.png", //z+
-			"textures/sky_top.png",    //z-
+			"textures/sky_right.png",  //y+
+			"textures/sky_left.png",   //y-
+			"textures/sky_top.png",    //z+
+			"textures/sky_bottom.png", //z-
 	} };
 	cubemap = new vkImage::CubeMap(textureInfo);
 }

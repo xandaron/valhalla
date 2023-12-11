@@ -23,7 +23,7 @@ vk::Image vkImage::make_image(ImageInputChunk input) {
 		VkImageUsageFlags        usage;
 		VkSharingMode            sharingMode;
 		uint32_t                 queueFamilyIndexCount;
-		const uint32_t* pQueueFamilyIndices;
+		const uint32_t*          pQueueFamilyIndices;
 		VkImageLayout            initialLayout;
 	} VkImageCreateInfo;
 	*/
