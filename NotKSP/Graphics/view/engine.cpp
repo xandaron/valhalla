@@ -27,10 +27,6 @@ Graphics::Engine::Engine(int width, int height, GLFWwindow* window) {
 
 	finalize_setup();
 
-	make_worker_threads();
-	make_assets();
-	end_worker_threads();
-
 	vkUtil::CameraView cameraVectors;
 
 	cameraVectors.eye	   = { -1.0f,  0.0f, 5.0f };
@@ -260,51 +256,46 @@ void Graphics::Engine::make_worker_threads() {
 	}
 }
 
-void Graphics::Engine::make_assets() {
+void Graphics::Engine::end_worker_threads() {
+
+	done = true;
+	size_t threadCount = std::thread::hardware_concurrency() - 1;
+
+	for (size_t i = 0; i < threadCount; ++i) {
+		workers[i].join();
+	}
+
+	std::cout << "Threads ended successfully." << std::endl;
+}
+
+void Graphics::Engine::make_assets(Game::AssetPack assetPack)
+{
+
+	std::vector<std::string> objectTypes = assetPack.objectTypes;
+	std::unordered_map<std::string, std::vector<const char*>> model_filenames = assetPack.model_filenames;
+	std::unordered_map<std::string, std::vector<const char*>> texture_filenames = assetPack.texture_filenames;
+	std::unordered_map<std::string, glm::mat4> preTransforms = assetPack.preTransforms;
 
 	//Meshes
 	meshes = new VertexMenagerie();
-	std::unordered_map<meshTypes, std::vector<const char*>> model_filenames = {
-		{meshTypes::GROUND, {"models/ground.obj", "models/ground.mtl"}},
-		{meshTypes::GIRL, {"models/girl.obj", "models/girl.mtl"}},
-		{meshTypes::SKULL, {"models/skull.obj", "models/skull.mtl"}}
-	};
-	std::unordered_map<meshTypes, glm::mat4> preTransforms = {
-		{meshTypes::GROUND, glm::mat4(1.0f)},
-		{meshTypes::GIRL, glm::rotate(
-			glm::mat4(1.0f),
-			glm::radians(180.0f),
-			glm::vec3(0.0f, 0.0f, 1.0f)
-		)},
-		{meshTypes::SKULL, glm::mat4(1.0f)}
-	};
-	std::unordered_map<meshTypes, vkMesh::ObjMesh> loaded_models;
-
-	//Materials
-
-	std::unordered_map<meshTypes, std::vector<const char*>> filenames = {
-		{meshTypes::GROUND, {"textures/ground.jpg"}},
-		{meshTypes::GIRL, {"textures/none.png"}},
-		{meshTypes::SKULL, {"textures/skull.png"}}
-	};
-
+	std::unordered_map<std::string, vkMesh::ObjMesh> loaded_models;
+	
 	//Make a descriptor pool to allocate sets.
 	vkInit::descriptorSetLayoutData bindings;
 	bindings.count = 1;
 	bindings.types.push_back(vk::DescriptorType::eCombinedImageSampler);
 
-	meshDescriptorPool = vkInit::make_descriptor_pool(device, static_cast<uint32_t>(filenames.size()) + 1, bindings);
+	meshDescriptorPool = vkInit::make_descriptor_pool(device, static_cast<uint32_t>(texture_filenames.size()) + 1, bindings);
 
 	//Submit loading work
 	workQueue.lock.lock();
-	std::vector<meshTypes> mesh_types = { {meshTypes::GROUND, meshTypes::GIRL, meshTypes::SKULL} };
-	for (meshTypes type : mesh_types) {
+	for (std::string type : objectTypes) {
 		vkImage::TextureInputChunk textureInfo;
 		textureInfo.logicalDevice = device;
 		textureInfo.physicalDevice = physicalDevice;
 		textureInfo.layout = meshSetLayout[pipelineType::STANDARD];
 		textureInfo.descriptorPool = meshDescriptorPool;
-		textureInfo.filenames = filenames[type];
+		textureInfo.filenames = texture_filenames[type];
 		materials[type] = new vkImage::Texture();
 		loaded_models[type] = vkMesh::ObjMesh();
 		workQueue.add(
@@ -312,7 +303,8 @@ void Graphics::Engine::make_assets() {
 		);
 		workQueue.add(
 			new vkJob::MakeModel(loaded_models[type],
-				model_filenames[type][0], model_filenames[type][1],
+				model_filenames[type][0], 
+				model_filenames[type][1],
 				preTransforms[type])
 		);
 	}
@@ -338,7 +330,7 @@ void Graphics::Engine::make_assets() {
 	}
 
 	//Consume loaded meshes
-	for (std::pair<meshTypes, vkMesh::ObjMesh> pair : loaded_models) {
+	for (std::pair<std::string, vkMesh::ObjMesh> pair : loaded_models) {
 		meshes->consume(pair.first, pair.second.vertices, pair.second.indices);
 	}
 
@@ -370,19 +362,13 @@ void Graphics::Engine::make_assets() {
 	cubemap = new vkImage::CubeMap(textureInfo);
 }
 
-void Graphics::Engine::end_worker_threads() {
-
-	done = true;
-	size_t threadCount = std::thread::hardware_concurrency() - 1;
-
-	for (size_t i = 0; i < threadCount; ++i) {
-		workers[i].join();
-	}
-
-	std::cout << "Threads ended successfully." << std::endl;
+void Graphics::Engine::load_assets(Game::AssetPack assetPack) {
+	make_worker_threads();
+	make_assets(assetPack);
+	end_worker_threads();
 }
 
-void Graphics::Engine::prepare_frame(uint32_t imageIndex, Scene* scene) {
+void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 
 	vkUtil::SwapChainFrame& _frame = swapchainFrames[imageIndex];
 
@@ -405,9 +391,9 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Scene* scene) {
 	memcpy(_frame.cameraMatrixWriteLocation, &(cameraMatrixData), sizeof(vkUtil::CameraMatrices));
 
 	size_t i = 0;
-	for (std::pair<meshTypes, std::vector<glm::vec3>> pair : scene->positions) {
-		for (glm::vec3& position : pair.second) {
-			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0), position);
+	for (std::pair<std::string, std::vector<PhysicsData::Vector3D<double>*>> pair : scene->positions) {
+		for (PhysicsData::Vector3D<double>* position : pair.second) {
+			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0), position->toGlm());
 		}
 	}
 	memcpy(_frame.modelBufferWriteLocation, _frame.modelTransforms.data(), i * sizeof(glm::mat4));
@@ -423,7 +409,7 @@ void Graphics::Engine::prepare_scene(vk::CommandBuffer commandBuffer) {
 	commandBuffer.bindIndexBuffer(meshes->indexBuffer.buffer, 0, vk::IndexType::eUint32);
 }
 
-void Graphics::Engine::record_draw_commands_sky(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Scene* scene) {
+void Graphics::Engine::record_draw_commands_sky(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene) {
 
 	vk::RenderPassBeginInfo renderPassInfo = {};
 	renderPassInfo.renderPass = renderpass[pipelineType::SKY];
@@ -452,7 +438,7 @@ void Graphics::Engine::record_draw_commands_sky(vk::CommandBuffer commandBuffer,
 	commandBuffer.endRenderPass();
 }
 
-void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Scene* scene) {
+void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene) {
 
 	vk::RenderPassBeginInfo renderPassInfo = {};
 	renderPassInfo.renderPass = renderpass[pipelineType::STANDARD];
@@ -481,7 +467,7 @@ void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffe
 	prepare_scene(commandBuffer);
 
 	uint32_t startInstance = 0;
-	for (std::pair<meshTypes, std::vector<glm::vec3>> pair : scene->positions) {
+	for (std::pair<std::string, std::vector<PhysicsData::Vector3D<double>*>> pair : scene->positions) {
 		render_objects(
 			commandBuffer, pair.first, startInstance, static_cast<uint32_t>(pair.second.size())
 		);
@@ -490,7 +476,7 @@ void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffe
 	commandBuffer.endRenderPass();
 }
 
-void Graphics::Engine::render_objects(vk::CommandBuffer commandBuffer, meshTypes objectType, uint32_t& startInstance, uint32_t instanceCount) {
+void Graphics::Engine::render_objects(vk::CommandBuffer commandBuffer, std::string objectType, uint32_t& startInstance, uint32_t instanceCount) {
 
 	int indexCount = meshes->indexCounts.find(objectType)->second;
 	int firstIndex = meshes->firstIndices.find(objectType)->second;
@@ -499,7 +485,7 @@ void Graphics::Engine::render_objects(vk::CommandBuffer commandBuffer, meshTypes
 	startInstance += instanceCount;
 }
 
-void Graphics::Engine::render(Scene* scene) {
+void Graphics::Engine::render(Game::Scene* scene) {
 
 	device.waitForFences(1, &(swapchainFrames[frameNumber].inFlight), VK_TRUE, UINT64_MAX);
 	device.resetFences(1, &(swapchainFrames[frameNumber].inFlight));

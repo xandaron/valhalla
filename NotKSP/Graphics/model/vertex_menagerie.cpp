@@ -4,7 +4,7 @@ VertexMenagerie::VertexMenagerie() {
 	indexOffset = 0;
 }
 
-void VertexMenagerie::consume(meshTypes type, std::vector<float>& vertexData, std::vector<uint32_t>& indexData) {
+void VertexMenagerie::consume(std::string type, std::vector<float>& vertexData, std::vector<uint32_t>& indexData) {
 
 	int indexCount = static_cast<int>(indexData.size());
 	int vertexCount = static_cast<int>(vertexData.size() / 11);

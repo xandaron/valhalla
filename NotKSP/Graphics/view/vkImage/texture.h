@@ -1,5 +1,5 @@
 #pragma once
-#include "../../cfg.h"
+#include "../../../cfg.h"
 #include "image.h"
 
 namespace vkImage {

@@ -20,9 +20,6 @@
     <ClCompile Include="app.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\model\scene.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Graphics\view\vkUtil\memory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -47,7 +44,7 @@
     <ClCompile Include="Graphics\view\vkUtil\frame.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\cfg.cpp">
+    <ClCompile Include="cfg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\view\vkMesh\obj_mesh.cpp">
@@ -77,12 +74,18 @@
     <ClCompile Include="Graphics\view\engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Game\scene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Physics\body.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Graphics\view\engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\cfg.h">
+    <ClInclude Include="cfg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\view\vkInit\instance.h">
@@ -122,9 +125,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\view\vkUtil\render_structs.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Graphics\model\scene.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\view\vkMesh\mesh.h">
@@ -176,6 +176,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\view\vkUtil\camera.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\scene.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

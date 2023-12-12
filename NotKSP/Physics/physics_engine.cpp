@@ -1,5 +1,4 @@
 #include "physics_engine.h"
-#include "vectors.h"
 #include <iostream>
 
 namespace Physics {

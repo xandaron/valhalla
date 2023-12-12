@@ -1,6 +1,8 @@
 #pragma once
+#include "cfg.h"
 #include "Graphics/view/engine.h"
 #include "Physics/physics_engine.h"
+#include "Game/scene.h"
 
 static class App {
 
@@ -10,7 +12,7 @@ public:
 	Graphics::Engine* graphicsEngine;
 	vkUtil::Camera* camera;
 	GLFWwindow* window;
-	Scene* scene;
+	Game::Scene* scene;
 
 	double lastTime, currentTime;
 	double fpsTimer;
@@ -24,6 +26,8 @@ public:
 
 	
 	App(int width, int height, bool debug);
+
+	std::vector<Game::SceneObject> prepateScene();
 
 	bool build_glfw_window(int width, int height, bool debug);
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "../cfg.h"
 
 namespace PhysicsConstants {
 	

@@ -1,5 +1,5 @@
 #pragma once
-#include "../../cfg.h"
+#include "../../../cfg.h"
 #include "../vkMesh/obj_mesh.h"
 #include "../vkImage/image.h"
 #include "../vkImage/texture.h"

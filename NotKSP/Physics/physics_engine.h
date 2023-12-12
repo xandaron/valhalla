@@ -1,4 +1,6 @@
 #pragma once
+#include "../cfg.h"
+#include "body.h"
 
 namespace Physics {
 

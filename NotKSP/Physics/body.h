@@ -1,5 +1,5 @@
 #pragma once
-#include "constants.h"
+#include "../cfg.h"
 #include "vectors.h"
 
 namespace PhysicsObject {
@@ -8,16 +8,7 @@ namespace PhysicsObject {
 
 	public:
 
-		Body(PhysicsData::Vector3D<double> position = PhysicsData::Vector3D<double>(),
-			 PhysicsData::Vector3D<double> velocity = PhysicsData::Vector3D<double>(),
-			 PhysicsData::Vector3D<double> force = PhysicsData::Vector3D<double>(),
-			 double mass = 0)
-		{
-			this->position = position;
-			this->velocity = velocity;
-			this->force = force;
-			this->mass = mass;
-		}
+		std::string name;
 
 		PhysicsData::Vector3D<double> position;
 		PhysicsData::Vector3D<double> velocity;
@@ -25,27 +16,17 @@ namespace PhysicsObject {
 
 		double mass;
 
-		PhysicsData::Vector3D<double> gravitationalForce(Body obj[]) {
+		Body(std::string name,
+			PhysicsData::Vector3D<double> position = PhysicsData::Vector3D<double>(0.0, 0.0, 0.0),
+			PhysicsData::Vector3D<double> velocity = PhysicsData::Vector3D<double>(0.0, 0.0, 0.0),
+			PhysicsData::Vector3D<double> force = PhysicsData::Vector3D<double>(0.0, 0.0, 0.0),
+			double mass = 0);
 
-			PhysicsData::Vector3D<double> resultantForce = PhysicsData::Vector3D<double>();
-			int len = sizeof(obj) / sizeof(Body);
-			for (int i = 0; i < len; i++) {
-				PhysicsData::Vector3D f = gravitationalForce(obj[i]);
-				resultantForce += f;
-			}
-			return resultantForce;
-		}
 
-		PhysicsData::Vector3D<double> gravitationalForce(Body obj) {
+		PhysicsData::Vector3D<double> gravitationalForce(std::vector<Body*> objs);
 
-			double r = position.dst(obj.position);
-			double f = PhysicsConstants::gravitationalConstant * (mass * obj.mass) / (r * r);
-			PhysicsData::Vector3D norm_dst = (position - obj.position).norm();
-			return norm_dst * f;
-		}
+		PhysicsData::Vector3D<double> gravitationalForce(Body* obj);
 
-		PhysicsData::Vector3D<double> momentum() {
-			return velocity * mass;
-		}
+		PhysicsData::Vector3D<double> momentum();
 	};
 }

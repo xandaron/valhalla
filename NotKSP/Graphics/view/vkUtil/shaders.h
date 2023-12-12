@@ -1,5 +1,5 @@
 #pragma once
-#include "cfg.h"
+#include "../../../cfg.h"
 #include "../../control/logging.h"
 
 namespace vkUtil {

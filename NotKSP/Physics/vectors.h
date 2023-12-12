@@ -1,28 +1,28 @@
 #pragma once
+#include "../cfg.h"
 #include <math.h>
-#include <string>
 
 namespace PhysicsData {
 
-	template <class T> 
+	template <class T>
 	class Vector3D {
 
 	public:
-		
+
+		T x, y, z;
+
 		Vector3D(T x = 0, T y = 0, T z = 0) {
 			this->x = x;
 			this->y = y;
 			this->z = z;
 		}
-		
-		T x, y, z;
-		
+
 		double dst(Vector3D<T> obj) {
-			return (this - obj).mag();
+			return (operator-(obj)).mag();
 		}
 
 		double mag() {
-			return sqrt(x*x + y*y + z*z);
+			return sqrt(x * x + y * y + z * z);
 		}
 
 		Vector3D<double> norm() {
@@ -59,11 +59,11 @@ namespace PhysicsData {
 		}
 
 		Vector3D<T> operator+=(Vector3D<T> const& obj) {
-			return this + obj;
+			return operator+(obj);
 		}
 
 		Vector3D<T> operator+=(T const& obj) {
-			return this + obj;
+			return operator+(obj);
 		}
 
 		Vector3D<T> operator-(Vector3D<T> const& obj) {
@@ -83,11 +83,11 @@ namespace PhysicsData {
 		}
 
 		Vector3D<T> operator-=(Vector3D<T> const& obj) {
-			return this - obj;
+			return operator-(obj);
 		}
 
 		Vector3D<T> operator-=(T const& obj) {
-			return this - obj;
+			return operator-(obj);
 		}
 
 		Vector3D<T> operator*(Vector3D<T> const& obj) {
@@ -103,11 +103,11 @@ namespace PhysicsData {
 		}
 
 		Vector3D<T> operator*=(Vector3D<T> const& obj) {
-			return this * obj;
+			return cross(obj);
 		}
 
 		Vector3D<T> operator*=(T const& obj) {
-			return this * obj;
+			return operator*(obj);
 		}
 
 		Vector3D<T> operator/(T const& obj) {
@@ -119,7 +119,7 @@ namespace PhysicsData {
 		}
 
 		Vector3D<T> operator/=(T const& obj) {
-			return this / obj;
+			return operator/(obj);
 		}
 
 		bool operator==(Vector3D<T> const& obj) {
@@ -132,10 +132,10 @@ namespace PhysicsData {
 		T& operator[](size_t i)
 		{
 			switch (i) {
-				case 0: return x;
-				case 1: return y;
-				case 2: return z;
-				default: throw "Error: Index out of bounds";
+			case 0: return x;
+			case 1: return y;
+			case 2: return z;
+			default: throw "Error: Index out of bounds";
 			}
 		}
 
@@ -147,6 +147,10 @@ namespace PhysicsData {
 		std::string toString() {
 			return "(" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + ")";
 		}
+
+		glm::vec3 toGlm() {
+			return glm::vec3({ x, y, z });
+		}
 	};
 
 	template <class T>
@@ -154,12 +158,12 @@ namespace PhysicsData {
 
 	public:
 
+		T x, y;
+
 		Vector2D(T x = 0, T y = 0) {
 			this->x = x;
 			this->y = y;
 		}
-
-		T x, y;
 
 		double dst(Vector2D<T> obj) {
 			return (this - obj).mag();

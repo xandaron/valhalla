@@ -1,5 +1,5 @@
 #pragma once
-#include "../cfg.h"
+#include "../../cfg.h"
 #include "../view/vkUtil/memory.h"
 
 struct vertexBufferFinalizationChunk {
@@ -13,11 +13,11 @@ class VertexMenagerie {
 public:
 	VertexMenagerie();
 	~VertexMenagerie();
-	void consume(meshTypes type, std::vector<float>& vertexData, std::vector<uint32_t>& indexData);
+	void consume(std::string type, std::vector<float>& vertexData, std::vector<uint32_t>& indexData);
 	void finalize(vertexBufferFinalizationChunk finalizationChunk);
 	Buffer vertexBuffer, indexBuffer;
-	std::unordered_map<meshTypes, int> firstIndices;
-	std::unordered_map<meshTypes, int> indexCounts;
+	std::unordered_map<std::string, int> firstIndices;
+	std::unordered_map<std::string, int> indexCounts;
 private:
 	int indexOffset;
 	vk::Device logicalDevice;

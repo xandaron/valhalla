@@ -142,7 +142,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="app.cpp" />
-    <ClCompile Include="Graphics\cfg.cpp" />
+    <ClCompile Include="Game\scene.cpp" />
+    <ClCompile Include="cfg.cpp" />
     <ClCompile Include="Graphics\view\engine.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\camera.cpp" />
     <ClCompile Include="Graphics\control\logger.cpp" />
@@ -160,12 +161,13 @@
     <ClCompile Include="Graphics\view\vkUtil\single_time_commands.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\memory.cpp" />
-    <ClCompile Include="Graphics\model\scene.cpp" />
+    <ClCompile Include="Physics\body.cpp" />
     <ClCompile Include="Physics\physics_engine.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="app.h" />
-    <ClInclude Include="Graphics\cfg.h" />
+    <ClInclude Include="Game\scene.h" />
+    <ClInclude Include="cfg.h" />
     <ClInclude Include="Graphics\view\vkUtil\camera.h" />
     <ClInclude Include="Graphics\view\vkImage\cubemap.h" />
     <ClInclude Include="Graphics\view\vkImage\image.h" />
@@ -188,7 +190,6 @@
     <ClInclude Include="Graphics\view\vkInit\pipeline.h" />
     <ClInclude Include="Graphics\view\vkUtil\queue_families.h" />
     <ClInclude Include="Graphics\view\vkUtil\render_structs.h" />
-    <ClInclude Include="Graphics\model\scene.h" />
     <ClInclude Include="Graphics\view\vkUtil\shaders.h" />
     <ClInclude Include="Graphics\view\vkInit\swapchain.h" />
     <ClInclude Include="Graphics\view\vkInit\sync.h" />

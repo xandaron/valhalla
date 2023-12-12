@@ -1,13 +1,13 @@
 #pragma once 
-#include "../cfg.h"
-#include "vkUtil/frame.h"
-#include "../model/scene.h"
+#include "../../cfg.h"
 #include "../model/vertex_menagerie.h"
+#include "vkUtil/frame.h"
 #include "vkImage/texture.h"
 #include "vkImage/cubemap.h"
 #include "vkJob/job.h"
 #include "vkJob/worker_thread.h"
 #include "vkUtil/camera.h"
+#include "../../Game/scene.h"
 
 namespace Graphics {
 
@@ -19,7 +19,9 @@ namespace Graphics {
 
 		~Engine();
 
-		void render(Scene* scene);
+		void load_assets(Game::AssetPack assetPackage);
+
+		void render(Game::Scene* scene);
 
 		vkUtil::Camera* getCameraPointer();
 
@@ -70,7 +72,7 @@ namespace Graphics {
 
 		//asset pointers
 		VertexMenagerie* meshes;
-		std::unordered_map<meshTypes, vkImage::Texture*> materials;
+		std::unordered_map<std::string, vkImage::Texture*> materials;
 		vkImage::CubeMap* cubemap;
 
 		//Job System
@@ -97,15 +99,14 @@ namespace Graphics {
 
 		//asset creation
 		void make_worker_threads();
-		void make_assets();
 		void end_worker_threads();
+		void make_assets(Game::AssetPack assetPack);
 
-		void prepare_frame(uint32_t imageIndex, Scene* scene);
+		void prepare_frame(uint32_t imageIndex, Game::Scene* scene);
 		void prepare_scene(vk::CommandBuffer commandBuffer);
-		void record_draw_commands_sky(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Scene* scene);
-		void record_draw_commands_scene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Scene* scene);
-		void render_objects(
-			vk::CommandBuffer commandBuffer, meshTypes objectType, uint32_t& startInstance, uint32_t instanceCount);
+		void record_draw_commands_sky(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene);
+		void record_draw_commands_scene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene);
+		void render_objects(vk::CommandBuffer commandBuffer, std::string objectType, uint32_t& startInstance, uint32_t instanceCount);
 
 		//Cleanup functions
 		void cleanup_swapchain();

@@ -17,10 +17,57 @@ App::App(int width, int height, bool debug) {
 	}
 
 	graphicsEngine = new Graphics::Engine(width, height, window);
+	std::vector<Game::SceneObject> sceneObjects = prepateScene();
+	scene = new Game::Scene(sceneObjects);
+	graphicsEngine->load_assets(scene->assetPack);
+
 	camera = graphicsEngine->getCameraPointer();
-	scene = new Scene();
 
 	physicsEngine = new Physics::PhysicsEngine();
+}
+
+/**
+* This is a temp function
+* The goal is to store the scene objects in files and load them into the program.
+* 
+* Then a second scene file will be used to describe what objects are required and where they 
+* should be positioned.
+* 
+* This means in the program we can simply load the scene file and it will take care of itself.
+*/
+std::vector<Game::SceneObject> App::prepateScene() {
+	
+	std::vector<Game::SceneObject> sceneObjects;
+	
+	// Skull
+	Game::SceneObject sceneObject;
+	sceneObject.name = "skull";
+	sceneObject.model_filenames = { "models/skull.obj", "models/skull.mtl" };
+	sceneObject.texture_filenames = { "textures/skull.png" };
+	sceneObject.preTransforms = glm::mat4(1.0f);
+	sceneObject.objects.push_back(new PhysicsObject::Body("skull_0", PhysicsData::Vector3D<double>(15.0, 5.0, 1.0)));
+	sceneObject.objects.push_back(new PhysicsObject::Body("skull_1", PhysicsData::Vector3D<double>(15.0, -5.0, 1.0)));
+	sceneObjects.push_back(sceneObject);
+
+	// Girl
+	sceneObject.name = "girl";
+	sceneObject.model_filenames = { "models/girl.obj", "models/girl.mtl" };
+	sceneObject.texture_filenames = { "textures/none.png" };
+	sceneObject.preTransforms = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	sceneObject.objects.clear();
+	sceneObject.objects.push_back(new PhysicsObject::Body("girl_0", PhysicsData::Vector3D<double>(5.0, 0.0, 0.0)));
+	sceneObjects.push_back(sceneObject);
+
+	// Ground
+	sceneObject.name = "ground";
+	sceneObject.model_filenames = { "models/ground.obj", "models/ground.mtl" };
+	sceneObject.texture_filenames = { "textures/ground.jpg" };
+	sceneObject.preTransforms = glm::mat4(1.0f);
+	sceneObject.objects.clear();
+	sceneObject.objects.push_back(new PhysicsObject::Body("ground_0", PhysicsData::Vector3D<double>(10.0, 0.0, 0.0)));
+	sceneObjects.push_back(sceneObject);
+
+	return sceneObjects;
 }
 
 /**
