@@ -12,6 +12,16 @@ namespace Physics {
 
 		~PhysicsEngine();
 
-		void vectorTest();
+		void update(double delta);
+
+		void setBodys(std::vector<PhysicsObject::Body*> bodys);
+
+		void clearBodys();
+
+	private:
+
+		std::vector<PhysicsObject::Body*> bodys;
+
+		void updateBodys(double delta);
 	};
 }

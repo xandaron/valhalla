@@ -28,6 +28,6 @@ namespace Game {
 
 		AssetPack assetPack;
 		std::vector<PhysicsObject::Body*> objects;
-		std::unordered_map<std::string, std::vector<PhysicsData::Vector3D<double>*>> positions;
+		std::unordered_map<std::string, std::vector<std::vector<PhysicsData::Vector3D<double>*>>> positions;
 	};
 }

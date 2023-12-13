@@ -24,6 +24,7 @@ App::App(int width, int height, bool debug) {
 	camera = graphicsEngine->getCameraPointer();
 
 	physicsEngine = new Physics::PhysicsEngine();
+	physicsEngine->setBodys(scene->objects);
 }
 
 /**
@@ -38,15 +39,25 @@ App::App(int width, int height, bool debug) {
 std::vector<Game::SceneObject> App::prepateScene() {
 	
 	std::vector<Game::SceneObject> sceneObjects;
+	Game::SceneObject sceneObject;
+	PhysicsObject::BodyDescriptor bodyDescriptor;
 	
 	// Skull
-	Game::SceneObject sceneObject;
 	sceneObject.name = "skull";
 	sceneObject.model_filenames = { "models/skull.obj", "models/skull.mtl" };
 	sceneObject.texture_filenames = { "textures/skull.png" };
 	sceneObject.preTransforms = glm::mat4(1.0f);
-	sceneObject.objects.push_back(new PhysicsObject::Body("skull_0", PhysicsData::Vector3D<double>(15.0, 5.0, 1.0)));
-	sceneObject.objects.push_back(new PhysicsObject::Body("skull_1", PhysicsData::Vector3D<double>(15.0, -5.0, 1.0)));
+
+	bodyDescriptor.name = "skull_0";
+	bodyDescriptor.position = PhysicsData::Vector3D<double>(15.0, 5.0, 1.0);
+	bodyDescriptor.rotationAxis = PhysicsData::Vector3D<double>(0.0, 0.0, 1.0);
+
+	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
+
+	bodyDescriptor.name = "skull_1";
+	bodyDescriptor.position = PhysicsData::Vector3D<double>(15.0, -5.0, 1.0);
+
+	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
 	sceneObjects.push_back(sceneObject);
 
 	// Girl
@@ -55,7 +66,13 @@ std::vector<Game::SceneObject> App::prepateScene() {
 	sceneObject.texture_filenames = { "textures/none.png" };
 	sceneObject.preTransforms = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	sceneObject.objects.clear();
-	sceneObject.objects.push_back(new PhysicsObject::Body("girl_0", PhysicsData::Vector3D<double>(5.0, 0.0, 0.0)));
+
+	bodyDescriptor.name = "girl_0";
+	bodyDescriptor.position = PhysicsData::Vector3D<double>(5.0, 0.0, 0.0);
+	bodyDescriptor.rotationalSpeed = 90.0;
+	bodyDescriptor.velocity = 0.0;
+
+	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
 	sceneObjects.push_back(sceneObject);
 
 	// Ground
@@ -64,7 +81,13 @@ std::vector<Game::SceneObject> App::prepateScene() {
 	sceneObject.texture_filenames = { "textures/ground.jpg" };
 	sceneObject.preTransforms = glm::mat4(1.0f);
 	sceneObject.objects.clear();
-	sceneObject.objects.push_back(new PhysicsObject::Body("ground_0", PhysicsData::Vector3D<double>(10.0, 0.0, 0.0)));
+
+	bodyDescriptor.name = "ground_0";
+	bodyDescriptor.position = PhysicsData::Vector3D<double>(10.0, 0.0, 0.0);
+	bodyDescriptor.rotationalSpeed = 0.0;
+	bodyDescriptor.velocity = 0.0;
+
+	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
 	sceneObjects.push_back(sceneObject);
 
 	return sceneObjects;
@@ -167,6 +190,7 @@ void App::run() {
 		double delta = calculateDeltaTime();
 		calculateFrameRate();
 		cameraMotion(delta);
+		physicsEngine->update(delta);
 		graphicsEngine->render(scene);
 	}
 }

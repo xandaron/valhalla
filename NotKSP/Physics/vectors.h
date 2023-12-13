@@ -11,10 +11,46 @@ namespace PhysicsData {
 
 		T x, y, z;
 
-		Vector3D(T x = 0, T y = 0, T z = 0) {
+		Vector3D(T x = 0.0, T y = 0.0, T z = 0.0) {
 			this->x = x;
 			this->y = y;
 			this->z = z;
+		}
+
+		~Vector3D() {
+
+		}
+
+		void rotate(double theta, Vector3D<double> axis) {
+			
+			glm::f64mat3 antisymmetricMatrix = glm::f64mat3({
+				{ 0.0, axis.z, -axis.y },
+				{ -axis.z, 0.0, axis.x },
+				{ axis.y, -axis.x, 0.0 }
+			});
+			glm::f64mat3 rotation = glm::f64mat3(1.0)
+				+ glm::sin(glm::radians(theta)) * antisymmetricMatrix
+				+ (1 - glm::cos(glm::radians(theta))) * antisymmetricMatrix * antisymmetricMatrix;
+
+			glm::f64vec3 r = rotation * toGlm();
+			if (r.x >= 360) {
+				this->x = r.x - 360;
+			}
+			else {
+				this->x = r.x;
+			}
+			if (r.y >= 360) {
+				this->y = r.y - 360;
+			}
+			else {
+				this->y = r.y;
+			}
+			if (r.z >= 360) {
+				this->z = r.z - 360;
+			}
+			else {
+				this->z = r.z;
+			}
 		}
 
 		double dst(Vector3D<T> obj) {
@@ -163,6 +199,10 @@ namespace PhysicsData {
 		Vector2D(T x = 0, T y = 0) {
 			this->x = x;
 			this->y = y;
+		}
+
+		~Vector2D() {
+
 		}
 
 		double dst(Vector2D<T> obj) {

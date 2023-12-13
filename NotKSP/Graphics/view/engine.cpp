@@ -391,9 +391,12 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 	memcpy(_frame.cameraMatrixWriteLocation, &(cameraMatrixData), sizeof(vkUtil::CameraMatrices));
 
 	size_t i = 0;
-	for (std::pair<std::string, std::vector<PhysicsData::Vector3D<double>*>> pair : scene->positions) {
-		for (PhysicsData::Vector3D<double>* position : pair.second) {
-			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0), position->toGlm());
+	for (std::pair<std::string, std::vector<std::vector<PhysicsData::Vector3D<double>*>>> pair : scene->positions) {
+		for (std::vector<PhysicsData::Vector3D<double>*> position : pair.second) {
+			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0), position[0]->toGlm())
+										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position[1]->x), glm::vec3(1, 0, 0))
+										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position[1]->y), glm::vec3(0, 1, 0))
+										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position[1]->z), glm::vec3(0, 0, 1));
 		}
 	}
 	memcpy(_frame.modelBufferWriteLocation, _frame.modelTransforms.data(), i * sizeof(glm::mat4));
@@ -467,7 +470,7 @@ void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffe
 	prepare_scene(commandBuffer);
 
 	uint32_t startInstance = 0;
-	for (std::pair<std::string, std::vector<PhysicsData::Vector3D<double>*>> pair : scene->positions) {
+	for (std::pair<std::string, std::vector<std::vector<PhysicsData::Vector3D<double>*>>> pair : scene->positions) {
 		render_objects(
 			commandBuffer, pair.first, startInstance, static_cast<uint32_t>(pair.second.size())
 		);
