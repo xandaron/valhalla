@@ -1,6 +1,6 @@
 #pragma once
 #include "../../../cfg.h"
-#include "camera.h"
+#include "../../../Game/camera.h"
 
 namespace vkUtil {
 
@@ -32,11 +32,11 @@ namespace vkUtil {
 		vk::Fence inFlight;
 
 		//Resources
-		CameraMatrices cameraMatrixData;
+		Game::CameraMatrices cameraMatrixData;
 		Buffer cameraMatrixBuffer;
 		void* cameraMatrixWriteLocation;
 
-		CameraVectors cameraVectorData;
+		Game::CameraVectors cameraVectorData;
 		Buffer cameraVectorBuffer;
 		void* cameraVectorWriteLocation;
 

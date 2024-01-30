@@ -8,7 +8,7 @@ namespace Game {
 		std::string name;
 		std::vector<const char*> model_filenames;
 		std::vector<const char*> texture_filenames;
-		glm::mat4 preTransforms;
+		glm::f64mat4 preTransforms;
 		std::vector<PhysicsObject::Body*> objects;
 	};
 
@@ -28,6 +28,6 @@ namespace Game {
 
 		AssetPack assetPack;
 		std::vector<PhysicsObject::Body*> objects;
-		std::unordered_map<std::string, std::vector<std::vector<PhysicsData::Vector3D<double>*>>> positions;
+		std::unordered_map<std::string, std::vector<std::pair<glm::f64vec3*, glm::f64vec3*>>> positions;
 	};
 }

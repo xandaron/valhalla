@@ -1,7 +1,6 @@
 #include "frame.h"
 #include "memory.h"
 #include "../vkImage/image.h"
-#include "camera.h"
 
 void vkUtil::SwapChainFrame::make_descriptor_resources() {
 
@@ -9,16 +8,16 @@ void vkUtil::SwapChainFrame::make_descriptor_resources() {
 	input.logicalDevice = logicalDevice;
 	input.memoryProperties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
 	input.physicalDevice = physicalDevice;
-	input.size = sizeof(CameraVectors);
+	input.size = sizeof(Game::CameraVectors);
 	input.usage = vk::BufferUsageFlagBits::eUniformBuffer;
 	cameraVectorBuffer = createBuffer(input);
 
-	cameraVectorWriteLocation = logicalDevice.mapMemory(cameraVectorBuffer.bufferMemory, 0, sizeof(CameraVectors));
+	cameraVectorWriteLocation = logicalDevice.mapMemory(cameraVectorBuffer.bufferMemory, 0, sizeof(Game::CameraVectors));
 
-	input.size = sizeof(CameraMatrices);
+	input.size = sizeof(Game::CameraMatrices);
 	cameraMatrixBuffer = createBuffer(input);
 
-	cameraMatrixWriteLocation = logicalDevice.mapMemory(cameraMatrixBuffer.bufferMemory, 0, sizeof(CameraMatrices));
+	cameraMatrixWriteLocation = logicalDevice.mapMemory(cameraMatrixBuffer.bufferMemory, 0, sizeof(Game::CameraMatrices));
 
 	input.size = 1024 * sizeof(glm::mat4);
 	input.usage = vk::BufferUsageFlagBits::eStorageBuffer;
@@ -28,7 +27,7 @@ void vkUtil::SwapChainFrame::make_descriptor_resources() {
 
 	modelTransforms.reserve(1024);
 	for (int i = 0; i < 1024; ++i) {
-		modelTransforms.push_back(glm::mat4(1.0f));
+		modelTransforms.push_back(glm::mat4(1.0));
 	}
 
 	/*
@@ -40,16 +39,15 @@ void vkUtil::SwapChainFrame::make_descriptor_resources() {
 	*/
 	cameraVectorDescriptor.buffer = cameraVectorBuffer.buffer;
 	cameraVectorDescriptor.offset = 0;
-	cameraVectorDescriptor.range = sizeof(CameraVectors);
+	cameraVectorDescriptor.range = sizeof(Game::CameraVectors);
 
 	cameraMatrixDescriptor.buffer = cameraMatrixBuffer.buffer;
 	cameraMatrixDescriptor.offset = 0;
-	cameraMatrixDescriptor.range = sizeof(CameraMatrices);
+	cameraMatrixDescriptor.range = sizeof(Game::CameraMatrices);
 
 	ssboDescriptor.buffer = modelBuffer.buffer;
 	ssboDescriptor.offset = 0;
 	ssboDescriptor.range = 1024 * sizeof(glm::mat4);
-
 }
 
 void vkUtil::SwapChainFrame::make_depth_resources() {

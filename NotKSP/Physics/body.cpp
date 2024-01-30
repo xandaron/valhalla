@@ -1,5 +1,5 @@
-#include "body.h"
 #include "constants.h"
+#include "body.h"
 
 PhysicsObject::Body::Body(BodyDescriptor bodyDescriptor)
 {
@@ -7,17 +7,43 @@ PhysicsObject::Body::Body(BodyDescriptor bodyDescriptor)
 	position = bodyDescriptor.position;
 	velocity = bodyDescriptor.velocity;
 	orientation = bodyDescriptor.orientation;
-	rotationAxis = bodyDescriptor.rotationAxis.norm();
+	rotationAxis = glm::normalize(bodyDescriptor.rotationAxis);
 	rotationalSpeed = bodyDescriptor.rotationalSpeed;
 	force = bodyDescriptor.force;
 	mass = bodyDescriptor.mass;
 	locked = bodyDescriptor.locked;
+	coefRestitution = bodyDescriptor.coefRestitution;
+	coefFriction = bodyDescriptor.coefFriction;
+	hitbox = new Collision::BoundingSphere(position, bodyDescriptor.hitboxDescriptor.radius);
 }
 
-void PhysicsObject::Body::update(double delta) {
+PhysicsObject::Body::~Body() {
+	delete hitbox;
+	delete position;
+}
 
-	position = position + (velocity * delta);
-	orientation = orientation + (rotationAxis * rotationalSpeed * delta);
+void PhysicsObject::Body::init(std::vector<Body*> objs) {
+	gravitationalForce(objs);
+}
+
+void PhysicsObject::Body::firstUpdate(double delta) {
+	if (!locked) {
+		velocity += (force / mass) * (delta / 2.0);
+		position->xyz += velocity * delta;
+		force = glm::f64vec3(0.0);
+	}
+}
+
+bool PhysicsObject::Body::checkColliding(Body* obj) {
+	return hitbox->checkColliding(obj->hitbox);
+}
+
+void PhysicsObject::Body::secondUpdate(double delta, std::vector<Body*> objs) {
+	if (!locked) {
+		gravitationalForce(objs);
+		velocity += (force / mass) * (delta / 2.0);
+		orientation += (rotationAxis * rotationalSpeed * delta);
+	}
 
 	if (orientation.x >= 360) {
 		orientation.x -= 360;
@@ -39,36 +65,38 @@ void PhysicsObject::Body::update(double delta) {
 	}
 }
 
-void PhysicsObject::Body::lock() {
-	locked = true;
+void PhysicsObject::Body::setLock(bool lock) {
+	locked = lock;
 }
 
-void PhysicsObject::Body::unlock() {
-	locked = false;
-}
+void PhysicsObject::Body::gravitationalForce(std::vector<Body*> objs) {
 
-PhysicsData::Vector3D<double> PhysicsObject::Body::gravitationalForce(std::vector<Body*> objs) {
+	if (locked) { return; }
 
-	PhysicsData::Vector3D<double> resultantForce = PhysicsData::Vector3D<double>();
+	glm::f64vec3 resultantForce = glm::f64vec3();
 	for (Body* obj : objs) {
-		PhysicsData::Vector3D<double> f = gravitationalForce(obj);
+		glm::f64vec3 f = gravitationalForce(obj);
 		resultantForce += f;
 	}
-	return resultantForce;
+	force += resultantForce;
 }
 
-PhysicsData::Vector3D<double> PhysicsObject::Body::gravitationalForce(Body* obj) {
+glm::f64vec3 PhysicsObject::Body::gravitationalForce(Body* obj) {
 
-	double r = position.dst(obj->position);
+	if (locked) { return glm::f64vec3(0.0); }
+
+	double r = glm::distance(*position, *obj->position);
+	if (r == 0.0) { return glm::f64vec3(0.0); }
+
 	double f = PhysicsConstants::gravitationalConstant * (mass * obj->mass) / (r * r);
-	PhysicsData::Vector3D norm_dst = (position - obj->position).norm();
+	glm::f64vec3 norm_dst = glm::normalize(*obj->position - *position);
 	return norm_dst * f;
 }
 
-void PhysicsObject::Body::applyForce(PhysicsData::Vector3D<double> f) {
+void PhysicsObject::Body::applyForce(glm::f64vec3 f) {
 	force += f;
 }
 
-PhysicsData::Vector3D<double> PhysicsObject::Body::momentum() {
+glm::f64vec3 PhysicsObject::Body::momentum() {
 	return velocity * mass;
 }

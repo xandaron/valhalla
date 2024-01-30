@@ -68,7 +68,7 @@
     <ClCompile Include="Graphics\view\vkJob\worker_thread.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\view\vkUtil\camera.cpp">
+    <ClCompile Include="Game\camera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\view\engine.cpp">
@@ -78,6 +78,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Physics\body.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Physics\collision\bounding_sphere.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -175,10 +178,19 @@
     <ClInclude Include="Graphics\view\vkJob\worker_thread.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\view\vkUtil\camera.h">
+    <ClInclude Include="Game\camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Game\scene.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\collision\collider.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\collision\bounding_sphere.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\collision\hitboxes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -200,5 +212,8 @@
     </None>
     <None Include="Graphics\shaders\sky_shader.vert" />
     <None Include="Graphics\shaders\sky_shader.frag" />
+  </ItemGroup>
+  <ItemGroup>
+    <Object Include="models\sphere.obj" />
   </ItemGroup>
 </Project>

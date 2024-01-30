@@ -6,7 +6,7 @@
 #include "vkImage/cubemap.h"
 #include "vkJob/job.h"
 #include "vkJob/worker_thread.h"
-#include "vkUtil/camera.h"
+#include "../../Game/camera.h"
 #include "../../Game/scene.h"
 
 namespace Graphics {
@@ -15,7 +15,7 @@ namespace Graphics {
 
 	public:
 
-		Engine(int width, int height, GLFWwindow* window);
+		Engine(int width, int height, GLFWwindow* window, Game::Camera* camera);
 
 		~Engine();
 
@@ -23,7 +23,7 @@ namespace Graphics {
 
 		void render(Game::Scene* scene);
 
-		vkUtil::Camera* getCameraPointer();
+		Game::Camera* getCameraPointer();
 
 	private:
 
@@ -33,7 +33,7 @@ namespace Graphics {
 		GLFWwindow* window;
 
 		//Camera pointer
-		vkUtil::Camera* camera;
+		Game::Camera* camera;
 
 		//instance-related variables
 		vk::Instance instance{ nullptr };

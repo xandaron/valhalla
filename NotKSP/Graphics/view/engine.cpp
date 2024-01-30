@@ -10,7 +10,7 @@
 #include "vkMesh/mesh.h"
 #include "vkMesh/obj_mesh.h"
 
-Graphics::Engine::Engine(int width, int height, GLFWwindow* window) {
+Graphics::Engine::Engine(int width, int height, GLFWwindow* window, Game::Camera* camera) {
 
 	this->width = width;
 	this->height = height;
@@ -26,16 +26,8 @@ Graphics::Engine::Engine(int width, int height, GLFWwindow* window) {
 	make_pipelines();
 
 	finalize_setup();
-
-	vkUtil::CameraView cameraVectors;
-
-	cameraVectors.eye	   = { -1.0f,  0.0f, 5.0f };
-	cameraVectors.center   = {  0.0f,  0.0f, 5.0f };
-	cameraVectors.forwards = {  1.0f,  0.0f, 0.0f };
-	cameraVectors.right	   = {  0.0f, -1.0f, 0.0f };
-	cameraVectors.up	   = {  0.0f,  0.0f, 1.0f };
-
-	camera = new vkUtil::Camera(cameraVectors);
+	
+	this->camera = camera;
 }
 
 void Graphics::Engine::make_instance() {
@@ -372,34 +364,34 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 
 	vkUtil::SwapChainFrame& _frame = swapchainFrames[imageIndex];
 
-	vkUtil::CameraView cameraViewData = camera->cameraViewData;
-	vkUtil::CameraVectors cameraVectorData;
-	cameraVectorData.forwards = { cameraViewData.forwards.x, cameraViewData.forwards.y, cameraViewData.forwards.z, 0 };
-	cameraVectorData.right	  = {    cameraViewData.right.x,    cameraViewData.right.y,    cameraViewData.right.z, 0 };
-	cameraVectorData.up		  = {       cameraViewData.up.x,       cameraViewData.up.y,       cameraViewData.up.z, 0 };
-	memcpy(_frame.cameraVectorWriteLocation, &(cameraVectorData), sizeof(vkUtil::CameraVectors));
+	Game::CameraView cameraViewData = camera->cameraViewData;
+	Game::CameraVectors cameraVectorData;
+	cameraVectorData.forwards = { cameraViewData.forwards.x, cameraViewData.forwards.y, cameraViewData.forwards.z, 0.0 };
+	cameraVectorData.right	  = {    cameraViewData.right.x,    cameraViewData.right.y,    cameraViewData.right.z, 0.0 };
+	cameraVectorData.up		  = {       cameraViewData.up.x,       cameraViewData.up.y,       cameraViewData.up.z, 0.0 };
+	memcpy(_frame.cameraVectorWriteLocation, &(cameraVectorData), sizeof(Game::CameraVectors));
 
 	glm::mat4 view = glm::lookAt(cameraViewData.eye, cameraViewData.center, cameraViewData.up);
 
-	glm::mat4 projection = glm::perspective(glm::radians(45.0f), static_cast<float>(swapchainExtent.width) / static_cast<float>(swapchainExtent.height), 0.1f, 100.0f);
+	glm::mat4 projection = glm::perspective(glm::radians(45.0), static_cast<double>(swapchainExtent.width) / static_cast<double>(swapchainExtent.height), 0.1, 1274200000000.0);
 	projection[1][1] *= -1;
 
-	vkUtil::CameraMatrices cameraMatrixData;
+	Game::CameraMatrices cameraMatrixData;
 	cameraMatrixData.view = view;
 	cameraMatrixData.projection = projection;
 	cameraMatrixData.viewProjection = projection * view;
-	memcpy(_frame.cameraMatrixWriteLocation, &(cameraMatrixData), sizeof(vkUtil::CameraMatrices));
+	memcpy(_frame.cameraMatrixWriteLocation, &(cameraMatrixData), sizeof(Game::CameraMatrices));
 
 	size_t i = 0;
-	for (std::pair<std::string, std::vector<std::vector<PhysicsData::Vector3D<double>*>>> pair : scene->positions) {
-		for (std::vector<PhysicsData::Vector3D<double>*> position : pair.second) {
-			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0), position[0]->toGlm())
-										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position[1]->x), glm::vec3(1, 0, 0))
-										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position[1]->y), glm::vec3(0, 1, 0))
-										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position[1]->z), glm::vec3(0, 0, 1));
+	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, glm::f64vec3*>>> pair : scene->positions) {
+		for (std::pair<glm::f64vec3*, glm::f64vec3*> position : pair.second) {
+			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0), glm::vec3(position.first->x, position.first->y, position.first->z))
+										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position.second->x), glm::vec3(1, 0, 0))
+										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position.second->y), glm::vec3(0, 1, 0))
+										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position.second->z), glm::vec3(0, 0, 1));
 		}
 	}
-	memcpy(_frame.modelBufferWriteLocation, _frame.modelTransforms.data(), i * sizeof(glm::mat4));
+	memcpy(_frame.modelBufferWriteLocation, _frame.modelTransforms.data(), i * sizeof(glm::f64mat4));
 
 	_frame.write_descriptor_set();
 }
@@ -470,7 +462,7 @@ void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffe
 	prepare_scene(commandBuffer);
 
 	uint32_t startInstance = 0;
-	for (std::pair<std::string, std::vector<std::vector<PhysicsData::Vector3D<double>*>>> pair : scene->positions) {
+	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, glm::f64vec3*>>> pair : scene->positions) {
 		render_objects(
 			commandBuffer, pair.first, startInstance, static_cast<uint32_t>(pair.second.size())
 		);
@@ -493,7 +485,6 @@ void Graphics::Engine::render(Game::Scene* scene) {
 	device.waitForFences(1, &(swapchainFrames[frameNumber].inFlight), VK_TRUE, UINT64_MAX);
 	device.resetFences(1, &(swapchainFrames[frameNumber].inFlight));
 
-	//acquireNextImageKHR(vk::SwapChainKHR, timeout, semaphore_to_signal, fence)
 	uint32_t imageIndex;
 	try {
 		vk::ResultValue acquire = device.acquireNextImageKHR(
@@ -605,7 +596,7 @@ void Graphics::Engine::cleanup_swapchain() {
 	device.destroyDescriptorPool(frameDescriptorPool);
 }
 
-vkUtil::Camera* Graphics::Engine::getCameraPointer() {
+Game::Camera* Graphics::Engine::getCameraPointer() {
 	return camera;
 }
 

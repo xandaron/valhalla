@@ -2,16 +2,19 @@
 #include "cfg.h"
 #include "Graphics/view/engine.h"
 #include "Physics/physics_engine.h"
+#include "Game/camera.h"
 #include "Game/scene.h"
 
 static class App {
 
 public:
-	Physics::PhysicsEngine* physicsEngine;
 
-	Graphics::Engine* graphicsEngine;
-	vkUtil::Camera* camera;
+
 	GLFWwindow* window;
+
+	Physics::PhysicsEngine* physicsEngine;
+	Graphics::Engine* graphicsEngine;
+	Game::Camera* camera;
 	Game::Scene* scene;
 
 	double lastTime, currentTime;
@@ -19,10 +22,12 @@ public:
 	int numFrames;
 	float frameTime;
 
-	glm::vec3 cameraMovementVector = { 0, 0, 0 };
-	glm::vec3 cameraRotationVector = { 0, 0, 0 };
+	double timeWarp = 5;
+
+	glm::f64vec3 cameraMovementVector = { 0, 0, 0 };
+	glm::f64vec3 cameraRotationVector = { 0, 0, 0 };
+	glm::f64vec2 mousePos = { 0, 0 };
 	bool middleMouse = false;
-	glm::vec2 mousePos = { 0, 0 };
 
 	
 	App(int width, int height, bool debug);
@@ -37,7 +42,7 @@ public:
 
 	void calculateFrameRate();
 
-	void cameraMotion(double delta);
+	void cameraUpdate(double delta);
 
 	void run();
 

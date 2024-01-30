@@ -233,6 +233,6 @@ vk::Format vkImage::find_supported_format(
 			return format;
 		}
 
-		std::runtime_error("Unable to find suitable format");
+		throw std::runtime_error("Unable to find suitable format");
 	}
 }

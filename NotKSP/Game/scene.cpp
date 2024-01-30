@@ -6,9 +6,9 @@ Game::Scene::Scene(std::vector<SceneObject> sceneObjects) {
 		
 		for (PhysicsObject::Body* object : sceneObject.objects) {
 			
-			std::vector<PhysicsData::Vector3D<double>*> position = { &object->position, &object->orientation };
+			std::pair<glm::f64vec3*, glm::f64vec3*> position = { object->position, &object->orientation };
 			positions[sceneObject.name].push_back(position);
-			this->objects.push_back(object);
+			objects.push_back(object);
 		}
 
 		assetPack.objectTypes.push_back(sceneObject.name);

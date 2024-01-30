@@ -1,6 +1,6 @@
 #include "job.h"
 
-vkJob::MakeModel::MakeModel(vkMesh::ObjMesh& mesh, const char* objFilepath, const char* mtlFilepath, glm::mat4 preTransform) :
+vkJob::MakeModel::MakeModel(vkMesh::ObjMesh& mesh, const char* objFilepath, const char* mtlFilepath, glm::f64mat4 preTransform) :
 	mesh(mesh) 
 {
 	this->objFilepath = objFilepath;

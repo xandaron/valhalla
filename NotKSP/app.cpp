@@ -16,15 +16,14 @@ App::App(int width, int height, bool debug) {
 		throw "Failed to build GLFW window.";
 	}
 
-	graphicsEngine = new Graphics::Engine(width, height, window);
 	std::vector<Game::SceneObject> sceneObjects = prepateScene();
 	scene = new Game::Scene(sceneObjects);
+
+	graphicsEngine = new Graphics::Engine(width, height, window, camera);
 	graphicsEngine->load_assets(scene->assetPack);
 
-	camera = graphicsEngine->getCameraPointer();
-
 	physicsEngine = new Physics::PhysicsEngine();
-	physicsEngine->setBodys(scene->objects);
+	physicsEngine->init(scene->objects);
 }
 
 /**
@@ -38,56 +37,49 @@ App::App(int width, int height, bool debug) {
 */
 std::vector<Game::SceneObject> App::prepateScene() {
 	
+	Game::CameraView cameraVectors;
+
+	cameraVectors.eye	   = { -1.0,  0.0, 5.0 };
+	cameraVectors.center   = {  0.0,  0.0, 5.0 };
+	cameraVectors.forwards = {  1.0,  0.0, 0.0 };
+	cameraVectors.right    = {  0.0, -1.0, 0.0 };
+	cameraVectors.up	   = {  0.0,  0.0, 1.0 };
+
+	camera = new Game::Camera(cameraVectors);
+
 	std::vector<Game::SceneObject> sceneObjects;
 	Game::SceneObject sceneObject;
 	PhysicsObject::BodyDescriptor bodyDescriptor;
 	
-	// Skull
-	sceneObject.name = "skull";
-	sceneObject.model_filenames = { "models/skull.obj", "models/skull.mtl" };
-	sceneObject.texture_filenames = { "textures/skull.png" };
-	sceneObject.preTransforms = glm::mat4(1.0f);
-
-	bodyDescriptor.name = "skull_0";
-	bodyDescriptor.position = PhysicsData::Vector3D<double>(15.0, 5.0, 1.0);
-	bodyDescriptor.rotationAxis = PhysicsData::Vector3D<double>(0.0, 0.0, 1.0);
-
-	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
-
-	bodyDescriptor.name = "skull_1";
-	bodyDescriptor.position = PhysicsData::Vector3D<double>(15.0, -5.0, 1.0);
-
-	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
-	sceneObjects.push_back(sceneObject);
-
-	// Girl
-	sceneObject.name = "girl";
-	sceneObject.model_filenames = { "models/girl.obj", "models/girl.mtl" };
-	sceneObject.texture_filenames = { "textures/none.png" };
-	sceneObject.preTransforms = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-	sceneObject.objects.clear();
-
-	bodyDescriptor.name = "girl_0";
-	bodyDescriptor.position = PhysicsData::Vector3D<double>(5.0, 0.0, 0.0);
-	bodyDescriptor.rotationalSpeed = 90.0;
-	bodyDescriptor.velocity = 0.0;
-
-	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
-	sceneObjects.push_back(sceneObject);
-
-	// Ground
-	sceneObject.name = "ground";
-	sceneObject.model_filenames = { "models/ground.obj", "models/ground.mtl" };
+	// Spheres
+	sceneObject.name = "sphere";
+	sceneObject.model_filenames = { "models/sphere.obj", "models/ground.mtl" };
 	sceneObject.texture_filenames = { "textures/ground.jpg" };
-	sceneObject.preTransforms = glm::mat4(1.0f);
+	sceneObject.preTransforms =  glm::mat4(500.0);
 	sceneObject.objects.clear();
 
-	bodyDescriptor.name = "ground_0";
-	bodyDescriptor.position = PhysicsData::Vector3D<double>(10.0, 0.0, 0.0);
+	bodyDescriptor.name = "sphere_0";
+	bodyDescriptor.position = new glm::f64vec3(3000.0, -1000.0, 0.0);
+	bodyDescriptor.velocity = glm::f64vec3(0.0, 0.0, -15);
 	bodyDescriptor.rotationalSpeed = 0.0;
-	bodyDescriptor.velocity = 0.0;
+	bodyDescriptor.mass = 4.0e16;
+	bodyDescriptor.locked = false;
+	bodyDescriptor.coefRestitution = 0.8;
+	bodyDescriptor.hitboxDescriptor.radius = 500;
 
 	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
+
+	bodyDescriptor.name = "sphere_1";
+	bodyDescriptor.position = new glm::f64vec3(3000.0, 1000.0, 0.0);
+	bodyDescriptor.velocity = glm::f64vec3(0.0, 0.0, 15);
+	bodyDescriptor.rotationalSpeed = 0.0;
+	bodyDescriptor.mass = 4.0e16;
+	bodyDescriptor.locked = false;
+	bodyDescriptor.coefRestitution = 0.8;
+	bodyDescriptor.hitboxDescriptor.radius = 500;
+
+	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
+
 	sceneObjects.push_back(sceneObject);
 
 	return sceneObjects;
@@ -160,11 +152,7 @@ void App::calculateFrameRate() {
 	++numFrames;
 }
 
-void App::cameraMotion(double delta) {
-
-	if (cameraMovementVector != glm::vec3({ 0, 0, 0 })) {
-		camera->moveCamera(cameraMovementVector, delta);
-	}
+void App::cameraUpdate(double delta) {
 
 	if (middleMouse) {
 		double xpos, ypos;
@@ -173,9 +161,9 @@ void App::cameraMotion(double delta) {
 		cameraRotationVector.z = mousePos.x - xpos;
 		mousePos = { xpos, ypos };
 	}
-	if (cameraRotationVector != glm::vec3({ 0, 0, 0 })) {
-		camera->rotateCamera(cameraRotationVector, delta);
-	}
+
+	camera->updateCamera(cameraMovementVector, cameraRotationVector, delta);
+
 	cameraRotationVector.y = 0;
 	cameraRotationVector.z = 0;
 }
@@ -187,9 +175,9 @@ void App::run() {
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
-		double delta = calculateDeltaTime();
+		double delta = calculateDeltaTime() * timeWarp;
 		calculateFrameRate();
-		cameraMotion(delta);
+		cameraUpdate(delta);
 		physicsEngine->update(delta);
 		graphicsEngine->render(scene);
 	}
