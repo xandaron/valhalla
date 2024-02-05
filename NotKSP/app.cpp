@@ -55,28 +55,28 @@ std::vector<Game::SceneObject> App::prepateScene() {
 	sceneObject.name = "sphere";
 	sceneObject.model_filenames = { "models/sphere.obj", "models/ground.mtl" };
 	sceneObject.texture_filenames = { "textures/ground.jpg" };
-	sceneObject.preTransforms =  glm::mat4(500.0);
+	sceneObject.preTransforms =  glm::mat4(100.0);
 	sceneObject.objects.clear();
 
 	bodyDescriptor.name = "sphere_0";
 	bodyDescriptor.position = new glm::f64vec3(3000.0, -1000.0, 0.0);
-	bodyDescriptor.velocity = glm::f64vec3(0.0, 0.0, -15);
+	bodyDescriptor.velocity = glm::f64vec3(0.0, 0.0, 10.0);
 	bodyDescriptor.rotationalSpeed = 0.0;
 	bodyDescriptor.mass = 4.0e16;
 	bodyDescriptor.locked = false;
 	bodyDescriptor.coefRestitution = 0.8;
-	bodyDescriptor.hitboxDescriptor.radius = 500;
+	bodyDescriptor.hitboxDescriptor.radius = 100;
 
 	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
 
 	bodyDescriptor.name = "sphere_1";
 	bodyDescriptor.position = new glm::f64vec3(3000.0, 1000.0, 0.0);
-	bodyDescriptor.velocity = glm::f64vec3(0.0, 0.0, 15);
+	bodyDescriptor.velocity = glm::f64vec3(0.0, 0.0, -10.0);
 	bodyDescriptor.rotationalSpeed = 0.0;
 	bodyDescriptor.mass = 4.0e16;
 	bodyDescriptor.locked = false;
 	bodyDescriptor.coefRestitution = 0.8;
-	bodyDescriptor.hitboxDescriptor.radius = 500;
+	bodyDescriptor.hitboxDescriptor.radius = 100;
 
 	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
 

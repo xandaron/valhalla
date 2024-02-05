@@ -24,6 +24,7 @@
     <ProjectGuid>{fa22242c-dc26-4f16-a208-6b237396c5c5}</ProjectGuid>
     <RootNamespace>NotKSP</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>Celest</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

@@ -19,10 +19,11 @@ void Physics::PhysicsEngine::update(double delta) {
 
 void Physics::PhysicsEngine::resolveCollision(PhysicsObject::Body* obj_0, PhysicsObject::Body* obj_1) {
 	std::cout << "Collision!!!" << std::endl;
-	glm::f64vec3 n = glm::normalize(*obj_0->position - *obj_1->position);
-	double restitution = obj_0->coefRestitution * obj_1->coefRestitution;
-	obj_0->velocity -= (1 + restitution) * (glm::dot(obj_0->velocity, n)) * n;
-	obj_1->velocity -= (1 + restitution) * (glm::dot(obj_1->velocity, n)) * n;
+	glm::f64vec3 n = glm::normalize(*obj_1->position - *obj_0->position);
+	double deltaV = -(1 + obj_0->coefRestitution * obj_1->coefRestitution) * glm::dot((obj_0->velocity - obj_1->velocity), n);
+	double impulse = deltaV / (obj_0->mass + obj_1->mass);
+	obj_0->velocity += (obj_1->mass * impulse) * n;
+	obj_1->velocity -= (obj_0->mass * impulse) * n;
 }
 
 void Physics::PhysicsEngine::resolveCollisions(double delta) {
