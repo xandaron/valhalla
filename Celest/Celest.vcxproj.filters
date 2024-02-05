@@ -216,4 +216,7 @@
   <ItemGroup>
     <Object Include="models\sphere.obj" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="LICENSE.txt" />
+  </ItemGroup>
 </Project>
