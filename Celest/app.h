@@ -5,7 +5,7 @@
 #include "Game/camera.h"
 #include "Game/scene.h"
 
-static class App {
+class App {
 
 public:
 
@@ -32,7 +32,7 @@ public:
 	
 	App(int width, int height, bool debug);
 
-	std::vector<Game::SceneObject> prepateScene();
+	std::vector<Game::SceneObject> prepareScene();
 
 	bool build_glfw_window(int width, int height, bool debug);
 

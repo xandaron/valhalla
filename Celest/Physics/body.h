@@ -1,24 +1,20 @@
 #pragma once
 #include "../cfg.h"
-#include "vectors.h"
-#include "collision/hitboxes.h"
+#include "collision/collider.h"
+#include "quaternion.h"
 
 namespace PhysicsObject {
 
 	struct BodyDescriptor {
-		std::string name;
+		std::string uid;
 
-		glm::f64vec3* position = new glm::f64vec3(0);
+		glm::f64vec3 position = glm::f64vec3(0);
 		glm::f64vec3 velocity = glm::f64vec3(0);
-		glm::f64vec3 force = glm::f64vec3(0);
 
-		glm::f64vec3 orientation = glm::f64vec3(0);
-		glm::f64vec3 rotationAxis = glm::f64vec3(0,0,1);
+		DataObject::Quaternion orientation = DataObject::Quaternion();
+		glm::f64vec3 angularVelocity = glm::f64vec3(0);
 
-		double rotationalSpeed = 0.0;
-
-		double mass = 0.0;
-		bool locked = false;
+		double invMass = 1.0;
 
 		double coefRestitution = 1.0;
 		double coefFriction = 1.0;
@@ -33,17 +29,18 @@ namespace PhysicsObject {
 		Body(BodyDescriptor bodyDescriptor);
 		~Body();
 
-		std::string name;
-
+		std::string uid;
+		
+		glm::f64vec3 position;
 		glm::f64vec3 velocity;
 		glm::f64vec3 force;
-		double mass;
 
-		glm::f64vec3* position;
-		glm::f64vec3 orientation;
-		glm::f64vec3 rotationAxis;
-		double rotationalSpeed;
-		bool locked;
+		DataObject::Quaternion orientation;
+		glm::f64vec3 angularVelocity;
+		glm::f64vec3 torque;
+		
+		double invMass;
+		glm::f64mat3 invInertia;
 
 		double coefRestitution;
 		double coefFriction;
@@ -54,17 +51,17 @@ namespace PhysicsObject {
 
 		void firstUpdate(double delta);
 
-		bool checkColliding(Body* obj);
+		bool checkColliding(Body* obj, Collision::CollisionInfo* collisionInfo);
 
-		void secondUpdate(double delta, std::vector<Body*> objs);
+		void secondUpdate(double delta);
 
-		void setLock(bool lock);
+		glm::f64mat3 invInertiaTensor();
 
-		void gravitationalForce(std::vector<Body*> objs);
+		void applyForce(glm::f64vec3 force);
 
-		glm::f64vec3 gravitationalForce(Body* obj);
+		void applyForceAtPoint(glm::f64vec3 force, glm::f64vec3 point);
 
-		void applyForce(glm::f64vec3 f);
+		void applyCollisionImpulse(glm::f64vec3 force, glm::f64vec3 distance);
 
 		glm::f64vec3 momentum();
 	};

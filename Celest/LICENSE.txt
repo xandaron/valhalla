@@ -2,3 +2,4 @@ This project makes use of code from a third party.
 The code used can be found throughout the Graphics dir.
 The code was created by GitHub user amengede and can be found at https://github.com/amengede/getIntoGameDev
 dir: getIntoGameDev/vulkan
+I have reached out to the auther and recieved explicit permission to upload their code as part of this project

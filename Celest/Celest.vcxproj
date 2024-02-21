@@ -163,7 +163,6 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\memory.cpp" />
     <ClCompile Include="Physics\body.cpp" />
-    <ClCompile Include="Physics\collision\bounding_sphere.cpp" />
     <ClCompile Include="Physics\physics_engine.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -197,12 +196,10 @@
     <ClInclude Include="Graphics\view\vkInit\sync.h" />
     <ClInclude Include="Graphics\view\vkUtil\single_time_commands.h" />
     <ClInclude Include="Physics\body.h" />
-    <ClInclude Include="Physics\collision\bounding_sphere.h" />
     <ClInclude Include="Physics\collision\collider.h" />
-    <ClInclude Include="Physics\collision\hitboxes.h" />
     <ClInclude Include="Physics\constants.h" />
     <ClInclude Include="Physics\physics_engine.h" />
-    <ClInclude Include="Physics\vectors.h" />
+    <ClInclude Include="Physics\quaternion.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Graphics\shaders\fragment.spv" />

@@ -383,12 +383,10 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 	memcpy(_frame.cameraMatrixWriteLocation, &(cameraMatrixData), sizeof(Game::CameraMatrices));
 
 	size_t i = 0;
-	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, glm::f64vec3*>>> pair : scene->positions) {
-		for (std::pair<glm::f64vec3*, glm::f64vec3*> position : pair.second) {
+	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>>> pair : scene->positions) {
+		for (std::pair<glm::f64vec3*, DataObject::Quaternion*> position : pair.second) {
 			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0), glm::vec3(position.first->x, position.first->y, position.first->z))
-										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position.second->x), glm::vec3(1, 0, 0))
-										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position.second->y), glm::vec3(0, 1, 0))
-										* glm::rotate(glm::mat4(1.0), (float)glm::radians(position.second->z), glm::vec3(0, 0, 1));
+										* glm::mat4(position.second->toMat4());
 		}
 	}
 	memcpy(_frame.modelBufferWriteLocation, _frame.modelTransforms.data(), i * sizeof(glm::f64mat4));
@@ -462,7 +460,7 @@ void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffe
 	prepare_scene(commandBuffer);
 
 	uint32_t startInstance = 0;
-	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, glm::f64vec3*>>> pair : scene->positions) {
+	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>>> pair : scene->positions) {
 		render_objects(
 			commandBuffer, pair.first, startInstance, static_cast<uint32_t>(pair.second.size())
 		);
