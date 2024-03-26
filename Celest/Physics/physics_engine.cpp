@@ -74,7 +74,8 @@ void Physics::PhysicsEngine::gravitationalForce(std::vector<PhysicsObject::Body*
 	}
 }
 
-glm::f64vec3 Physics::PhysicsEngine::calculateGravitationalForce(PhysicsObject::Body* objA, PhysicsObject::Body* objB) {
+glm::f64vec3 Physics::PhysicsEngine::calculateGravitationalForce(PhysicsObject::Body* objA, PhysicsObject::Body* objB)
+{
 
 	glm::f64vec3 relativePos = objB->position - objA->position;
 	double r = glm::length(relativePos);

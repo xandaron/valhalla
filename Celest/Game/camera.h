@@ -13,7 +13,7 @@ namespace Game {
 	};
 
 	struct CameraVectors {
-		glm::vec4 forwards;
+		glm::vec4 forward;
 		glm::vec4 right;
 		glm::vec4 up;
 	};
@@ -21,7 +21,7 @@ namespace Game {
 	struct CameraView {
 		glm::f64vec3 eye;
 		glm::f64vec3 center;
-		glm::f64vec3 forwards;
+		glm::f64vec3 forward;
 		glm::f64vec3 right;
 		glm::f64vec3 up;
 	};

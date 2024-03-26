@@ -21,11 +21,11 @@ namespace vkJob {
 
 	class MakeModel : public Job {
 	public:
-		const char* objFilepath;
-		const char* mtlFilepath;
+		std::string* objFilepath;
+		std::string* mtlFilepath;
 		glm::f64mat4 preTransform;
 		vkMesh::ObjMesh& mesh;
-		MakeModel(vkMesh::ObjMesh& mesh, const char* objFilepath, const char* mtlFilepath, glm::f64mat4 preTransform);
+		MakeModel(vkMesh::ObjMesh& mesh, std::string* objFilepath, std::string* mtlFilepath, glm::f64mat4 preTransform);
 		virtual void execute(vk::CommandBuffer commandBuffer, vk::Queue queue) final;
 	};
 

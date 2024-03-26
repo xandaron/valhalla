@@ -53,9 +53,9 @@ vkImage::CubeMap::~CubeMap() {
 void vkImage::CubeMap::load() {
 
 	for (int i = 0; i < 6; ++i) {
-		pixels[i] = stbi_load(filenames[i], &width, &height, &channels, STBI_rgb_alpha);
+		pixels[i] = stbi_load(filenames[i]->c_str(), &width, &height, &channels, STBI_rgb_alpha);
 		if (!pixels) {
-			vkLogging::Logger::get_logger()->print_list({ "Unable to load: ", filenames[i] });
+			vkLogging::Logger::get_logger()->print_list({ "Unable to load: ", filenames[i]->c_str() });
 		}
 	}
 }

@@ -15,7 +15,7 @@ namespace vkMesh {
 		glm::vec3 brushColor;
 		glm::mat4 preTransform;
 
-		void load(const char* objFilepath, const char* mtlFilepath, glm::mat4 preTransform);
+		void load(std::string* objFilepath, std::string* mtlFilepath, glm::mat4 preTransform);
 
 		void read_vertex_data(const std::vector<std::string>& words);
 

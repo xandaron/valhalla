@@ -20,7 +20,7 @@ void Game::Camera::updateCamera(glm::f64vec3 movementVector, glm::f64vec3 rotati
 void Game::Camera::moveCamera(glm::f64vec3 movementVector, double delta) {
 
 	movementVector *= movementSpeed * delta;
-	movementVector = movementVector.x * cameraViewData.forwards
+	movementVector = movementVector.x * cameraViewData.forward
 				   + movementVector.y * cameraViewData.right
 				   + movementVector.z * cameraViewData.up;
 	cameraViewData.eye	  += movementVector;
@@ -29,17 +29,17 @@ void Game::Camera::moveCamera(glm::f64vec3 movementVector, double delta) {
 
 void Game::Camera::rotateCamera(glm::f64vec3 rotationVector, double delta) {
 
-	glm::f64vec3 w = rotationVector.x * cameraViewData.forwards
+	glm::f64vec3 w = rotationVector.x * cameraViewData.forward
 				+ rotationVector.y * cameraViewData.right
 				+ rotationVector.z * cameraViewData.up;
 	
 	double theta = rotationSpeed * delta;
 	glm::f64mat3 rotationMatrix = glm::rotate(glm::f64mat4(1.0), theta, w);
 
-	cameraViewData.forwards = glm::normalize(rotationMatrix * cameraViewData.forwards);
-	cameraViewData.right    = glm::normalize(rotationMatrix * cameraViewData.right);
-	cameraViewData.up       = glm::normalize(rotationMatrix * cameraViewData.up);
-	cameraViewData.center   = cameraViewData.eye + cameraViewData.forwards;
+	cameraViewData.forward = glm::normalize(rotationMatrix * cameraViewData.forward);
+	cameraViewData.right   = glm::normalize(rotationMatrix * cameraViewData.right);
+	cameraViewData.up      = glm::normalize(rotationMatrix * cameraViewData.up);
+	cameraViewData.center  = cameraViewData.eye + cameraViewData.forward;
 }
 
 void Game::Camera::reset() {

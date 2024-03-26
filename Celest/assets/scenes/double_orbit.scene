@@ -1,0 +1,36 @@
+
+camera {
+	eye: "-1,0,0"
+	center: "0,0,0"
+	forward: "1,0,0"
+	right: "0,1,0"
+	up: "0,0,1"
+}
+
+object {
+	name: "sphere"
+	model_filename: "sphere.obj"
+	material_filename: "none.mtl"
+	texture_filename: "ground.jpg"
+	pre_transform_scalar: "50"
+
+	instance {
+		position: "1000,-500,0"
+		velocity: "0,0,10"
+		angular_velocity: "0,0,0"
+		mass: "4.0e16"
+		restitution: "0.8"
+		hitbox_type: "SPHERE"
+		hitbox_halfdims: "50,0,0"
+	}
+
+	instance {
+		position: "1000,500,0"
+		velocity: "0,0,-10"
+		angular_velocity: "0,0,0"
+		mass: "4.0e16"
+		restitution: "0.8"
+		hitbox_type: "SPHERE"
+		hitbox_halfdims: "50,0,0"
+	}
+}

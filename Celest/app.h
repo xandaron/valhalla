@@ -32,8 +32,6 @@ public:
 	
 	App(int width, int height, bool debug);
 
-	std::vector<Game::SceneObject> prepareScene();
-
 	bool build_glfw_window(int width, int height, bool debug);
 
 	void updateTitle(std::string title);

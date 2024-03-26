@@ -260,13 +260,7 @@ void Graphics::Engine::end_worker_threads() {
 	std::cout << "Threads ended successfully." << std::endl;
 }
 
-void Graphics::Engine::make_assets(Game::AssetPack assetPack)
-{
-
-	std::vector<std::string> objectTypes = assetPack.objectTypes;
-	std::unordered_map<std::string, std::vector<const char*>> model_filenames = assetPack.model_filenames;
-	std::unordered_map<std::string, std::vector<const char*>> texture_filenames = assetPack.texture_filenames;
-	std::unordered_map<std::string, glm::mat4> preTransforms = assetPack.preTransforms;
+void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 
 	//Meshes
 	meshes = new VertexMenagerie();
@@ -277,27 +271,27 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack)
 	bindings.count = 1;
 	bindings.types.push_back(vk::DescriptorType::eCombinedImageSampler);
 
-	meshDescriptorPool = vkInit::make_descriptor_pool(device, static_cast<uint32_t>(texture_filenames.size()) + 1, bindings);
+	meshDescriptorPool = vkInit::make_descriptor_pool(device, static_cast<uint32_t>(assetPack.texture_filenames.size()) + 1, bindings);
 
 	//Submit loading work
 	workQueue.lock.lock();
-	for (std::string type : objectTypes) {
+	for (int i = 0; i < assetPack.objectTypes.size(); i++) {
 		vkImage::TextureInputChunk textureInfo;
 		textureInfo.logicalDevice = device;
 		textureInfo.physicalDevice = physicalDevice;
 		textureInfo.layout = meshSetLayout[pipelineType::STANDARD];
 		textureInfo.descriptorPool = meshDescriptorPool;
-		textureInfo.filenames = texture_filenames[type];
-		materials[type] = new vkImage::Texture();
-		loaded_models[type] = vkMesh::ObjMesh();
+		textureInfo.filenames.push_back(assetPack.texture_filenames[i]);
+		materials[assetPack.objectTypes[i]] = new vkImage::Texture();
+		loaded_models[assetPack.objectTypes[i]] = vkMesh::ObjMesh();
 		workQueue.add(
-			new vkJob::MakeTexture(materials[type], textureInfo)
+			new vkJob::MakeTexture(materials[assetPack.objectTypes[i]], textureInfo)
 		);
 		workQueue.add(
-			new vkJob::MakeModel(loaded_models[type],
-				model_filenames[type][0], 
-				model_filenames[type][1],
-				preTransforms[type])
+			new vkJob::MakeModel(loaded_models[assetPack.objectTypes[i]],
+				assetPack.model_filenames[i],
+				assetPack.material_filenames[i],
+				assetPack.preTransforms[i])
 		);
 	}
 	workQueue.lock.unlock();
@@ -343,14 +337,12 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack)
 	textureInfo.layout = meshSetLayout[pipelineType::STANDARD];
 	textureInfo.descriptorPool = meshDescriptorPool;
 	textureInfo.layout = meshSetLayout[pipelineType::SKY];
-	textureInfo.filenames = { {
-			"textures/sky_front.png",  //x+
-			"textures/sky_back.png",   //x-
-			"textures/sky_right.png",  //y+
-			"textures/sky_left.png",   //y-
-			"textures/sky_top.png",    //z+
-			"textures/sky_bottom.png", //z-
-	} };
+	textureInfo.filenames.push_back(new std::string("assets/textures/sky_front.png"));
+	textureInfo.filenames.push_back(new std::string("assets/textures/sky_back.png"));
+	textureInfo.filenames.push_back(new std::string("assets/textures/sky_right.png"));
+	textureInfo.filenames.push_back(new std::string("assets/textures/sky_left.png"));
+	textureInfo.filenames.push_back(new std::string("assets/textures/sky_top.png"));
+	textureInfo.filenames.push_back(new std::string("assets/textures/sky_bottom.png"));
 	cubemap = new vkImage::CubeMap(textureInfo);
 }
 
@@ -366,9 +358,9 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 
 	Game::CameraView cameraViewData = camera->cameraViewData;
 	Game::CameraVectors cameraVectorData;
-	cameraVectorData.forwards = { cameraViewData.forwards.x, cameraViewData.forwards.y, cameraViewData.forwards.z, 0.0 };
-	cameraVectorData.right	  = {    cameraViewData.right.x,    cameraViewData.right.y,    cameraViewData.right.z, 0.0 };
-	cameraVectorData.up		  = {       cameraViewData.up.x,       cameraViewData.up.y,       cameraViewData.up.z, 0.0 };
+	cameraVectorData.forward = { cameraViewData.forward.x, cameraViewData.forward.y, cameraViewData.forward.z, 0.0 };
+	cameraVectorData.right	 = {   cameraViewData.right.x,   cameraViewData.right.y,   cameraViewData.right.z, 0.0 };
+	cameraVectorData.up		 = {      cameraViewData.up.x,      cameraViewData.up.y,      cameraViewData.up.z, 0.0 };
 	memcpy(_frame.cameraVectorWriteLocation, &(cameraVectorData), sizeof(Game::CameraVectors));
 
 	glm::mat4 view = glm::lookAt(cameraViewData.eye, cameraViewData.center, cameraViewData.up);
@@ -383,7 +375,7 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 	memcpy(_frame.cameraMatrixWriteLocation, &(cameraMatrixData), sizeof(Game::CameraMatrices));
 
 	size_t i = 0;
-	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>>> pair : scene->positions) {
+	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>>> pair : scene->GetPositions()) {
 		for (std::pair<glm::f64vec3*, DataObject::Quaternion*> position : pair.second) {
 			_frame.modelTransforms[i++] = glm::translate(glm::mat4(1.0), glm::vec3(position.first->x, position.first->y, position.first->z))
 										* glm::mat4(position.second->toMat4());
@@ -460,7 +452,7 @@ void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffe
 	prepare_scene(commandBuffer);
 
 	uint32_t startInstance = 0;
-	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>>> pair : scene->positions) {
+	for (std::pair<std::string, std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>>> pair : scene->GetPositions()) {
 		render_objects(
 			commandBuffer, pair.first, startInstance, static_cast<uint32_t>(pair.second.size())
 		);

@@ -205,7 +205,7 @@
     <None Include="Graphics\shaders\sky_shader.frag" />
   </ItemGroup>
   <ItemGroup>
-    <Object Include="models\sphere.obj" />
+    <Object Include="assets\models\sphere.obj" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />

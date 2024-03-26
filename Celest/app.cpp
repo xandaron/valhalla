@@ -16,107 +16,17 @@ App::App(int width, int height, bool debug) {
 		throw "Failed to build GLFW window.";
 	}
 
-	std::vector<Game::SceneObject> sceneObjects = prepareScene();
-	scene = new Game::Scene(sceneObjects);
+	//std::vector<Game::SceneObject> sceneObjects = prepareScene();
+	scene = new Game::Scene("assets/scenes/double_orbit.scene");
+	camera = scene->GetCamera();
 
 	graphicsEngine = new Graphics::Engine(width, height, window, camera);
-	graphicsEngine->load_assets(scene->assetPack);
+	graphicsEngine->load_assets(scene->GetAssetPack());
 
 	physicsEngine = new Physics::PhysicsEngine();
-	physicsEngine->init(scene->objects);
+	physicsEngine->init(scene->GetPhysicsObjects());
 
 	graphicsEngine->render(scene);
-}
-
-/**
-* This is a temp function
-* The goal is to store the scene objects in files and load them into the program.
-* 
-* Then a second scene file will be used to describe what objects are required and where they 
-* should be positioned.
-* 
-* This means in the program we can simply load the scene file and it will take care of itself.
-*/
-std::vector<Game::SceneObject> App::prepareScene() {
-	
-	Game::CameraView cameraVectors;
-
-	cameraVectors.eye	   = { -1.0,  0.0, 0.0 };
-	cameraVectors.center   = {  0.0,  0.0, 0.0 };
-	cameraVectors.forwards = {  1.0,  0.0, 0.0 };
-	cameraVectors.right    = {  0.0, -1.0, 0.0 };
-	cameraVectors.up	   = {  0.0,  0.0, 1.0 };
-
-	camera = new Game::Camera(cameraVectors);
-
-	std::vector<Game::SceneObject> sceneObjects;
-	Game::SceneObject sceneObject;
-	PhysicsObject::BodyDescriptor bodyDescriptor;
-	
-	// Sphere
-	sceneObject.name = "sphere";
-	sceneObject.model_filenames = { "models/sphere.obj", "models/ground.mtl" };
-	sceneObject.texture_filenames = { "textures/ground.jpg" };
-	sceneObject.preTransforms =  glm::mat4(1);
-	sceneObject.objects.clear();
-
-	bodyDescriptor.uid = "sphere_0";
-	bodyDescriptor.position = glm::f64vec3(50, -10, 0);
-	bodyDescriptor.velocity = glm::f64vec3(0, 1, 0);
-	bodyDescriptor.angularVelocity = glm::f64vec3(glm::radians(0.0), glm::radians(0.0), glm::radians(0.0));
-	bodyDescriptor.invMass = 1.0 / 10.0; // 1 / 4.0e16
-	bodyDescriptor.coefRestitution = 0.8;
-	bodyDescriptor.hitboxDescriptor.type = Collision::HitboxType::SPHERE;
-	bodyDescriptor.hitboxDescriptor.halfDimensions.x = 1;
-	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
-	
-	/*bodyDescriptor.uid = "sphere_1";
-	bodyDescriptor.position = glm::f64vec3(100, 1, 0);
-	bodyDescriptor.velocity = glm::f64vec3(0, 0, 0);
-	bodyDescriptor.angularVelocity = glm::f64vec3(glm::radians(0.0), glm::radians(0.0), glm::radians(0.0));
-	bodyDescriptor.invMass = 1 / 1;
-	bodyDescriptor.coefRestitution = 0.8;
-	bodyDescriptor.hitboxDescriptor.type = Collision::HitboxType::SPHERE;
-	bodyDescriptor.hitboxDescriptor.halfDimensions.x = 1;
-	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));*/
-
-	sceneObjects.push_back(sceneObject);
-
-	// Cube
-	sceneObject.name = "cube";
-	sceneObject.model_filenames = { "models/cube.obj", "models/ground.mtl" };
-	sceneObject.texture_filenames = { "textures/ground.jpg" };
-	//sceneObject.preTransforms = glm::mat4(1);
-	sceneObject.preTransforms = glm::mat4(
-		1, 0, 0,  0,
-		0, 1, 0,  0,
-		0, 0, 20,  0,
-		0, 0, 0,  1);
-	sceneObject.objects.clear();
-
-	//bodyDescriptor.uid = "cube_0";
-	//bodyDescriptor.position = glm::f64vec3(50, 0, 0);
-	//bodyDescriptor.velocity = glm::f64vec3(0, 0, 0);
-	//bodyDescriptor.angularVelocity = glm::f64vec3(glm::radians(0.0), glm::radians(0.0), glm::radians(0.0));
-	//bodyDescriptor.invMass = 1 / 1; // 1 / 4.0e16
-	//bodyDescriptor.coefRestitution = 0.8;
-	//bodyDescriptor.hitboxDescriptor.type = Collision::HitboxType::AABB;
-	//bodyDescriptor.hitboxDescriptor.halfDimensions = glm::f64vec3(1, 1, 10);
-	//sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
-
-	bodyDescriptor.uid = "cube_1";
-	bodyDescriptor.position = glm::f64vec3(50, 10, 0);
-	bodyDescriptor.velocity = glm::f64vec3(0, 0, 0);
-	bodyDescriptor.angularVelocity = glm::f64vec3(glm::radians(0.0), glm::radians(0.0), glm::radians(0.0));
-	bodyDescriptor.invMass = 1.0 / 10.0;
-	bodyDescriptor.coefRestitution = 0.8;
-	bodyDescriptor.hitboxDescriptor.type = Collision::HitboxType::AABB;
-	bodyDescriptor.hitboxDescriptor.halfDimensions = glm::f64vec3(1, 1, 20);
-	sceneObject.objects.push_back(new PhysicsObject::Body(bodyDescriptor));
-
-	sceneObjects.push_back(sceneObject);
-
-	return sceneObjects;
 }
 
 /**

@@ -23,12 +23,12 @@ inline void trim(std::string& s) {
 	ltrim(s);
 }
 
-void vkMesh::ObjMesh::load(const char* objFilepath, const char* mtlFilepath, glm::mat4 preTransform) {
+void vkMesh::ObjMesh::load(std::string* objFilepath, std::string* mtlFilepath, glm::mat4 preTransform) {
 
 	this->preTransform = preTransform;
 
 	std::ifstream file;
-	file.open(mtlFilepath);
+	file.open(mtlFilepath->c_str());
 	std::string line;
 	std::string materialName;
 	std::vector<std::string> words;
@@ -47,7 +47,7 @@ void vkMesh::ObjMesh::load(const char* objFilepath, const char* mtlFilepath, glm
 	}
 
 	file.close();
-	file.open(objFilepath);
+	file.open(objFilepath->c_str());
 
 	while (std::getline(file, line)) {
 		trim(line);

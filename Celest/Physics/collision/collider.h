@@ -7,7 +7,8 @@ namespace Collision {
 	enum class HitboxType {
 		BASE,
 		SPHERE,
-		AABB
+		AABB,
+		OBB
 	};
 
 	struct HitboxDescriptor {
@@ -33,7 +34,7 @@ namespace Collision {
 		}
 
 	protected:
-		glm::f64vec3* position;
+		glm::f64vec3* position = nullptr;
 	};
 
 	class SphereCollider : public Collider {
@@ -47,9 +48,11 @@ namespace Collision {
 
 		glm::f64mat3 invInertiaMat(double invMass) {
 			double i = 2.5 * invMass / (radius * radius);
-			return glm::f64mat3(i, 0, 0,
+			return glm::f64mat3(
+				i, 0, 0,
 				0, i, 0,
-				0, 0, i);
+				0, 0, i
+			);
 		}
 
 		double getRadius() {
@@ -63,8 +66,38 @@ namespace Collision {
 	class AABBCollider : public Collider {
 
 	public:
-		AABBCollider(glm::f64vec3* position, glm::f64vec3 halfDimensions, DataObject::Quaternion* orientation) {
+		AABBCollider(glm::f64vec3* position, glm::f64vec3 halfDimensions) {
 			type = HitboxType::AABB;
+			this->position = position;
+			this->halfDimensions = halfDimensions;
+		}
+
+		glm::f64mat3 invInertiaMat(double invMass) {
+			double x2 = halfDimensions.x * halfDimensions.x;
+			double y2 = halfDimensions.y * halfDimensions.y;
+			double z2 = halfDimensions.z * halfDimensions.z;
+			double cm = 12 * invMass;
+			return glm::f64mat3(
+				cm / (y2 + z2), 0, 0,
+				0, cm / (x2 + z2), 0,
+				0, 0, cm / (x2 + y2)
+			);
+		}
+
+		glm::f64vec3 getHalfDimensions() {
+			return halfDimensions;
+		}
+
+	private:
+		glm::f64vec3 halfDimensions;
+
+	};
+
+	class OBBCollider : public Collider {
+
+	public:
+		OBBCollider(glm::f64vec3* position, glm::f64vec3 halfDimensions, DataObject::Quaternion* orientation) {
+			type = HitboxType::OBB;
 			this->position = position;
 			this->halfDimensions = halfDimensions;
 			this->orientation = orientation;
@@ -75,9 +108,11 @@ namespace Collision {
 			double y2 = halfDimensions.y * halfDimensions.y;
 			double z2 = halfDimensions.z * halfDimensions.z;
 			double cm = 12 * invMass;
-			return glm::f64mat3(cm / (y2 + z2), 0, 0,
+			return glm::f64mat3(
+				cm / (y2 + z2), 0, 0,
 				0, cm / (x2 + z2), 0,
-				0, 0, cm / (x2 + y2));
+				0, 0, cm / (x2 + y2)
+			);
 		}
 
 		glm::f64vec3 getHalfDimensions() {
@@ -115,8 +150,8 @@ namespace Collision {
 		glm::f64vec3 posB = objB->getPosition();
 		glm::f64vec3 relativePos = posB - posA;
 
-		glm::f64vec3 sizeA = objA->getOrientation().toMat3() * objA->getHalfDimensions();
-		glm::f64vec3 sizeB = objB->getOrientation().toMat3() * objB->getHalfDimensions();
+		glm::f64vec3 sizeA = objA->getHalfDimensions();
+		glm::f64vec3 sizeB = objB->getHalfDimensions();
 		glm::f64vec3 totalSize = sizeA + sizeB;
 
 		if (glm::abs(relativePos.x) > totalSize.x ||
@@ -165,13 +200,17 @@ namespace Collision {
 		return true;
 	}
 
-	static bool AABBSphereCollision(AABBCollider* objA, SphereCollider* objB, CollisionInfo* collisionInfo) {
-		
+	static bool OBBCollision(OBBCollider* objA, OBBCollider* objB, CollisionInfo* collisionInfo) {
+		return false;
+	}
+
+	static bool AABB_SphereCollision(AABBCollider* objA, SphereCollider* objB, CollisionInfo* collisionInfo) {
+
 		glm::f64vec3 posA = objA->getPosition();
 		glm::f64vec3 posB = objB->getPosition();
 		glm::f64vec3 relativePos = posB - posA;
 
-		glm::f64vec3 sizeA = objA->getOrientation().toMat3() * objA->getHalfDimensions();
+		glm::f64vec3 sizeA = objA->getHalfDimensions();
 		double radiusB = objB->getRadius();
 
 		glm::f64vec3 closestPointOnBox = glm::clamp(relativePos, -sizeA, sizeA);
@@ -190,16 +229,45 @@ namespace Collision {
 		return true;
 	}
 
-	static bool SphereAABBCollision(SphereCollider* objA, AABBCollider* objB, CollisionInfo* collisionInfo) {
-		
-		bool ret = AABBSphereCollision(objB, objA, collisionInfo);
-		if (ret) {
+	static bool OBB_SphereCollision(OBBCollider* objA, SphereCollider* objB, CollisionInfo* collisionInfo) {
+
+		glm::f64vec3 posA = objA->getPosition();
+		glm::f64vec3 posB = objB->getPosition();
+		glm::f64vec3 relativePos = posB - posA;
+
+		glm::f64vec3 sizeA = objA->getOrientation().toMat3() * objA->getHalfDimensions();
+		double radiusB = objB->getRadius();
+
+		DataObject::Quaternion orientationA = objA->getOrientation();
+
+		glm::f64vec3 closestPointOnBox = orientationA.toMat3() * glm::clamp(orientationA.conjugate().toMat3() * relativePos, -sizeA, sizeA);
+
+		glm::f64vec3 localPoint = relativePos - closestPointOnBox;
+		double distance = glm::length(localPoint);
+
+		if (distance >= radiusB) {
+			return false;
+		}
+
+		collisionInfo->normal = glm::normalize(localPoint);
+		collisionInfo->penetration = radiusB - distance;
+		collisionInfo->contactPointA = closestPointOnBox;
+		collisionInfo->contactPointB = -collisionInfo->normal * radiusB;
+		return true;
+	}
+
+	static bool AABB_OBBCollision(AABBCollider* objA, OBBCollider* objB, CollisionInfo* collisionInfo) {
+		return false;
+	}
+
+	static bool InvertCollision(bool collision, CollisionInfo* collisionInfo) {
+		if (collision) {
 			glm::f64vec3 temp = collisionInfo->contactPointA;
 			collisionInfo->contactPointA = collisionInfo->contactPointB;
 			collisionInfo->contactPointB = temp;
 			collisionInfo->normal *= -1;
 		}
-		return ret;
+		return collision;
 	}
 
 	static bool CheckColliding(Collider* objA, Collider* objB, CollisionInfo* collisionInfo) {
@@ -211,11 +279,26 @@ namespace Collision {
 		if (pairType == (int)HitboxType::AABB) {
 			return AABBCollision(dynamic_cast<AABBCollider*>(objA), dynamic_cast<AABBCollider*>(objB), collisionInfo);
 		}
+		if (pairType == (int)HitboxType::AABB) {
+			return OBBCollision(dynamic_cast<OBBCollider*>(objA), dynamic_cast<OBBCollider*>(objB), collisionInfo);
+		}
 		if (pairType == ((int)HitboxType::SPHERE | (int)HitboxType::AABB)) {
 			if (objA->type == HitboxType::AABB) {
-				return AABBSphereCollision(dynamic_cast<AABBCollider*>(objA), dynamic_cast<SphereCollider*>(objB), collisionInfo);
+				return AABB_SphereCollision(dynamic_cast<AABBCollider*>(objA), dynamic_cast<SphereCollider*>(objB), collisionInfo);
+			} 
+			return InvertCollision(AABB_SphereCollision(dynamic_cast<AABBCollider*>(objB), dynamic_cast<SphereCollider*>(objA), collisionInfo), collisionInfo);
+		}
+		if (pairType == ((int)HitboxType::SPHERE | (int)HitboxType::OBB)) {
+			if (objA->type == HitboxType::OBB) {
+				return OBB_SphereCollision(dynamic_cast<OBBCollider*>(objA), dynamic_cast<SphereCollider*>(objB), collisionInfo);
 			}
-			return SphereAABBCollision(dynamic_cast<SphereCollider*>(objA), dynamic_cast<AABBCollider*>(objB), collisionInfo);
+			return InvertCollision(OBB_SphereCollision(dynamic_cast<OBBCollider*>(objB), dynamic_cast<SphereCollider*>(objA), collisionInfo), collisionInfo);
+		}
+		if (pairType == ((int)HitboxType::OBB | (int)HitboxType::AABB)) {
+			if (objA->type == HitboxType::OBB) {
+				return AABB_OBBCollision(dynamic_cast<AABBCollider*>(objA), dynamic_cast<OBBCollider*>(objB), collisionInfo);
+			}
+			return InvertCollision(AABB_OBBCollision(dynamic_cast<AABBCollider*>(objB), dynamic_cast<OBBCollider*>(objA), collisionInfo), collisionInfo);
 		}
 
 		return false;

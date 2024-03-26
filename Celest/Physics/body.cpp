@@ -6,12 +6,17 @@ PhysicsObject::Body::Body(BodyDescriptor bodyDescriptor)
 
 	position = bodyDescriptor.position;
 	velocity = bodyDescriptor.velocity;
+	force = glm::f64vec3(0);
 
 	orientation = bodyDescriptor.orientation;
 	angularVelocity = bodyDescriptor.angularVelocity;
+	torque = glm::f64vec3(0);
 	
 	if (bodyDescriptor.hitboxDescriptor.type == Collision::HitboxType::AABB) {
-		hitbox = new Collision::AABBCollider(&position, bodyDescriptor.hitboxDescriptor.halfDimensions, &orientation);
+		hitbox = new Collision::AABBCollider(&position, bodyDescriptor.hitboxDescriptor.halfDimensions);
+	}
+	else if (bodyDescriptor.hitboxDescriptor.type == Collision::HitboxType::OBB) {
+		hitbox = new Collision::OBBCollider(&position, bodyDescriptor.hitboxDescriptor.halfDimensions, &orientation);
 	}
 	else {
 		hitbox = new Collision::SphereCollider(&position, bodyDescriptor.hitboxDescriptor.halfDimensions.x);
@@ -22,9 +27,6 @@ PhysicsObject::Body::Body(BodyDescriptor bodyDescriptor)
 
 	coefRestitution = bodyDescriptor.coefRestitution;
 	coefFriction = bodyDescriptor.coefFriction;
-
-	force = glm::f64vec3(0);
-	torque = glm::f64vec3(0);
 }
 
 PhysicsObject::Body::~Body() {
