@@ -1,6 +1,6 @@
 #pragma once
-#include "../../cfg.h"
-#include "../quaternion.h"
+#include "../cfg.h"
+#include "quaternion.h"
 
 namespace Collision {
 

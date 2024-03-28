@@ -15,9 +15,9 @@ object {
 	pre_transform_scalar: "50"
 
 	instance {
-		position: "1000,-500,0"
-		velocity: "0,0,10"
-		angular_velocity: "0,0,0"
+		position: "1000,-300,0"
+		velocity: "0,0,25"
+		angular_velocity: "1,0,0"
 		mass: "4.0e16"
 		restitution: "0.8"
 		hitbox_type: "SPHERE"
@@ -25,8 +25,8 @@ object {
 	}
 
 	instance {
-		position: "1000,500,0"
-		velocity: "0,0,-10"
+		position: "1000,300,0"
+		velocity: "0,0,-25"
 		angular_velocity: "0,0,0"
 		mass: "4.0e16"
 		restitution: "0.8"

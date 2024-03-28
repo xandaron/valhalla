@@ -4,14 +4,6 @@
 #include "camera.h"
 
 namespace Game {
-	
-	struct SceneObject {
-		std::string name;
-		std::pair<std::string*, std::string*> model_filenames;
-		std::string* texture_filenames;
-		glm::f64mat4 preTransforms;
-		std::vector<PhysicsObject::Body*> objects;
-	};
 
 	struct AssetPack {
 		std::vector<std::string> objectTypes;
@@ -30,20 +22,20 @@ namespace Game {
 
 		void load(const std::string& sceneFilepath);
 
-		Game::Camera* GetCamera();
+		Game::Camera* getCamera();
 
-		AssetPack GetAssetPack();
+		AssetPack getAssetPack();
 
-		std::vector<PhysicsObject::Body*> GetPhysicsObjects();
+		std::vector<PhysicsObject::Body*> getPhysicsObjects();
 
-		std::unordered_map<std::string, std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>>> GetPositions();
+		std::unordered_map<std::string, std::vector<PhysicsObject::Body*>> getMappedObjects();
 
 		~Scene();
 
 	private:
 		AssetPack assetPack;
 		Game::Camera* camera;
-		std::vector<PhysicsObject::Body*> objects;
-		std::unordered_map<std::string, std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>>> positions;
+		std::vector<PhysicsObject::Body*> physicsObjects;
+		std::unordered_map<std::string, std::vector<PhysicsObject::Body*>> mappedObjects;
 	};
 }

@@ -32,8 +32,8 @@ void Physics::PhysicsEngine::resolveCollision(PhysicsObject::Body* objA, Physics
 
 	double numerator = -(1 + objA->coefRestitution * objB->coefRestitution) * glm::dot(collisionVelocity, collisionInfo->normal);
 	double denominator = totalMass + glm::dot(
-		glm::cross(objA->invInertiaTensor() * glm::cross(collisionInfo->contactPointA, collisionInfo->normal), collisionInfo->contactPointA) +
-		glm::cross(objB->invInertiaTensor() * glm::cross(collisionInfo->contactPointB, collisionInfo->normal), collisionInfo->contactPointB),
+		glm::cross(objA->invInertiaOrientated * glm::cross(collisionInfo->contactPointA, collisionInfo->normal), collisionInfo->contactPointA) +
+		glm::cross(objB->invInertiaOrientated * glm::cross(collisionInfo->contactPointB, collisionInfo->normal), collisionInfo->contactPointB),
 		collisionInfo->normal
 	);
 

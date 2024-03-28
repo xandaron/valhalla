@@ -65,10 +65,11 @@ namespace DataObject {
 			double wy2 = w * y2;
 			double wz2 = w * z2;
 
-			return glm::f64mat4(1 - (yy2 + zz2), xy2 + wz2,		  xz2 - wy2,	   0,
-								xy2 - wz2,		 1 - (xx2 + zz2), yz2 + wx2,	   0,
-								xz2 + wy2,		 yz2 - wx2,		  1 - (xx2 + yy2), 0,
-								0,				 0,				  0,			   1
+			return glm::f64mat4(
+				1 - (yy2 + zz2), xy2 + wz2,		  xz2 - wy2,	   0,
+				xy2 - wz2,		 1 - (xx2 + zz2), yz2 + wx2,	   0,
+				xz2 + wy2,		 yz2 - wx2,		  1 - (xx2 + yy2), 0,
+				0,				 0,				  0,			   1
 			);
 		}
 
@@ -86,9 +87,10 @@ namespace DataObject {
 			double wy2 = w * y2;
 			double wz2 = w * z2;
 
-			return glm::f64mat3(1 - (yy2 + zz2), xy2 + wz2,		  xz2 - wy2,
-								xy2 - wz2,		 1 - (xx2 + zz2), yz2 + wx2,
-								xz2 + wy2,		 yz2 - wx2,		  1 - (xx2 + yy2)
+			return glm::f64mat3(
+				1 - (yy2 + zz2), xy2 + wz2,		  xz2 - wy2,
+				xy2 - wz2,		 1 - (xx2 + zz2), yz2 + wx2,
+				xz2 + wy2,		 yz2 - wx2,		  1 - (xx2 + yy2)
 			);
 		}
 

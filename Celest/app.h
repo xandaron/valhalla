@@ -18,7 +18,7 @@ public:
 	Game::Scene* scene;
 
 	double lastTime, currentTime;
-	double fpsTimer;
+	double fpsTimer = glfwGetTime();
 	int numFrames;
 	float frameTime;
 

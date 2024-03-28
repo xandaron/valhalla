@@ -1,6 +1,6 @@
 #pragma once
 #include "../cfg.h"
-#include "collision/collider.h"
+#include "collider.h"
 #include "quaternion.h"
 
 namespace PhysicsObject {
@@ -35,12 +35,15 @@ namespace PhysicsObject {
 		glm::f64vec3 velocity;
 		glm::f64vec3 force;
 
-		DataObject::Quaternion orientation;
 		glm::f64vec3 angularVelocity;
 		glm::f64vec3 torque;
+
+		DataObject::Quaternion orientation;
+		glm::f64mat3 orientationMatrix = orientation.toMat3();
 		
 		double invMass;
 		glm::f64mat3 invInertia;
+		glm::f64mat3 invInertiaOrientated;
 
 		double coefRestitution;
 		double coefFriction;
@@ -55,7 +58,7 @@ namespace PhysicsObject {
 
 		void secondUpdate(double delta);
 
-		glm::f64mat3 invInertiaTensor();
+		void updateInvInertiaOrientated();
 
 		void applyForce(glm::f64vec3 force);
 
@@ -64,5 +67,7 @@ namespace PhysicsObject {
 		void applyCollisionImpulse(glm::f64vec3 force, glm::f64vec3 distance);
 
 		glm::f64vec3 momentum();
+
+		glm::f64mat4 translationMatrix();
 	};
 }

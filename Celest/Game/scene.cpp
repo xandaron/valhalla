@@ -80,7 +80,6 @@ void Game::Scene::load(const std::string& sceneFilepath) {
 		else if (!words[0].compare("object")) {
 			std::string name;
 			int instance = 0;
-			std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>> instancePositions;
 
 			while (std::getline(file, line)) {
 				
@@ -89,7 +88,6 @@ void Game::Scene::load(const std::string& sceneFilepath) {
 				trim(line);
 
 				if (!line.compare("}")) {
-					positions[name] = instancePositions;
 					assetPack.objectTypes.push_back(name);
 					break;
 				}
@@ -135,8 +133,8 @@ void Game::Scene::load(const std::string& sceneFilepath) {
 
 							if (!line.compare("}")) {
 								PhysicsObject::Body* object = new PhysicsObject::Body(bodyDescriptor);
-								objects.push_back(object);
-								instancePositions.push_back({ &object->position, &object->orientation });
+								physicsObjects.push_back(object);
+								mappedObjects[name].push_back(object);
 								instance++;
 								break;
 							}
@@ -193,30 +191,25 @@ void Game::Scene::load(const std::string& sceneFilepath) {
 	file.close();
 }
 
-Game::Camera* Game::Scene::GetCamera() {
+Game::Camera* Game::Scene::getCamera() {
 	return camera;
 }
 
-Game::AssetPack Game::Scene::GetAssetPack() {
+Game::AssetPack Game::Scene::getAssetPack() {
 	return assetPack;
 }
 
-std::vector<PhysicsObject::Body*> Game::Scene::GetPhysicsObjects() {
-	return objects;
+std::vector<PhysicsObject::Body*> Game::Scene::getPhysicsObjects() {
+	return physicsObjects;
 }
 
-std::unordered_map<std::string, std::vector<std::pair<glm::f64vec3*, DataObject::Quaternion*>>> Game::Scene::GetPositions() {
-	return positions;
+std::unordered_map<std::string, std::vector<PhysicsObject::Body*>> Game::Scene::getMappedObjects() {
+	return mappedObjects;
 }
 
 Game::Scene::~Scene() {
-
-	for (std::string type : assetPack.objectTypes) {
-		positions[type].clear();
+	for (auto obj : physicsObjects) {
+		delete obj;
 	}
-
-	for (PhysicsObject::Body* object : objects) {
-		delete object;
-	}
-	objects.clear();
+	mappedObjects.clear();
 }

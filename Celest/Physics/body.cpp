@@ -8,9 +8,11 @@ PhysicsObject::Body::Body(BodyDescriptor bodyDescriptor)
 	velocity = bodyDescriptor.velocity;
 	force = glm::f64vec3(0);
 
-	orientation = bodyDescriptor.orientation;
 	angularVelocity = bodyDescriptor.angularVelocity;
 	torque = glm::f64vec3(0);
+
+	orientation = bodyDescriptor.orientation;
+	orientationMatrix = orientation.toMat3();
 	
 	if (bodyDescriptor.hitboxDescriptor.type == Collision::HitboxType::AABB) {
 		hitbox = new Collision::AABBCollider(&position, bodyDescriptor.hitboxDescriptor.halfDimensions);
@@ -24,7 +26,8 @@ PhysicsObject::Body::Body(BodyDescriptor bodyDescriptor)
 
 	invMass = bodyDescriptor.invMass;
 	invInertia = hitbox->invInertiaMat(invMass);
-
+	invInertiaOrientated = orientationMatrix * invInertia;
+	
 	coefRestitution = bodyDescriptor.coefRestitution;
 	coefFriction = bodyDescriptor.coefFriction;
 }
@@ -48,18 +51,16 @@ bool PhysicsObject::Body::checkColliding(Body* obj, Collision::CollisionInfo* co
 
 void PhysicsObject::Body::secondUpdate(double delta) {
 	velocity += force * invMass * delta / 2.0;
-	angularVelocity += torque * invInertiaTensor() * delta;
-	orientation = (orientation + DataObject::Quaternion(angularVelocity * delta * 0.5) * orientation).normalize();
+	angularVelocity +=  invInertiaOrientated * delta * torque;
+	if (angularVelocity.length() > 0) {
+		orientation = (orientation + DataObject::Quaternion(angularVelocity * delta * 0.5) * orientation).normalize();
+		orientationMatrix = orientation.toMat3();
+		updateInvInertiaOrientated();
+	}
 }
 
-glm::f64mat3 PhysicsObject::Body::invInertiaTensor() {
-	glm::f64mat3 orientationMatrix = orientation.toMat3();
-	return orientationMatrix * invInertia;
-
-	/*glm::f64mat3 invOrientationMatrix = orientation.conjugate().toMat3();
-	glm::f64mat3 orientationMatrix = orientation.toMat3();
-
-	return orientationMatrix * invInertia * invOrientationMatrix;*/
+void PhysicsObject::Body::updateInvInertiaOrientated() {
+	invInertiaOrientated = orientationMatrix * invInertia;
 }
 
 void PhysicsObject::Body::applyForce(glm::f64vec3 force) {
@@ -74,9 +75,18 @@ void PhysicsObject::Body::applyForceAtPoint(glm::f64vec3 force, glm::f64vec3 poi
 
 void PhysicsObject::Body::applyCollisionImpulse(glm::f64vec3 force, glm::f64vec3 distance) {
 	this->velocity += force * invMass;
-	angularVelocity += invInertiaTensor() * glm::cross(distance, force);
+	angularVelocity += invInertiaOrientated * glm::cross(distance, force);
 }
 
 glm::f64vec3 PhysicsObject::Body::momentum() {
 	return velocity / invMass;
+}
+
+glm::f64mat4 PhysicsObject::Body::translationMatrix() {
+	return glm::f64mat4(
+		orientationMatrix[0][0], orientationMatrix[0][1], orientationMatrix[0][2], 0,
+		orientationMatrix[1][0], orientationMatrix[1][1], orientationMatrix[1][2], 0,
+		orientationMatrix[2][0], orientationMatrix[2][1], orientationMatrix[2][2], 0,
+		position.x,				 position.y,			  position.z,			   1
+	);
 }

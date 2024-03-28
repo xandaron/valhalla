@@ -178,7 +178,7 @@
     <ClInclude Include="Game\scene.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Physics\collision\collider.h">
+    <ClInclude Include="Physics\collider.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Physics\quaternion.h">

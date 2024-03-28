@@ -196,7 +196,7 @@
     <ClInclude Include="Graphics\view\vkInit\sync.h" />
     <ClInclude Include="Graphics\view\vkUtil\single_time_commands.h" />
     <ClInclude Include="Physics\body.h" />
-    <ClInclude Include="Physics\collision\collider.h" />
+    <ClInclude Include="Physics\collider.h" />
     <ClInclude Include="Physics\constants.h" />
     <ClInclude Include="Physics\physics_engine.h" />
     <ClInclude Include="Physics\quaternion.h" />

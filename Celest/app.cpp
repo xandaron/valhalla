@@ -18,13 +18,13 @@ App::App(int width, int height, bool debug) {
 
 	//std::vector<Game::SceneObject> sceneObjects = prepareScene();
 	scene = new Game::Scene("assets/scenes/double_orbit.scene");
-	camera = scene->GetCamera();
+	camera = scene->getCamera();
 
 	graphicsEngine = new Graphics::Engine(width, height, window, camera);
-	graphicsEngine->load_assets(scene->GetAssetPack());
+	graphicsEngine->load_assets(scene->getAssetPack());
 
 	physicsEngine = new Physics::PhysicsEngine();
-	physicsEngine->init(scene->GetPhysicsObjects());
+	physicsEngine->init(scene->getPhysicsObjects());
 
 	graphicsEngine->render(scene);
 }
@@ -86,13 +86,9 @@ double App::calculateDeltaTime() {
 void App::calculateFrameRate() {
 
 	double delta = glfwGetTime() - fpsTimer;
-	if (delta >= 1) {
-		fpsTimer = glfwGetTime();
-		int framerate{ std::max(1, int(numFrames / delta)) };
-		updateTitle(std::to_string(framerate));
-		numFrames = -1;
-		frameTime = float(1000.0 / framerate);
-	}
+	double framerate{ std::max(1.0, numFrames / delta) };
+	updateTitle(std::to_string(framerate));
+	frameTime = float(1000.0 / framerate);
 	++numFrames;
 }
 
