@@ -1,6 +1,6 @@
 #pragma once
 #include "../../../cfg.h"
-#include "../vkMesh/obj_mesh.h"
+#include "../../util/mesh_loader.h"
 #include "../vkImage/image.h"
 #include "../vkImage/texture.h"
 
@@ -21,11 +21,8 @@ namespace vkJob {
 
 	class MakeModel : public Job {
 	public:
-		std::string* objFilepath;
-		std::string* mtlFilepath;
-		glm::f64mat4 preTransform;
-		vkMesh::ObjMesh& mesh;
-		MakeModel(vkMesh::ObjMesh& mesh, std::string* objFilepath, std::string* mtlFilepath, glm::f64mat4 preTransform);
+		util::MeshLoader* mesh;
+		MakeModel(util::MeshLoader* mesh);
 		virtual void execute(vk::CommandBuffer commandBuffer, vk::Queue queue) final;
 	};
 

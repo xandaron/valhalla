@@ -17,7 +17,7 @@ App::App(int width, int height, bool debug) {
 	}
 
 	//std::vector<Game::SceneObject> sceneObjects = prepareScene();
-	scene = new Game::Scene("assets/scenes/double_orbit.scene");
+	scene = new Game::Scene("assets/scenes/fbx.scene");
 	camera = scene->getCamera();
 
 	graphicsEngine = new Graphics::Engine(width, height, window, camera);
@@ -52,8 +52,8 @@ bool App::build_glfw_window(int width, int height, bool debug) {
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-	if (window = glfwCreateWindow(width, height, "Not KSP", nullptr, nullptr)) {
-		message << "Successfully made a glfw window called \"Not KSP\", width: " << width << ", height: " << height;
+	if (window = glfwCreateWindow(width, height, "Celest", nullptr, nullptr)) {
+		message << "Successfully made a glfw window called \"Celest\", width: " << width << ", height: " << height;
 		vkLogging::Logger::get_logger()->print(message.str());
 	}
 	else {
@@ -64,6 +64,7 @@ bool App::build_glfw_window(int width, int height, bool debug) {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 	glfwSetScrollCallback(window, scroll_callback);
+	glfwSetCursorPosCallback(window, cursor_position_callback);
 	return true;
 }
 
@@ -94,15 +95,11 @@ void App::calculateFrameRate() {
 
 void App::cameraUpdate(double delta) {
 
-	if (middleMouse) {
-		double xpos, ypos;
-		glfwGetCursorPos(window, &xpos, &ypos);
-		cameraRotationVector.y = mousePos.y - ypos;
-		cameraRotationVector.z = mousePos.x - xpos;
-		mousePos = { xpos, ypos };
+	if (mouseLock) {
+		
 	}
 
-	camera->updateCamera(cameraMovementVector * 0.1, cameraRotationVector, delta);
+	camera->updateCamera(movementSpeed * cameraMovementVector, mouseSensitivity * cameraRotationVector, delta);
 
 	cameraRotationVector.y = 0;
 	cameraRotationVector.z = 0;

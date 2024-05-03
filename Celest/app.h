@@ -22,12 +22,14 @@ public:
 	int numFrames;
 	float frameTime;
 
-	double timeWarp = 5;
+	double timeWarp = 1;
 
-	glm::f64vec3 cameraMovementVector = { 0, 0, 0 };
-	glm::f64vec3 cameraRotationVector = { 0, 0, 0 };
-	glm::f64vec2 mousePos = { 0, 0 };
-	bool middleMouse = false;
+	glm::f32vec3 cameraMovementVector = { 0, 0, 0 };
+	glm::f32vec3 cameraRotationVector = { 0, 0, 0 };
+	glm::vec2 mousePos = glm::vec2(0);
+	float mouseSensitivity = 0.8;
+	float movementSpeed = 0.05;
+	bool mouseLock = false;
 
 	
 	App(int width, int height, bool debug);
@@ -98,19 +100,19 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 
 	if (key == GLFW_KEY_A) {
 		if (action == GLFW_PRESS) {
-			myApp->cameraMovementVector.y--;
+			myApp->cameraMovementVector.y++;
 		}
 		else if (action == GLFW_RELEASE) {
-			myApp->cameraMovementVector.y++;
+			myApp->cameraMovementVector.y--;
 		}
 	}
 
 	if (key == GLFW_KEY_D) {
 		if (action == GLFW_PRESS) {
-			myApp->cameraMovementVector.y++;
+			myApp->cameraMovementVector.y--;
 		}
 		else if (action == GLFW_RELEASE) {
-			myApp->cameraMovementVector.y--;
+			myApp->cameraMovementVector.y++;
 		}
 	}
 	
@@ -141,19 +143,30 @@ static void mouse_button_callback(GLFWwindow* window, int button, int action, in
 {
 	if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
 		if (action == GLFW_PRESS) {
-			myApp->middleMouse = true; 
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-		}
-		else if (action == GLFW_RELEASE) {
-			myApp->middleMouse = false;
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			if (myApp->mouseLock) {
+				myApp->mouseLock = false;
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			}
+			else {
+				myApp->mouseLock = true;
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			}
 		}
 	}
 }
 
+static void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
+{
+	std::cout << "Position: (" << xpos << ":" << ypos << ")" << std::endl;
+
+	if (myApp->mouseLock)
+	{
+		glm::vec2 mouseMovement = glm::vec2(xpos, ypos) - myApp->mousePos;
+		myApp->cameraRotationVector.y = mouseMovement[1];
+		myApp->cameraRotationVector.z = -mouseMovement[0];
+		myApp->mousePos = glm::vec2(xpos, ypos);
+	}
+}
 static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-	if (!myApp->middleMouse) {
-
-	}
 }

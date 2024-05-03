@@ -7,9 +7,8 @@ namespace Game {
 
 	struct AssetPack {
 		std::vector<std::string> objectTypes;
-		std::vector<std::string*> model_filenames;
-		std::vector<std::string*> material_filenames;
-		std::vector<std::string*> texture_filenames;
+		std::vector<std::string> model_filenames;
+		std::vector<std::string> texture_filenames;
 		std::vector<glm::mat4> preTransforms;
 		std::vector<std::string*> skybocks;
 	};
@@ -20,7 +19,7 @@ namespace Game {
 
 		Scene(const char* filepath);
 
-		void load(const std::string& sceneFilepath);
+		void load(const char* sceneFilepath);
 
 		Game::Camera* getCamera();
 

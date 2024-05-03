@@ -3,32 +3,12 @@
 #include <cctype>
 #include <locale>
 
-// trim from start (in place)
-inline void ltrim(std::string& s) {
-	s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
-		return !std::isspace(ch);
-		}));
-}
-
-// trim from end (in place)
-inline void rtrim(std::string& s) {
-	s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
-		return !std::isspace(ch);
-		}).base(), s.end());
-}
-
-// trim from both ends (in place)
-inline void trim(std::string& s) {
-	rtrim(s);
-	ltrim(s);
-}
-
 Game::Scene::Scene(const char* filepath) {
 
 	load(filepath);
 };
 
-void Game::Scene::load(const std::string& sceneFilepath) {
+void Game::Scene::load(const char* sceneFilepath) {
 
 	std::ifstream file;
 	file.open(sceneFilepath);
@@ -102,21 +82,12 @@ void Game::Scene::load(const std::string& sceneFilepath) {
 						name = words[1];
 					}
 					else if (!words[0].compare("model_filename")) {
-						std::string* filepath = new std::string("assets/models/");
-						filepath->append(words[1]);
-						assetPack.model_filenames.push_back(filepath);
-					}
-					else if (!words[0].compare("material_filename")) {
-						std::string* filepath = new std::string("assets/materials/");
-						filepath->append(words[1]);
-						assetPack.material_filenames.push_back(filepath);
+						assetPack.model_filenames.push_back(words[1]);
 					}
 					else if (!words[0].compare("texture_filename")) {
-						std::string* filepath = new std::string("assets/textures/");
-						filepath->append(words[1]);
-						assetPack.texture_filenames.push_back(filepath);
+						assetPack.texture_filenames.push_back(words[1]);
 					}
-					else if (!words[0].compare("pre_transform_scalar")) {
+					else if (!words[0].compare("pre_transform")) {
 						assetPack.preTransforms.push_back(glm::f64mat4(std::stof(words[1])));
 					}
 				}

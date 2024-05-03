@@ -17,7 +17,6 @@ void VertexMenagerie::consume(std::string type, std::vector<float>& vertexData, 
 		vertexLump.push_back(attribute);
 	}
 	for (uint32_t index : indexData) {
-		//std::cout << (index + indexOffset) << std::endl;
 		indexLump.push_back(index + indexOffset);
 	}
 

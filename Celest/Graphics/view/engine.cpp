@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "../util/mesh_loader.h"
 #include "vkInit/instance.h"
 #include "vkInit/device.h"
 #include "vkInit/swapchain.h"
@@ -8,7 +9,6 @@
 #include "vkInit/sync.h"
 #include "vkInit/descriptors.h"
 #include "vkMesh/mesh.h"
-#include "vkMesh/obj_mesh.h"
 
 Graphics::Engine::Engine(int width, int height, GLFWwindow* window, Game::Camera* camera) {
 
@@ -264,7 +264,7 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 
 	//Meshes
 	meshes = new VertexMenagerie();
-	std::unordered_map<std::string, vkMesh::ObjMesh> loaded_models;
+	std::unordered_map<std::string, util::MeshLoader*> loaded_models;
 	
 	//Make a descriptor pool to allocate sets.
 	vkInit::descriptorSetLayoutData bindings;
@@ -281,17 +281,14 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 		textureInfo.physicalDevice = physicalDevice;
 		textureInfo.layout = meshSetLayout[pipelineType::STANDARD];
 		textureInfo.descriptorPool = meshDescriptorPool;
-		textureInfo.filenames.push_back(assetPack.texture_filenames[i]);
+		textureInfo.filenames.push_back("assets/textures/" + assetPack.texture_filenames[i]);
 		materials[assetPack.objectTypes[i]] = new vkImage::Texture();
-		loaded_models[assetPack.objectTypes[i]] = vkMesh::ObjMesh();
+		loaded_models[assetPack.objectTypes[i]] = util::createMeshLoader("assets/models/", assetPack.model_filenames[i].c_str(), assetPack.preTransforms[i]);
 		workQueue.add(
 			new vkJob::MakeTexture(materials[assetPack.objectTypes[i]], textureInfo)
 		);
 		workQueue.add(
-			new vkJob::MakeModel(loaded_models[assetPack.objectTypes[i]],
-				assetPack.model_filenames[i],
-				assetPack.material_filenames[i],
-				assetPack.preTransforms[i])
+			new vkJob::MakeModel(loaded_models[assetPack.objectTypes[i]])
 		);
 	}
 	workQueue.lock.unlock();
@@ -316,8 +313,9 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 	}
 
 	//Consume loaded meshes
-	for (std::pair<std::string, vkMesh::ObjMesh> pair : loaded_models) {
-		meshes->consume(pair.first, pair.second.vertices, pair.second.indices);
+	for (std::pair<std::string, util::MeshLoader*> pair : loaded_models) {
+		meshes->consume(pair.first, pair.second->vertices, pair.second->indices);
+		delete pair.second;
 	}
 
 	vertexBufferFinalizationChunk finalizationInfo;
@@ -337,12 +335,12 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 	textureInfo.layout = meshSetLayout[pipelineType::STANDARD];
 	textureInfo.descriptorPool = meshDescriptorPool;
 	textureInfo.layout = meshSetLayout[pipelineType::SKY];
-	textureInfo.filenames.push_back(new std::string("assets/textures/sky_front.png"));
-	textureInfo.filenames.push_back(new std::string("assets/textures/sky_back.png"));
-	textureInfo.filenames.push_back(new std::string("assets/textures/sky_right.png"));
-	textureInfo.filenames.push_back(new std::string("assets/textures/sky_left.png"));
-	textureInfo.filenames.push_back(new std::string("assets/textures/sky_top.png"));
-	textureInfo.filenames.push_back(new std::string("assets/textures/sky_bottom.png"));
+	textureInfo.filenames.push_back("assets/textures/sky_front.png");
+	textureInfo.filenames.push_back("assets/textures/sky_back.png");
+	textureInfo.filenames.push_back("assets/textures/sky_right.png");
+	textureInfo.filenames.push_back("assets/textures/sky_left.png");
+	textureInfo.filenames.push_back("assets/textures/sky_top.png");
+	textureInfo.filenames.push_back("assets/textures/sky_bottom.png");
 	cubemap = new vkImage::CubeMap(textureInfo);
 }
 

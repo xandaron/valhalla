@@ -50,9 +50,9 @@ vkImage::Texture::~Texture() {
 
 void vkImage::Texture::load() {
 
-	pixels = stbi_load(filename->c_str(), &width, &height, &channels, STBI_rgb_alpha);
+	pixels = stbi_load(filename.c_str(), &width, &height, &channels, STBI_rgb_alpha);
 	if (!pixels) {
-		vkLogging::Logger::get_logger()->print_list({ "Unable to load: ", filename->c_str()});
+		vkLogging::Logger::get_logger()->print_list({ "Unable to load: ", filename});
 	}
 }
 

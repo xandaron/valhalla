@@ -44,12 +44,6 @@
     <ClCompile Include="Graphics\view\vkUtil\frame.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="cfg.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Graphics\view\vkMesh\obj_mesh.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Graphics\view\vkInit\pipeline.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -157,9 +151,6 @@
     <ClInclude Include="Graphics\view\vkUtil\single_time_commands.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\view\vkMesh\obj_mesh.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Graphics\view\vkImage\texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -184,6 +175,15 @@
     <ClInclude Include="Physics\quaternion.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Graphics\util\file_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\util\mesh_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\util\tree.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Graphics\shaders\fragment.spv">
@@ -203,9 +203,12 @@
     </None>
     <None Include="Graphics\shaders\sky_shader.vert" />
     <None Include="Graphics\shaders\sky_shader.frag" />
+    <None Include="assets\scenes\fbx.scene" />
+    <None Include="assets\models\cube.mtl" />
   </ItemGroup>
   <ItemGroup>
     <Object Include="assets\models\sphere.obj" />
+    <Object Include="assets\models\cube.obj" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />
