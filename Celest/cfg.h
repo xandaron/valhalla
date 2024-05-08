@@ -20,6 +20,8 @@
 #include <thread>
 #include <mutex>
 
+#include "Game/console/logging.h"
+
 /**
 	Data structures used for creating buffers
 	and allocating memory

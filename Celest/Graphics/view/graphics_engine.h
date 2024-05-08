@@ -8,13 +8,12 @@
 #include "vkJob/worker_thread.h"
 #include "../../Game/camera.h"
 #include "../../Game/scene.h"
+#include "../../Game/entity.h"
 
 namespace Graphics {
 
 	class Engine {
-
 	public:
-
 		Engine(int width, int height, GLFWwindow* window, Game::Camera* camera);
 
 		~Engine();
@@ -23,17 +22,11 @@ namespace Graphics {
 
 		void render(Game::Scene* scene);
 
-		Game::Camera* getCameraPointer();
-
 	private:
-
 		//glfw-related variables
 		int width;
 		int height;
 		GLFWwindow* window;
-
-		//Camera pointer
-		Game::Camera* camera;
 
 		//instance-related variables
 		vk::Instance instance{ nullptr };

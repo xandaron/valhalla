@@ -2,22 +2,22 @@
 #include "physics_engine.h"
 #include "constants.h"
 
-Physics::PhysicsEngine::PhysicsEngine() {
+Physics::Engine::Engine() {
 
 }
 
-void Physics::PhysicsEngine::init(std::vector<PhysicsObject::Body*> bodys) {
+void Physics::Engine::init(std::vector<PhysicsObject::Body*> bodys) {
 	setBodys(bodys);
 	for (PhysicsObject::Body* body : bodys) {
 		body->init(bodys);
 	}
 }
 
-void Physics::PhysicsEngine::update(double delta) {
+void Physics::Engine::update(double delta) {
 	updateBodys(delta);
 }
 
-void Physics::PhysicsEngine::resolveCollision(PhysicsObject::Body* objA, PhysicsObject::Body* objB, Collision::CollisionInfo* collisionInfo) {
+void Physics::Engine::resolveCollision(PhysicsObject::Body* objA, PhysicsObject::Body* objB, Collision::CollisionInfo* collisionInfo) {
 	double totalMass = objA->invMass + objB->invMass;
 
 	objA->position.xyz -= (collisionInfo->normal * collisionInfo->penetration * (objA->invMass / totalMass));
@@ -42,7 +42,7 @@ void Physics::PhysicsEngine::resolveCollision(PhysicsObject::Body* objA, Physics
 	objB->applyCollisionImpulse(impulse, collisionInfo->contactPointB);
 }
 
-void Physics::PhysicsEngine::resolveCollisions(double delta) {
+void Physics::Engine::resolveCollisions(double delta) {
 	Collision::CollisionInfo collisionInfo;
 	for (int i = 0; i < bodys.size() - 1; i++) {
 		for (int j = i + 1; j < bodys.size(); j++) {
@@ -53,7 +53,7 @@ void Physics::PhysicsEngine::resolveCollisions(double delta) {
 	}
 }
 
-void Physics::PhysicsEngine::updateBodys(double delta) {
+void Physics::Engine::updateBodys(double delta) {
 	for (PhysicsObject::Body* body : bodys) {
 		body->firstUpdate(delta);
 	}
@@ -64,7 +64,7 @@ void Physics::PhysicsEngine::updateBodys(double delta) {
 	}
 }
 
-void Physics::PhysicsEngine::gravitationalForce(std::vector<PhysicsObject::Body*> objs) {
+void Physics::Engine::gravitationalForce(std::vector<PhysicsObject::Body*> objs) {
 	for (int i = 0; i < objs.size() - 1; i++) {
 		for (int j = i + 1; j < objs.size(); j++) {
 			glm::f64vec3 force = calculateGravitationalForce(objs[i], objs[j]);
@@ -74,7 +74,7 @@ void Physics::PhysicsEngine::gravitationalForce(std::vector<PhysicsObject::Body*
 	}
 }
 
-glm::f64vec3 Physics::PhysicsEngine::calculateGravitationalForce(PhysicsObject::Body* objA, PhysicsObject::Body* objB)
+glm::f64vec3 Physics::Engine::calculateGravitationalForce(PhysicsObject::Body* objA, PhysicsObject::Body* objB)
 {
 
 	glm::f64vec3 relativePos = objB->position - objA->position;
@@ -95,14 +95,14 @@ glm::f64vec3 Physics::PhysicsEngine::calculateGravitationalForce(PhysicsObject::
 	return dir * f;
 }
 
-void Physics::PhysicsEngine::setBodys(std::vector<PhysicsObject::Body*> bodys) {
+void Physics::Engine::setBodys(std::vector<PhysicsObject::Body*> bodys) {
 	this->bodys = bodys;
 }
 
-void Physics::PhysicsEngine::clearBodys() {
+void Physics::Engine::clearBodys() {
 	this->bodys.clear();
 }
 
-Physics::PhysicsEngine::~PhysicsEngine() {
+Physics::Engine::~Engine() {
 
 }

@@ -7,17 +7,19 @@ Game::Camera::Camera(CameraView cameraViewData) :
 
 }
 
-void Game::Camera::updateCamera(glm::f64vec3 movementVector, glm::f64vec3 rotationVector, double delta) {
+void Game::Camera::update(double delta) {
 
-	if (movementVector != glm::f64vec3(0.0)) {
-		moveCamera(movementVector, delta);
-	}
-	if (rotationVector != glm::f64vec3(0.0)) {
-		rotateCamera(rotationVector, delta);
-	}
+	if (controller == nullptr) { return; }
+
+	moveCamera(delta);
+	rotateCamera(delta);
 }
 
-void Game::Camera::moveCamera(glm::f64vec3 movementVector, double delta) {
+void Game::Camera::moveCamera(double delta) {
+
+	glm::f64vec3 movementVector = controller->movementVector;
+
+	if (movementVector == glm::f64vec3(0.0)) { return; }
 
 	movementVector *= movementSpeed * delta;
 	movementVector = movementVector.x * cameraViewData.forward
@@ -27,7 +29,11 @@ void Game::Camera::moveCamera(glm::f64vec3 movementVector, double delta) {
 	cameraViewData.center += movementVector;
 }
 
-void Game::Camera::rotateCamera(glm::f64vec3 rotationVector, double delta) {
+void Game::Camera::rotateCamera(double delta) {
+
+	glm::f64vec3 rotationVector = controller->rotationVector;
+
+	if (rotationVector == glm::f64vec3(0.0)) { return; }
 
 	glm::f64vec3 w = rotationVector.x * cameraViewData.forward
 				+ rotationVector.y * cameraViewData.right
@@ -44,4 +50,8 @@ void Game::Camera::rotateCamera(glm::f64vec3 rotationVector, double delta) {
 
 void Game::Camera::reset() {
 	cameraViewData = initialCameraViewData;
+}
+
+Game::CameraView Game::Camera::getCameraViewData() {
+	return cameraViewData;
 }

@@ -14,6 +14,8 @@ void Game::Scene::load(const char* sceneFilepath) {
 	file.open(sceneFilepath);
 	std::string line;
 	std::vector<std::string> words;
+	int cameraType = 0;
+	std::string cameraTarget;
 
 	while (std::getline(file, line)) {
 		trim(line);
@@ -26,7 +28,16 @@ void Game::Scene::load(const char* sceneFilepath) {
 
 				trim(line);
 				if (!line.compare("}")) {
-					camera = new Game::Camera(cameraView);
+					if (cameraType == 1) {
+						FollowCamera* c = new FollowCamera(cameraView);
+						c->setOffset(glm::f64vec3(-10, 0, 0));
+						camera = c;
+					}
+					else {
+						camera = new Game::Camera(cameraView);
+					}
+					cameras.push_back(camera);
+					cameraArrayPointer++;
 					break;
 				}
 
@@ -34,8 +45,16 @@ void Game::Scene::load(const char* sceneFilepath) {
 				trim(words[0]);
 				trim(words[1]);
 				words[1] = words[1].substr(1, words[1].length() - 2);
-
-				if (!words[0].compare("eye")) {
+				
+				if (!words[0].compare("type")) {
+					if (!words[1].compare("follow")) {
+						cameraType = 1;
+					}
+				}
+				else if (!words[0].compare("target")) {
+					cameraTarget = words[1];
+				}
+				else if (!words[0].compare("eye")) {
 					std::vector<std::string> values = split(words[1], ",");
 					cameraView.eye = glm::f64vec3(std::stof(values[0]), std::stof(values[1]), std::stof(values[2]));
 				}
@@ -77,7 +96,6 @@ void Game::Scene::load(const char* sceneFilepath) {
 					trim(words[0]);
 					trim(words[1]);
 					words[1] = words[1].substr(1, words[1].length() - 2);
-
 					if (!words[0].compare("name")) {
 						name = words[1];
 					}
@@ -88,7 +106,18 @@ void Game::Scene::load(const char* sceneFilepath) {
 						assetPack.texture_filenames.push_back(words[1]);
 					}
 					else if (!words[0].compare("pre_transform")) {
-						assetPack.preTransforms.push_back(glm::f64mat4(std::stof(words[1])));
+						std::vector<std::string> preTransformWords = split(words[1], ",");
+						if (preTransformWords.size() == 3) {
+							assetPack.preTransforms.push_back(glm::f64mat4(
+								std::stof(preTransformWords[0]), 0, 0, 0,
+								0, std::stof(preTransformWords[1]), 0, 0,
+								0, 0, std::stof(preTransformWords[2]), 0,
+								0, 0, 0, 1
+							));
+						}
+						else {
+							assetPack.preTransforms.push_back(glm::f64mat4(std::stof(words[1])));
+						}
 					}
 				}
 				else {
@@ -103,10 +132,16 @@ void Game::Scene::load(const char* sceneFilepath) {
 							trim(line);
 
 							if (!line.compare("}")) {
-								PhysicsObject::Body* object = new PhysicsObject::Body(bodyDescriptor);
-								physicsObjects.push_back(object);
-								mappedObjects[name].push_back(object);
+								PhysicsObject::Body* physicsObject = new PhysicsObject::Body(bodyDescriptor);
+								physicsObjects.push_back(physicsObject);
+								Entitys::Entity* entity = new Entitys::Entity(physicsObject);
+								mappedObjects[name].push_back(entity);
 								instance++;
+
+								if (cameraType == 1 && !bodyDescriptor.uid.compare(cameraTarget)) {
+									FollowCamera* c = reinterpret_cast<FollowCamera*>(camera);
+									c->setTarget(entity);
+								}
 								break;
 							}
 
@@ -162,8 +197,21 @@ void Game::Scene::load(const char* sceneFilepath) {
 	file.close();
 }
 
+void Game::Scene::update(double delta) {
+	for (auto obj : mappedObjects) {
+		for (auto o : obj.second) {
+			o->update(delta);
+		}
+	}
+	camera->update(delta);
+}
+
 Game::Camera* Game::Scene::getCamera() {
 	return camera;
+}
+
+void Game::Scene::setCamera(Camera* camera) {
+	this->camera = camera;
 }
 
 Game::AssetPack Game::Scene::getAssetPack() {
@@ -174,13 +222,41 @@ std::vector<PhysicsObject::Body*> Game::Scene::getPhysicsObjects() {
 	return physicsObjects;
 }
 
-std::unordered_map<std::string, std::vector<PhysicsObject::Body*>> Game::Scene::getMappedObjects() {
+std::unordered_map<std::string, std::vector<Entitys::Entity*>> Game::Scene::getMappedObjects() {
 	return mappedObjects;
+}
+
+void Game::Scene::cycleCamera(Controller::PlayerController* pc) {
+	if (camera->getType() == Game::CameraType::FOLLOW) {
+		Game::FollowCamera* c = reinterpret_cast<Game::FollowCamera*>(camera);
+		c->getTarget()->setController(nullptr);
+	}
+	else {
+		camera->setController(nullptr);
+	}
+
+	cameraArrayPointer = (cameraArrayPointer + 1) % cameras.size();
+	camera = cameras[cameraArrayPointer];
+
+	if (camera->getType() == Game::CameraType::FOLLOW) {
+		Game::FollowCamera* c = reinterpret_cast<Game::FollowCamera*>(camera);
+		c->getTarget()->setController(pc);
+	}
+	else {
+		camera->setController(pc);
+	}
 }
 
 Game::Scene::~Scene() {
 	for (auto obj : physicsObjects) {
 		delete obj;
 	}
+
+	for (auto obj : mappedObjects) {
+		for (auto o : obj.second) {
+			delete o;
+		}
+	}
+
 	mappedObjects.clear();
 }

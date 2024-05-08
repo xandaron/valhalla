@@ -2,6 +2,9 @@
 #include "../cfg.h"
 #include "../Physics/body.h"
 #include "camera.h"
+#include "follower_camera.h"
+#include "entity.h"
+#include "player_controller.h"
 
 namespace Game {
 
@@ -21,20 +24,28 @@ namespace Game {
 
 		void load(const char* sceneFilepath);
 
-		Game::Camera* getCamera();
+		void update(double delta);
+
+		Camera* getCamera();
+
+		void setCamera(Camera* camera);
 
 		AssetPack getAssetPack();
 
 		std::vector<PhysicsObject::Body*> getPhysicsObjects();
 
-		std::unordered_map<std::string, std::vector<PhysicsObject::Body*>> getMappedObjects();
+		std::unordered_map<std::string, std::vector<Entitys::Entity*>> getMappedObjects();
+
+		void cycleCamera(Controller::PlayerController* pc);
 
 		~Scene();
 
 	private:
 		AssetPack assetPack;
-		Game::Camera* camera;
+		int cameraArrayPointer = 0;
+		Camera* camera;
+		std::vector<Camera*> cameras;
 		std::vector<PhysicsObject::Body*> physicsObjects;
-		std::unordered_map<std::string, std::vector<PhysicsObject::Body*>> mappedObjects;
+		std::unordered_map<std::string, std::vector<Entitys::Entity*>> mappedObjects;
 	};
 }

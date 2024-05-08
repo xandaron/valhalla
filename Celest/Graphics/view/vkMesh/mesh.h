@@ -1,5 +1,7 @@
 #pragma once
 #include "../../../cfg.h"
+#include "fbx_loader.h"
+#include "obj_loader.h"
 
 namespace vkMesh {
 
@@ -70,5 +72,16 @@ namespace vkMesh {
 		attributes[3].offset = 8 * sizeof(float);
 
 		return attributes;
+	}
+	
+	static Fileloader::Mesh_Loader* createMeshLoader(std::string filedir, std::string filename, glm::mat4 preTransform) {
+		std::vector<std::string> words = split(filename, ".");
+		if (words[1] == "obj") {
+			return new Fileloader::OBJ_Loader(filedir, filename, preTransform);
+		}
+		else if (words[1] == "fbx") {
+			return new Fileloader::FBX_Loader(filedir, filename, preTransform);
+		}
+		throw std::invalid_argument("invalid file type");
 	}
 }

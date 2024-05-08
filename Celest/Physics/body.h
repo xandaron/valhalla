@@ -23,12 +23,7 @@ namespace PhysicsObject {
 	};
 
 	class Body {
-
 	public:
-
-		Body(BodyDescriptor bodyDescriptor);
-		~Body();
-
 		std::string uid;
 		
 		glm::f64vec3 position;
@@ -50,6 +45,8 @@ namespace PhysicsObject {
 
 		Collision::Collider* hitbox;
 
+		Body(BodyDescriptor bodyDescriptor);
+
 		void init(std::vector<Body*> objs);
 
 		void firstUpdate(double delta);
@@ -66,8 +63,12 @@ namespace PhysicsObject {
 
 		void applyCollisionImpulse(glm::f64vec3 force, glm::f64vec3 distance);
 
+		void rotate(glm::f64vec3 rotation);
+
 		glm::f64vec3 momentum();
 
 		glm::f64mat4 translationMatrix();
+
+		~Body();
 	};
 }

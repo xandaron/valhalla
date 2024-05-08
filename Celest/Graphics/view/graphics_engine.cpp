@@ -1,5 +1,4 @@
-#include "engine.h"
-#include "../util/mesh_loader.h"
+#include "graphics_engine.h"
 #include "vkInit/instance.h"
 #include "vkInit/device.h"
 #include "vkInit/swapchain.h"
@@ -26,8 +25,6 @@ Graphics::Engine::Engine(int width, int height, GLFWwindow* window, Game::Camera
 	make_pipelines();
 
 	finalize_setup();
-	
-	this->camera = camera;
 }
 
 void Graphics::Engine::make_instance() {
@@ -264,7 +261,7 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 
 	//Meshes
 	meshes = new VertexMenagerie();
-	std::unordered_map<std::string, util::MeshLoader*> loaded_models;
+	std::unordered_map<std::string, Fileloader::Mesh_Loader*> loaded_models;
 	
 	//Make a descriptor pool to allocate sets.
 	vkInit::descriptorSetLayoutData bindings;
@@ -283,7 +280,7 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 		textureInfo.descriptorPool = meshDescriptorPool;
 		textureInfo.filenames.push_back("assets/textures/" + assetPack.texture_filenames[i]);
 		materials[assetPack.objectTypes[i]] = new vkImage::Texture();
-		loaded_models[assetPack.objectTypes[i]] = util::createMeshLoader("assets/models/", assetPack.model_filenames[i].c_str(), assetPack.preTransforms[i]);
+		loaded_models[assetPack.objectTypes[i]] = vkMesh::createMeshLoader("assets/models/", assetPack.model_filenames[i].c_str(), assetPack.preTransforms[i]);
 		workQueue.add(
 			new vkJob::MakeTexture(materials[assetPack.objectTypes[i]], textureInfo)
 		);
@@ -313,7 +310,7 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 	}
 
 	//Consume loaded meshes
-	for (std::pair<std::string, util::MeshLoader*> pair : loaded_models) {
+	for (std::pair<std::string, Fileloader::Mesh_Loader*> pair : loaded_models) {
 		meshes->consume(pair.first, pair.second->vertices, pair.second->indices);
 		delete pair.second;
 	}
@@ -354,7 +351,7 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 
 	vkUtil::SwapChainFrame& _frame = swapchainFrames[imageIndex];
 
-	Game::CameraView cameraViewData = camera->cameraViewData;
+	Game::CameraView cameraViewData = scene->getCamera()->getCameraViewData();
 	Game::CameraVectors cameraVectorData;
 	cameraVectorData.forward = { cameraViewData.forward.x, cameraViewData.forward.y, cameraViewData.forward.z, 0.0 };
 	cameraVectorData.right	 = {   cameraViewData.right.x,   cameraViewData.right.y,   cameraViewData.right.z, 0.0 };
@@ -373,9 +370,9 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 	memcpy(_frame.cameraMatrixWriteLocation, &(cameraMatrixData), sizeof(Game::CameraMatrices));
 
 	size_t i = 0;
-	for (std::pair<std::string, std::vector<PhysicsObject::Body*>> pair : scene->getMappedObjects()) {
-		for (PhysicsObject::Body* obj : pair.second) {
-			_frame.modelTransforms[i++] = obj->translationMatrix();
+	for (std::pair<std::string, std::vector<Entitys::Entity*>> pair : scene->getMappedObjects()) {
+		for (Entitys::Entity* obj : pair.second) {
+			_frame.modelTransforms[i++] = obj->getPhysicsObject()->translationMatrix();
 		}
 	}
 	memcpy(_frame.modelBufferWriteLocation, _frame.modelTransforms.data(), i * sizeof(glm::f64mat4));
@@ -449,7 +446,7 @@ void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffe
 	prepare_scene(commandBuffer);
 
 	uint32_t startInstance = 0;
-	for (std::pair<std::string, std::vector<PhysicsObject::Body*>> pair : scene->getMappedObjects()) {
+	for (std::pair<std::string, std::vector<Entitys::Entity*>> pair : scene->getMappedObjects()) {
 		render_objects(
 			commandBuffer, pair.first, startInstance, static_cast<uint32_t>(pair.second.size())
 		);
@@ -581,10 +578,6 @@ void Graphics::Engine::cleanup_swapchain() {
 	device.destroySwapchainKHR(swapchain);
 
 	device.destroyDescriptorPool(frameDescriptorPool);
-}
-
-Game::Camera* Graphics::Engine::getCameraPointer() {
-	return camera;
 }
 
 Graphics::Engine::~Engine() {

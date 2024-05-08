@@ -18,12 +18,20 @@ App::App(int width, int height, bool debug) {
 
 	//std::vector<Game::SceneObject> sceneObjects = prepareScene();
 	scene = new Game::Scene("assets/scenes/fbx.scene");
-	camera = scene->getCamera();
+	Game::Camera* camera = scene->getCamera();
+
+	if (camera->getType() == Game::CameraType::FOLLOW) {
+		Game::FollowCamera* c = reinterpret_cast<Game::FollowCamera*>(camera);
+		c->getTarget()->setController(playerController);
+	}
+	else {
+		camera->setController(playerController);
+	}
 
 	graphicsEngine = new Graphics::Engine(width, height, window, camera);
 	graphicsEngine->load_assets(scene->getAssetPack());
 
-	physicsEngine = new Physics::PhysicsEngine();
+	physicsEngine = new Physics::Engine();
 	physicsEngine->init(scene->getPhysicsObjects());
 
 	graphicsEngine->render(scene);
@@ -93,31 +101,28 @@ void App::calculateFrameRate() {
 	++numFrames;
 }
 
-void App::cameraUpdate(double delta) {
-
-	if (mouseLock) {
-		
-	}
-
-	camera->updateCamera(movementSpeed * cameraMovementVector, mouseSensitivity * cameraRotationVector, delta);
-
-	cameraRotationVector.y = 0;
-	cameraRotationVector.z = 0;
-}
-
 /**
 * Start the App's main loop
 */
 void App::run() {
-
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		double delta = calculateDeltaTime() * timeWarp;
 		calculateFrameRate();
-		cameraUpdate(delta);
+		scene->update(delta);
+		myApp->playerController->rotationVector.y = 0;
+		myApp->playerController->rotationVector.z = 0;
 		physicsEngine->update(delta);
 		graphicsEngine->render(scene);
 	}
+}
+
+void App::nextCamera() {
+	scene->cycleCamera(playerController);
+}
+
+void App::resetCamera() {
+	scene->getCamera()->reset();
 }
 
 /**
@@ -131,4 +136,6 @@ App::~App() {
 	delete graphicsEngine;
 	delete physicsEngine;
 	delete scene;
+
+	delete playerController;
 }

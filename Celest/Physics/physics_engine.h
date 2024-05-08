@@ -4,13 +4,13 @@
 
 namespace Physics {
 
-	class PhysicsEngine {
+	class Engine {
 
 	public:
 
-		PhysicsEngine();
+		Engine();
 
-		~PhysicsEngine();
+		~Engine();
 
 		void init(std::vector<PhysicsObject::Body*> bodys);
 

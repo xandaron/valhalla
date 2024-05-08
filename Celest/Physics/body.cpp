@@ -78,6 +78,10 @@ void PhysicsObject::Body::applyCollisionImpulse(glm::f64vec3 force, glm::f64vec3
 	angularVelocity += invInertiaOrientated * glm::cross(distance, force);
 }
 
+void PhysicsObject::Body::rotate(glm::f64vec3 rotation) {
+	orientation = (orientation + DataObject::Quaternion(rotation) * orientation).normalize();
+}
+
 glm::f64vec3 PhysicsObject::Body::momentum() {
 	return velocity / invMass;
 }

@@ -65,7 +65,7 @@
     <ClCompile Include="Game\camera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\view\engine.cpp">
+    <ClCompile Include="Graphics\view\graphics_engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Game\scene.cpp">
@@ -74,9 +74,27 @@
     <ClCompile Include="Physics\body.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Graphics\view\vkMesh\mtl_loader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkMesh\fbx_loader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkMesh\obj_loader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\util\tree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\util\node.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\follower_camera.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Graphics\view\engine.h">
+    <ClInclude Include="Graphics\view\graphics_engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="cfg.h">
@@ -175,13 +193,40 @@
     <ClInclude Include="Physics\quaternion.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\util\file_loader.h">
+    <ClInclude Include="Game\util\file_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\util\mesh_loader.h">
+    <ClInclude Include="Graphics\view\vkMesh\mesh_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\util\tree.h">
+    <ClInclude Include="Game\util\tree.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\view\vkMesh\mtl_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\view\vkMesh\fbx_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\view\vkMesh\obj_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\console\logging.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\util\node.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\entity.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\controller.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\player_controller.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\follower_camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -205,6 +250,7 @@
     <None Include="Graphics\shaders\sky_shader.frag" />
     <None Include="assets\scenes\fbx.scene" />
     <None Include="assets\models\cube.mtl" />
+    <None Include="assets\models\abom.fbx" />
   </ItemGroup>
   <ItemGroup>
     <Object Include="assets\models\sphere.obj" />

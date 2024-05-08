@@ -1,5 +1,6 @@
 #pragma once
 #include "../cfg.h"
+#include "player_controller.h"
 
 namespace Game {
 
@@ -19,31 +20,49 @@ namespace Game {
 	};
 
 	struct CameraView {
-		glm::f64vec3 eye;
-		glm::f64vec3 center;
-		glm::f64vec3 forward;
-		glm::f64vec3 right;
-		glm::f64vec3 up;
+		glm::f64vec3 eye = glm::f64vec3(0, 0, 0);
+		glm::f64vec3 center = glm::f64vec3(1, 0, 0);
+		glm::f64vec3 forward = glm::f64vec3(1, 0, 0);
+		glm::f64vec3 right = glm::f64vec3(0, 1, 0);
+		glm::f64vec3 up = glm::f64vec3(0, 0, 1);
+	};
+
+	enum CameraType {
+		FREE,
+		FOLLOW
 	};
 
 	class Camera {
-
 	public:
-
 		Camera(CameraView cameraViewData);
 
-		void updateCamera(glm::f64vec3 movementVector, glm::f64vec3 rotationVector, double delta);
+		void update(double delta);
 
-		void moveCamera(glm::f64vec3 movementVector, double delta);
+		void moveCamera(double delta);
 
-		void rotateCamera(glm::f64vec3 rotationVector, double delta);
+		void rotateCamera(double delta);
 
 		void reset();
+
+		virtual CameraView getCameraViewData();
+
+		CameraType getType() {
+			return type;
+		}
+
+		void setController(Controller::PlayerController* controller) {
+			this->controller = controller;
+		}
+
+	protected:
+		CameraView cameraViewData;
+		CameraView initialCameraViewData;
 
 		double movementSpeed = 15.0;
 		double rotationSpeed = 5.0;
 
-		CameraView cameraViewData;
-		CameraView initialCameraViewData;
+		CameraType type = CameraType::FREE;
+
+		Controller::PlayerController* controller;
 	};
 }
