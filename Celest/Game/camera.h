@@ -1,6 +1,7 @@
 #pragma once
 #include "../cfg.h"
 #include "player_controller.h"
+#include "entity.h"
 
 namespace Game {
 
@@ -27,14 +28,16 @@ namespace Game {
 		glm::f64vec3 up = glm::f64vec3(0, 0, 1);
 	};
 
-	enum CameraType {
-		FREE,
-		FOLLOW
-	};
-
 	class Camera {
 	public:
+		enum CameraMode {
+			FREE,
+			FOLLOW
+		};
+
 		Camera(CameraView cameraViewData);
+
+		Camera(CameraView cameraViewData, Entitys::Entity* target);
 
 		void update(double delta);
 
@@ -46,13 +49,17 @@ namespace Game {
 
 		virtual CameraView getCameraViewData();
 
-		CameraType getType() {
-			return type;
-		}
+		CameraMode getMode();
 
-		void setController(Controller::PlayerController* controller) {
-			this->controller = controller;
-		}
+		void setMode(Game::Camera::CameraMode mode);
+
+		void setController(Controller::Controller* controller);
+
+		Entitys::Entity* getTarget();
+
+		void setTarget(Entitys::Entity* target);
+
+		void setOffset(glm::f64vec3 offset);
 
 	protected:
 		CameraView cameraViewData;
@@ -61,8 +68,11 @@ namespace Game {
 		double movementSpeed = 15.0;
 		double rotationSpeed = 5.0;
 
-		CameraType type = CameraType::FREE;
+		CameraMode mode;
 
-		Controller::PlayerController* controller;
+		Controller::Controller* controller;
+
+		Entitys::Entity* target;
+		glm::f64vec3 offset = glm::f64vec3(0.0);
 	};
 }

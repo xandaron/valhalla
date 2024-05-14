@@ -143,7 +143,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="app.cpp" />
-    <ClCompile Include="Game\follower_camera.cpp" />
     <ClCompile Include="Game\scene.cpp" />
     <ClCompile Include="Game\util\node.cpp" />
     <ClCompile Include="Game\util\tree.cpp" />
@@ -171,10 +170,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="app.h" />
-    <ClInclude Include="Game\console\logging.h" />
+    <ClInclude Include="Game\debugging\logging.h" />
     <ClInclude Include="Game\controller.h" />
     <ClInclude Include="Game\entity.h" />
-    <ClInclude Include="Game\follower_camera.h" />
     <ClInclude Include="Game\player_controller.h" />
     <ClInclude Include="Game\scene.h" />
     <ClInclude Include="cfg.h" />

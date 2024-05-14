@@ -4,12 +4,10 @@
 #include <locale>
 
 Game::Scene::Scene(const char* filepath) {
-
 	load(filepath);
 };
 
 void Game::Scene::load(const char* sceneFilepath) {
-
 	std::ifstream file;
 	file.open(sceneFilepath);
 	std::string line;
@@ -29,9 +27,9 @@ void Game::Scene::load(const char* sceneFilepath) {
 				trim(line);
 				if (!line.compare("}")) {
 					if (cameraType == 1) {
-						FollowCamera* c = new FollowCamera(cameraView);
-						c->setOffset(glm::f64vec3(-10, 0, 0));
-						camera = c;
+						camera = new Camera(cameraView);
+						camera->setMode(Game::Camera::CameraMode::FOLLOW);
+						camera->setOffset(glm::f64vec3(-10, 0, 0));
 					}
 					else {
 						camera = new Game::Camera(cameraView);
@@ -139,8 +137,7 @@ void Game::Scene::load(const char* sceneFilepath) {
 								instance++;
 
 								if (cameraType == 1 && !bodyDescriptor.uid.compare(cameraTarget)) {
-									FollowCamera* c = reinterpret_cast<FollowCamera*>(camera);
-									c->setTarget(entity);
+									camera->setTarget(entity);
 								}
 								break;
 							}
@@ -227,9 +224,8 @@ std::unordered_map<std::string, std::vector<Entitys::Entity*>> Game::Scene::getM
 }
 
 void Game::Scene::cycleCamera(Controller::PlayerController* pc) {
-	if (camera->getType() == Game::CameraType::FOLLOW) {
-		Game::FollowCamera* c = reinterpret_cast<Game::FollowCamera*>(camera);
-		c->getTarget()->setController(nullptr);
+	if (camera->getMode() == Game::Camera::CameraMode::FOLLOW) {
+		camera->getTarget()->setController(nullptr);
 	}
 	else {
 		camera->setController(nullptr);
@@ -238,9 +234,8 @@ void Game::Scene::cycleCamera(Controller::PlayerController* pc) {
 	cameraArrayPointer = (cameraArrayPointer + 1) % cameras.size();
 	camera = cameras[cameraArrayPointer];
 
-	if (camera->getType() == Game::CameraType::FOLLOW) {
-		Game::FollowCamera* c = reinterpret_cast<Game::FollowCamera*>(camera);
-		c->getTarget()->setController(pc);
+	if (camera->getMode() == Game::Camera::CameraMode::FOLLOW) {
+		camera->getTarget()->setController(pc);
 	}
 	else {
 		camera->setController(pc);

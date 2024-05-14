@@ -89,9 +89,6 @@
     <ClCompile Include="Game\util\node.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Game\follower_camera.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Graphics\view\graphics_engine.h">
@@ -211,7 +208,7 @@
     <ClInclude Include="Graphics\view\vkMesh\obj_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Game\console\logging.h">
+    <ClInclude Include="Game\debugging\logging.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Game\util\node.h">
@@ -224,9 +221,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Game\player_controller.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Game\follower_camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

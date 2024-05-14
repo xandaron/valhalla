@@ -2,7 +2,6 @@
 #include "../cfg.h"
 #include "../Physics/body.h"
 #include "camera.h"
-#include "follower_camera.h"
 #include "entity.h"
 #include "player_controller.h"
 

@@ -1,15 +1,28 @@
 #include "camera.h"
 
-Game::Camera::Camera(CameraView cameraViewData) :
-	initialCameraViewData(cameraViewData),
-	cameraViewData(cameraViewData)
-{
+Game::Camera::Camera(CameraView cameraViewData) {
+	initialCameraViewData = cameraViewData;
+	cameraViewData = cameraViewData;
+	mode = Camera::CameraMode::FREE;
+}
 
+Game::Camera::Camera(CameraView cameraViewData, Entitys::Entity* target) {
+	initialCameraViewData = cameraViewData;
+	cameraViewData = cameraViewData;
+	this->target = target;
+	mode = Camera::CameraMode::FOLLOW;
 }
 
 void Game::Camera::update(double delta) {
 
-	if (controller == nullptr) { return; }
+	if (mode == CameraMode::FOLLOW) {
+		cameraViewData.eye = target->getPosition() + target->orientateVector(offset);
+		cameraViewData.forward = target->getForwards();
+		cameraViewData.right = target->getRight();
+		cameraViewData.up = target->getUp();
+		cameraViewData.center = cameraViewData.eye + cameraViewData.forward;
+		return;
+	}
 
 	moveCamera(delta);
 	rotateCamera(delta);
@@ -54,4 +67,28 @@ void Game::Camera::reset() {
 
 Game::CameraView Game::Camera::getCameraViewData() {
 	return cameraViewData;
+}
+
+Game::Camera::CameraMode Game::Camera::getMode() {
+	return mode;
+}
+
+void Game::Camera::setMode(Game::Camera::CameraMode mode) {
+	this->mode = mode;
+}
+
+void Game::Camera::setController(Controller::Controller* controller) {
+	this->controller = controller;
+}
+
+Entitys::Entity* Game::Camera::getTarget() {
+	return target;
+}
+
+void Game::Camera::setTarget(Entitys::Entity* target) {
+	this->target = target;
+}
+
+void Game::Camera::setOffset(glm::f64vec3 offset) {
+	this->offset = offset;
 }

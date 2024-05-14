@@ -20,9 +20,8 @@ App::App(int width, int height, bool debug) {
 	scene = new Game::Scene("assets/scenes/fbx.scene");
 	Game::Camera* camera = scene->getCamera();
 
-	if (camera->getType() == Game::CameraType::FOLLOW) {
-		Game::FollowCamera* c = reinterpret_cast<Game::FollowCamera*>(camera);
-		c->getTarget()->setController(playerController);
+	if (camera->getMode() == Game::Camera::CameraMode::FOLLOW) {
+		camera->getTarget()->setController(playerController);
 	}
 	else {
 		camera->setController(playerController);

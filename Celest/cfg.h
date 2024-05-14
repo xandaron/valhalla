@@ -20,7 +20,7 @@
 #include <thread>
 #include <mutex>
 
-#include "Game/console/logging.h"
+#include "Game/debugging/logging.h"
 
 /**
 	Data structures used for creating buffers
