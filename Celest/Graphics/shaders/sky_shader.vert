@@ -20,5 +20,5 @@ const vec2 screen_corners[6] = vec2[](
 void main() {
 	vec2 pos = screen_corners[gl_VertexIndex];
 	gl_Position = vec4(pos, 0.0, 1.0);
-	forwards = normalize(cameraData.forwards + pos.x * cameraData.right - pos.y * cameraData.up).xyz;
+	forwards = normalize(cameraData.forwards - pos.x * cameraData.right - pos.y * cameraData.up).xyz;
 }

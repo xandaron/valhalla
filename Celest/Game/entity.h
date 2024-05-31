@@ -1,12 +1,12 @@
 #pragma once
 #include "../cfg.h"
 #include "controller.h"
-#include "../Physics/body.h"
+#include "../Physics/objects/dynamic_body.h"
 
 namespace Entitys {
 	class Entity {
 	public:
-		Entity(PhysicsObject::Body* physicsBody) {
+		Entity(PhysicsObject::DynamicBody* physicsBody) {
 			this->physicsBody = physicsBody;
 		}
 
@@ -25,7 +25,7 @@ namespace Entitys {
 			movementVector = orientateVector(movementVector);
 			movementVector *= movementSpeed * delta;
 
-			physicsBody->position += movementVector;
+			physicsBody->move(movementVector);
 		}
 
 		void rotate(double delta) {
@@ -70,7 +70,7 @@ namespace Entitys {
 	protected:
 		int movementSpeed = 10;
 		int rotationSpeed = 10;
-		PhysicsObject::Body* physicsBody;
+		PhysicsObject::DynamicBody* physicsBody;
 		Controller::Controller* controller;
 
 	private:

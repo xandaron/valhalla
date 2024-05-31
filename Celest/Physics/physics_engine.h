@@ -1,18 +1,13 @@
 #pragma once
 #include "../cfg.h"
-#include "body.h"
+#include "objects/body.h"
 
 namespace Physics {
 
 	class Engine {
 
 	public:
-
 		Engine();
-
-		~Engine();
-
-		void init(std::vector<PhysicsObject::Body*> bodys);
 
 		void update(double delta);
 
@@ -21,17 +16,14 @@ namespace Physics {
 		void clearBodys();
 
 	private:
-
 		std::vector<PhysicsObject::Body*> bodys;
-
-		void resolveCollision(PhysicsObject::Body* objA, PhysicsObject::Body* objB, Collision::CollisionInfo* collisionInfo);
-
-		void resolveCollisions(double delta);
 
 		void updateBodys(double delta);
 
-		void gravitationalForce(std::vector<PhysicsObject::Body*> objs);
+		/*
+		void resolveCollision(PhysicsObject::Body* objA, PhysicsObject::Body* objB, Collision::CollisionInfo* collisionInfo);
 
-		glm::f64vec3 calculateGravitationalForce(PhysicsObject::Body* objA, PhysicsObject::Body* objB);
+		void resolveCollisions(double delta);
+		*/
 	};
 }

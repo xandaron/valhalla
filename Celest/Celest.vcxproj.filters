@@ -23,7 +23,7 @@
     <ClCompile Include="Graphics\view\vkUtil\memory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\model\vertex_menagerie.cpp">
+    <ClCompile Include="Graphics\view\vkMesh\vertex_menagerie.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\control\logger.cpp">
@@ -71,22 +71,28 @@
     <ClCompile Include="Game\scene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Physics\body.cpp">
+    <ClCompile Include="Physics\objects\dynamic_body.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\view\vkMesh\mtl_loader.cpp">
+    <ClCompile Include="Graphics\Meshloader\fbx_loader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\view\vkMesh\fbx_loader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Graphics\view\vkMesh\obj_loader.cpp">
+    <ClCompile Include="Graphics\Meshloader\obj_loader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Game\util\tree.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Game\util\node.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Physics\objects\body.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Meshloader\OpenFBX\ofbx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Meshloader\OpenFBX\libdeflate.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -142,16 +148,13 @@
     <ClInclude Include="Graphics\view\vkUtil\memory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\model\vertex_menagerie.h">
+    <ClInclude Include="Graphics\view\vkMesh\vertex_menagerie.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Physics\physics_engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Physics\body.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Physics\constants.h">
+    <ClInclude Include="Physics\objects\body.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\view\vkInit\descriptors.h">
@@ -193,19 +196,16 @@
     <ClInclude Include="Game\util\file_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\view\vkMesh\mesh_loader.h">
+    <ClInclude Include="Graphics\Meshloader\mesh_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Game\util\tree.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\view\vkMesh\mtl_loader.h">
+    <ClInclude Include="Graphics\Meshloader\fbx_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\view\vkMesh\fbx_loader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Graphics\view\vkMesh\obj_loader.h">
+    <ClInclude Include="Graphics\Meshloader\obj_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Game\debugging\logging.h">
@@ -221,6 +221,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Game\player_controller.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\objects\dynamic_body.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="thirdParty\include\tiny_obj_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Meshloader\OpenFBX\ofbx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Meshloader\OpenFBX\libdeflate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -245,6 +257,8 @@
     <None Include="assets\scenes\fbx.scene" />
     <None Include="assets\models\cube.mtl" />
     <None Include="assets\models\abom.fbx" />
+    <None Include="assets\models\scav.fbx" />
+    <None Include="assets\models\scav_back.fbx" />
   </ItemGroup>
   <ItemGroup>
     <Object Include="assets\models\sphere.obj" />
@@ -252,5 +266,8 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\textures\scav.png" />
   </ItemGroup>
 </Project>

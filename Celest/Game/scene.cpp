@@ -43,7 +43,7 @@ void Game::Scene::load(const char* sceneFilepath) {
 				trim(words[0]);
 				trim(words[1]);
 				words[1] = words[1].substr(1, words[1].length() - 2);
-				
+
 				if (!words[0].compare("type")) {
 					if (!words[1].compare("follow")) {
 						cameraType = 1;
@@ -130,7 +130,7 @@ void Game::Scene::load(const char* sceneFilepath) {
 							trim(line);
 
 							if (!line.compare("}")) {
-								PhysicsObject::Body* physicsObject = new PhysicsObject::Body(bodyDescriptor);
+								PhysicsObject::DynamicBody* physicsObject = new PhysicsObject::DynamicBody(bodyDescriptor);
 								physicsObjects.push_back(physicsObject);
 								Entitys::Entity* entity = new Entitys::Entity(physicsObject);
 								mappedObjects[name].push_back(entity);

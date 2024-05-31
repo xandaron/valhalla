@@ -1,6 +1,6 @@
 #pragma once
 #include "../cfg.h"
-#include "../Physics/body.h"
+#include "../Physics/objects/body.h"
 #include "camera.h"
 #include "entity.h"
 #include "player_controller.h"

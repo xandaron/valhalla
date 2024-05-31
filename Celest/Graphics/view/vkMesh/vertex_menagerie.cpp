@@ -1,20 +1,38 @@
 #include "vertex_menagerie.h"
 
-VertexMenagerie::VertexMenagerie() {
+vkMesh::VertexMenagerie::VertexMenagerie() {
 	indexOffset = 0;
 }
 
-void VertexMenagerie::consume(std::string type, std::vector<float>& vertexData, std::vector<uint32_t>& indexData) {
+void vkMesh::VertexMenagerie::consume(std::string type, std::vector<Vertex>& vertexData, std::vector<uint32_t>& indexData) {
 
-	int indexCount = static_cast<int>(indexData.size());
-	int vertexCount = static_cast<int>(vertexData.size() / 11);
-	int lastIndex = static_cast<int>(indexLump.size());
+	int indexCount = static_cast<uint32_t>(indexData.size());
+	int vertexCount = static_cast<uint32_t>(vertexData.size() / 11);
+	int lastIndex = static_cast<uint32_t>(indexLump.size());
 
 	firstIndices.insert(std::make_pair(type, lastIndex));
 	indexCounts.insert(std::make_pair(type, indexCount));
 
-	for (float attribute : vertexData) {
-		vertexLump.push_back(attribute);
+	for (Vertex vertex : vertexData) {
+		glm::vec3& p = vertex.pos;
+		glm::vec3& c = vertex.color;
+		glm::vec2& t = vertex.texCoord;
+		glm::vec3& n = vertex.normal;
+
+		vertexLump.push_back(p.x);
+		vertexLump.push_back(p.y);
+		vertexLump.push_back(p.z);
+
+		vertexLump.push_back(c.x);
+		vertexLump.push_back(c.y);
+		vertexLump.push_back(c.z);
+
+		vertexLump.push_back(t.x);
+		vertexLump.push_back(t.y);
+
+		vertexLump.push_back(n.x);
+		vertexLump.push_back(n.y);
+		vertexLump.push_back(n.z);
 	}
 	for (uint32_t index : indexData) {
 		indexLump.push_back(index + indexOffset);
@@ -23,7 +41,7 @@ void VertexMenagerie::consume(std::string type, std::vector<float>& vertexData, 
 	indexOffset += vertexCount;
 }
 
-void VertexMenagerie::finalize(vertexBufferFinalizationChunk finalizationChunk) {
+void vkMesh::VertexMenagerie::finalize(vertexBufferFinalizationChunk finalizationChunk) {
 
 	logicalDevice = finalizationChunk.logicalDevice;
 
@@ -85,7 +103,7 @@ void VertexMenagerie::finalize(vertexBufferFinalizationChunk finalizationChunk) 
 	vertexLump.clear();
 }
 
-VertexMenagerie::~VertexMenagerie() {
+vkMesh::VertexMenagerie::~VertexMenagerie() {
 
 	//destroy vertex buffer
 	logicalDevice.destroyBuffer(vertexBuffer.buffer);

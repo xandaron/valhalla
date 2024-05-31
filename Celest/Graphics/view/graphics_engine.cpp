@@ -17,19 +17,16 @@ Graphics::Engine::Engine(int width, int height, GLFWwindow* window, Game::Camera
 
 	vkLogging::Logger::get_logger()->print("Making a graphics engine...");
 
-	make_instance();
-
-	make_device();
-
-	make_descriptor_set_layouts();
-	make_pipelines();
-
-	finalize_setup();
+	createInstance();
+	createDevice();
+	createDescriptorSetLayouts();
+	createPipelines();
+	finalizeSetup();
 }
 
-void Graphics::Engine::make_instance() {
+void Graphics::Engine::createInstance() {
 
-	instance = vkInit::make_instance("Not KSP");
+	instance = vkInit::make_instance("New Innsmouth");
 	dldi = vk::DispatchLoaderDynamic(instance, vkGetInstanceProcAddr);
 	if (vkLogging::Logger::get_logger()->get_debug_mode()) {
 		debugMessenger = vkLogging::make_debug_messenger(instance, dldi);
@@ -46,21 +43,21 @@ void Graphics::Engine::make_instance() {
 	surface = c_style_surface;
 }
 
-void Graphics::Engine::make_device() {
+void Graphics::Engine::createDevice() {
 
 	physicalDevice = vkInit::choose_physical_device(instance);
 	device = vkInit::create_logical_device(physicalDevice, surface);
 	std::array<vk::Queue, 2> queues = vkInit::get_queues(physicalDevice, device, surface);
 	graphicsQueue = queues[0];
 	presentQueue = queues[1];
-	make_swapchain();
+	createSwapchain();
 	frameNumber = 0;
 }
 
 /**
 * Make a swapchain
 */
-void Graphics::Engine::make_swapchain() {
+void Graphics::Engine::createSwapchain() {
 
 	vkInit::SwapChainBundle bundle = vkInit::create_swapchain(
 		device, physicalDevice, surface, width, height
@@ -84,7 +81,7 @@ void Graphics::Engine::make_swapchain() {
 /**
 * The swapchain must be recreated upon resize or minimization, among other cases
 */
-void Graphics::Engine::recreate_swapchain() {
+void Graphics::Engine::recreateSwapchain() {
 
 	width = 0;
 	height = 0;
@@ -95,15 +92,15 @@ void Graphics::Engine::recreate_swapchain() {
 
 	device.waitIdle();
 
-	cleanup_swapchain();
-	make_swapchain();
-	make_framebuffers();
-	make_frame_resources();
+	cleanupSwapchain();
+	createSwapchain();
+	createFramebuffers();
+	createFrameResources();
 	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainFrames };
 	vkInit::make_frame_command_buffers(commandBufferInput);
 }
 
-void Graphics::Engine::make_descriptor_set_layouts() {
+void Graphics::Engine::createDescriptorSetLayouts() {
 
 	//Binding once per frame
 	vkInit::descriptorSetLayoutData bindings;
@@ -122,7 +119,7 @@ void Graphics::Engine::make_descriptor_set_layouts() {
 	bindings.types.push_back(vk::DescriptorType::eStorageBuffer);
 	bindings.counts.push_back(1);
 	bindings.stages.push_back(vk::ShaderStageFlagBits::eVertex);
-
+	
 	frameSetLayout[pipelineType::STANDARD] = vkInit::make_descriptor_set_layout(device, bindings);
 
 	//Binding for individual draw calls
@@ -137,7 +134,7 @@ void Graphics::Engine::make_descriptor_set_layouts() {
 	meshSetLayout[pipelineType::STANDARD] = vkInit::make_descriptor_set_layout(device, bindings);
 }
 
-void Graphics::Engine::make_pipelines() {
+void Graphics::Engine::createPipelines() {
 
 	vkInit::PipelineBuilder pipelineBuilder(device);
 
@@ -161,8 +158,8 @@ void Graphics::Engine::make_pipelines() {
 	//Standard
 	pipelineBuilder.set_overwrite_mode(true);
 	pipelineBuilder.specify_vertex_format(
-		vkMesh::getPosColorBindingDescription(),
-		vkMesh::getPosColorAttributeDescriptions());
+		vkMesh::Vertex::getBindingDescription(),
+		vkMesh::Vertex::getAttributeDescriptions());
 	pipelineBuilder.specify_vertex_shader("Graphics/shaders/vertex.spv");
 	pipelineBuilder.specify_fragment_shader("Graphics/shaders/fragment.spv");
 	pipelineBuilder.specify_swapchain_extent(swapchainExtent);
@@ -181,7 +178,7 @@ void Graphics::Engine::make_pipelines() {
 /**
 * Make a framebuffer for each frame
 */
-void Graphics::Engine::make_framebuffers() {
+void Graphics::Engine::createFramebuffers() {
 
 	vkInit::framebufferInput frameBufferInput;
 	frameBufferInput.device = device;
@@ -190,9 +187,9 @@ void Graphics::Engine::make_framebuffers() {
 	vkInit::make_framebuffers(frameBufferInput, swapchainFrames);
 }
 
-void Graphics::Engine::finalize_setup() {
+void Graphics::Engine::finalizeSetup() {
 
-	make_framebuffers();
+	createFramebuffers();
 
 	commandPool = vkInit::make_command_pool(device, physicalDevice, surface);
 
@@ -200,10 +197,10 @@ void Graphics::Engine::finalize_setup() {
 	mainCommandBuffer = vkInit::make_command_buffer(commandBufferInput);
 	vkInit::make_frame_command_buffers(commandBufferInput);
 
-	make_frame_resources();
+	createFrameResources();
 }
 
-void Graphics::Engine::make_frame_resources() {
+void Graphics::Engine::createFrameResources() {
 
 	vkInit::descriptorSetLayoutData bindings;
 	bindings.count = 2;
@@ -228,7 +225,7 @@ void Graphics::Engine::make_frame_resources() {
 	}
 }
 
-void Graphics::Engine::make_worker_threads() {
+void Graphics::Engine::createWorkerThreads() {
 
 	done = false;
 	size_t threadCount = std::thread::hardware_concurrency() - 1;
@@ -245,7 +242,7 @@ void Graphics::Engine::make_worker_threads() {
 	}
 }
 
-void Graphics::Engine::end_worker_threads() {
+void Graphics::Engine::endWorkerThreads() {
 
 	done = true;
 	size_t threadCount = std::thread::hardware_concurrency() - 1;
@@ -257,12 +254,12 @@ void Graphics::Engine::end_worker_threads() {
 	std::cout << "Threads ended successfully." << std::endl;
 }
 
-void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
+void Graphics::Engine::createAssets(Game::AssetPack assetPack) {
 
 	//Meshes
-	meshes = new VertexMenagerie();
-	std::unordered_map<std::string, Fileloader::Mesh_Loader*> loaded_models;
-	
+	meshes = new vkMesh::VertexMenagerie();
+	std::unordered_map<std::string, Meshloader::Mesh_Loader*> loaded_models;
+
 	//Make a descriptor pool to allocate sets.
 	vkInit::descriptorSetLayoutData bindings;
 	bindings.count = 1;
@@ -280,7 +277,7 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 		textureInfo.descriptorPool = meshDescriptorPool;
 		textureInfo.filenames.push_back("assets/textures/" + assetPack.texture_filenames[i]);
 		materials[assetPack.objectTypes[i]] = new vkImage::Texture();
-		loaded_models[assetPack.objectTypes[i]] = vkMesh::createMeshLoader("assets/models/", assetPack.model_filenames[i].c_str(), assetPack.preTransforms[i]);
+		loaded_models[assetPack.objectTypes[i]] = vkMesh::createMeshLoader("assets/models/", assetPack.model_filenames[i], assetPack.preTransforms[i]);
 		workQueue.add(
 			new vkJob::MakeTexture(materials[assetPack.objectTypes[i]], textureInfo)
 		);
@@ -290,8 +287,6 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 	}
 	workQueue.lock.unlock();
 
-	//Work will be done by the background threads,
-	//we just need to wait.
 	std::cout << "Waiting for work to finish." << std::endl;
 	while (true) {
 
@@ -310,12 +305,12 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 	}
 
 	//Consume loaded meshes
-	for (std::pair<std::string, Fileloader::Mesh_Loader*> pair : loaded_models) {
+	for (std::pair<std::string, Meshloader::Mesh_Loader*> pair : loaded_models) {
 		meshes->consume(pair.first, pair.second->vertices, pair.second->indices);
 		delete pair.second;
 	}
 
-	vertexBufferFinalizationChunk finalizationInfo;
+	vkMesh::vertexBufferFinalizationChunk finalizationInfo;
 	finalizationInfo.logicalDevice = device;
 	finalizationInfo.physicalDevice = physicalDevice;
 	finalizationInfo.commandBuffer = mainCommandBuffer;
@@ -341,26 +336,26 @@ void Graphics::Engine::make_assets(Game::AssetPack assetPack) {
 	cubemap = new vkImage::CubeMap(textureInfo);
 }
 
-void Graphics::Engine::load_assets(Game::AssetPack assetPack) {
-	make_worker_threads();
-	make_assets(assetPack);
-	end_worker_threads();
+void Graphics::Engine::loadAssets(Game::AssetPack assetPack) {
+	createWorkerThreads();
+	createAssets(assetPack);
+	endWorkerThreads();
 }
 
-void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
+void Graphics::Engine::prepareFrame(uint32_t imageIndex, Game::Scene* scene) {
 
 	vkUtil::SwapChainFrame& _frame = swapchainFrames[imageIndex];
 
 	Game::CameraView cameraViewData = scene->getCamera()->getCameraViewData();
 	Game::CameraVectors cameraVectorData;
 	cameraVectorData.forward = { cameraViewData.forward.x, cameraViewData.forward.y, cameraViewData.forward.z, 0.0 };
-	cameraVectorData.right	 = {   cameraViewData.right.x,   cameraViewData.right.y,   cameraViewData.right.z, 0.0 };
-	cameraVectorData.up		 = {      cameraViewData.up.x,      cameraViewData.up.y,      cameraViewData.up.z, 0.0 };
+	cameraVectorData.right = { cameraViewData.right.x,   cameraViewData.right.y,   cameraViewData.right.z, 0.0 };
+	cameraVectorData.up = { cameraViewData.up.x,      cameraViewData.up.y,      cameraViewData.up.z, 0.0 };
 	memcpy(_frame.cameraVectorWriteLocation, &(cameraVectorData), sizeof(Game::CameraVectors));
 
 	glm::mat4 view = glm::lookAt(cameraViewData.eye, cameraViewData.center, cameraViewData.up);
 
-	glm::mat4 projection = glm::perspective(glm::radians(45.0), static_cast<double>(swapchainExtent.width) / static_cast<double>(swapchainExtent.height), 0.1, 1274200000000.0);
+	glm::mat4 projection = glm::perspective(glm::radians(45.0), static_cast<double>(swapchainExtent.width) / static_cast<double>(swapchainExtent.height), 0.1, 1000.0);
 	projection[1][1] *= -1;
 
 	Game::CameraMatrices cameraMatrixData;
@@ -372,7 +367,7 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 	size_t i = 0;
 	for (std::pair<std::string, std::vector<Entitys::Entity*>> pair : scene->getMappedObjects()) {
 		for (Entitys::Entity* obj : pair.second) {
-			_frame.modelTransforms[i++] = obj->getPhysicsObject()->translationMatrix();
+			_frame.modelTransforms[i++] = obj->getPhysicsObject()->translationMatrix;
 		}
 	}
 	memcpy(_frame.modelBufferWriteLocation, _frame.modelTransforms.data(), i * sizeof(glm::f64mat4));
@@ -380,7 +375,7 @@ void Graphics::Engine::prepare_frame(uint32_t imageIndex, Game::Scene* scene) {
 	_frame.write_descriptor_set();
 }
 
-void Graphics::Engine::prepare_scene(vk::CommandBuffer commandBuffer) {
+void Graphics::Engine::prepareScene(vk::CommandBuffer commandBuffer) {
 
 	vk::Buffer vertexBuffers[] = { meshes->vertexBuffer.buffer };
 	vk::DeviceSize offsets[] = { 0 };
@@ -388,7 +383,7 @@ void Graphics::Engine::prepare_scene(vk::CommandBuffer commandBuffer) {
 	commandBuffer.bindIndexBuffer(meshes->indexBuffer.buffer, 0, vk::IndexType::eUint32);
 }
 
-void Graphics::Engine::record_draw_commands_sky(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene) {
+void Graphics::Engine::recordDrawCommandsSky(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene) {
 
 	vk::RenderPassBeginInfo renderPassInfo = {};
 	renderPassInfo.renderPass = renderpass[pipelineType::SKY];
@@ -417,7 +412,7 @@ void Graphics::Engine::record_draw_commands_sky(vk::CommandBuffer commandBuffer,
 	commandBuffer.endRenderPass();
 }
 
-void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene) {
+void Graphics::Engine::recordDrawCommandsScene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene) {
 
 	vk::RenderPassBeginInfo renderPassInfo = {};
 	renderPassInfo.renderPass = renderpass[pipelineType::STANDARD];
@@ -443,11 +438,11 @@ void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffe
 
 	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout[pipelineType::STANDARD], 0, swapchainFrames[imageIndex].descriptorSet[pipelineType::STANDARD], nullptr);
 
-	prepare_scene(commandBuffer);
+	prepareScene(commandBuffer);
 
 	uint32_t startInstance = 0;
 	for (std::pair<std::string, std::vector<Entitys::Entity*>> pair : scene->getMappedObjects()) {
-		render_objects(
+		renderObjects(
 			commandBuffer, pair.first, startInstance, static_cast<uint32_t>(pair.second.size())
 		);
 	}
@@ -455,7 +450,7 @@ void Graphics::Engine::record_draw_commands_scene(vk::CommandBuffer commandBuffe
 	commandBuffer.endRenderPass();
 }
 
-void Graphics::Engine::render_objects(vk::CommandBuffer commandBuffer, std::string objectType, uint32_t& startInstance, uint32_t instanceCount) {
+void Graphics::Engine::renderObjects(vk::CommandBuffer commandBuffer, std::string objectType, uint32_t& startInstance, uint32_t instanceCount) {
 
 	int indexCount = meshes->indexCounts.find(objectType)->second;
 	int firstIndex = meshes->firstIndices.find(objectType)->second;
@@ -479,12 +474,12 @@ void Graphics::Engine::render(Game::Scene* scene) {
 	}
 	catch (vk::OutOfDateKHRError error) {
 		std::cout << "Recreate" << std::endl;
-		recreate_swapchain();
+		recreateSwapchain();
 		return;
 	}
 	catch (vk::IncompatibleDisplayKHRError error) {
 		std::cout << "Recreate" << std::endl;
-		recreate_swapchain();
+		recreateSwapchain();
 		return;
 	}
 	catch (vk::SystemError error) {
@@ -495,7 +490,7 @@ void Graphics::Engine::render(Game::Scene* scene) {
 
 	commandBuffer.reset();
 
-	prepare_frame(imageIndex, scene);
+	prepareFrame(imageIndex, scene);
 
 	vk::CommandBufferBeginInfo beginInfo = {};
 
@@ -506,8 +501,8 @@ void Graphics::Engine::render(Game::Scene* scene) {
 		vkLogging::Logger::get_logger()->print("Failed to begin recording command buffer!");
 	}
 
-	record_draw_commands_sky(commandBuffer, imageIndex, scene);
-	record_draw_commands_scene(commandBuffer, imageIndex, scene);
+	recordDrawCommandsSky(commandBuffer, imageIndex, scene);
+	recordDrawCommandsScene(commandBuffer, imageIndex, scene);
 
 	try {
 		commandBuffer.end();
@@ -560,7 +555,7 @@ void Graphics::Engine::render(Game::Scene* scene) {
 
 	if (present == vk::Result::eErrorOutOfDateKHR || present == vk::Result::eSuboptimalKHR) {
 		std::cout << "Recreate" << std::endl;
-		recreate_swapchain();
+		recreateSwapchain();
 		return;
 	}
 
@@ -570,7 +565,7 @@ void Graphics::Engine::render(Game::Scene* scene) {
 /**
 * Free the memory associated with the swapchain objects
 */
-void Graphics::Engine::cleanup_swapchain() {
+void Graphics::Engine::cleanupSwapchain() {
 
 	for (vkUtil::SwapChainFrame& frame : swapchainFrames) {
 		frame.destroy();
@@ -594,7 +589,7 @@ Graphics::Engine::~Engine() {
 		device.destroyRenderPass(renderpass[pipeline_type]);
 	}
 
-	cleanup_swapchain();
+	cleanupSwapchain();
 	for (pipelineType pipeline_type : pipelineTypes) {
 		device.destroyDescriptorSetLayout(frameSetLayout[pipeline_type]);
 		device.destroyDescriptorSetLayout(meshSetLayout[pipeline_type]);

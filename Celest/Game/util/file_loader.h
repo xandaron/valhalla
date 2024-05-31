@@ -10,7 +10,7 @@ namespace Fileloader {
 			this->filepath = filedir + filename;
 		}
 
-		virtual void load() = 0;
+		virtual bool load() = 0;
 
 	protected:
 		std::string filedir;

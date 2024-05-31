@@ -2,22 +2,29 @@
 #include "Graphics/control/logging.h"
 
 /**
-* Construct a new App.
-*
 * @param width	the width of the window
 * @param height the height of the window
 * @param debug	whether to run the app with vulkan validation layers and extra print statements
 */
 App::App(int width, int height, bool debug) {
 
+	playerController = new Controller::PlayerController();
+
+	fpsTimer = glfwGetTime();
+
+	mousePos = glm::vec2(0);
+	mouseSensitivity = 0.5f;
+	movementSpeed = 0.05f;
+	mouseLock = false;
+	
 	vkLogging::Logger::get_logger()->set_debug_mode(debug);
 
-	if (!build_glfw_window(width, height, debug)) { 
+	if (!Build_GLFW_Window(width, height, debug)) {
 		throw "Failed to build GLFW window.";
 	}
 
 	//std::vector<Game::SceneObject> sceneObjects = prepareScene();
-	scene = new Game::Scene("assets/scenes/fbx.scene");
+	scene = new Game::Scene("assets/scenes/monke.scene");
 	Game::Camera* camera = scene->getCamera();
 
 	if (camera->getMode() == Game::Camera::CameraMode::FOLLOW) {
@@ -31,7 +38,6 @@ App::App(int width, int height, bool debug) {
 	graphicsEngine->load_assets(scene->getAssetPack());
 
 	physicsEngine = new Physics::Engine();
-	physicsEngine->init(scene->getPhysicsObjects());
 
 	graphicsEngine->render(scene);
 }
@@ -43,7 +49,7 @@ App::App(int width, int height, bool debug) {
 * @param height		the height of the window
 * @param debugMode	whether to make extra print statements
 */
-bool App::build_glfw_window(int width, int height, bool debug) {
+bool App::Build_GLFW_Window(int width, int height, bool debug) {
 
 	std::stringstream message;
 
@@ -75,12 +81,12 @@ bool App::build_glfw_window(int width, int height, bool debug) {
 	return true;
 }
 
-void App::updateTitle(std::string title) {
+void App::UpdateTitle(std::string title) {
 
 	glfwSetWindowTitle(window, title.c_str());
 }
 
-double App::calculateDeltaTime() {
+double App::CalculateDeltaTime() {
 
 	currentTime = glfwGetTime();
 	double delta = currentTime - lastTime;
@@ -91,44 +97,36 @@ double App::calculateDeltaTime() {
 /**
 * Calculates the App's framerate and updates the window title
 */
-void App::calculateFrameRate() {
-
-	double delta = glfwGetTime() - fpsTimer;
-	double framerate{ std::max(1.0, numFrames / delta) };
-	updateTitle(std::to_string(framerate));
-	frameTime = float(1000.0 / framerate);
-	++numFrames;
+void App::CalculateFrameRate(double delta) {
+	double framerate = 1.0 / delta;
+	UpdateTitle(std::to_string(framerate));
 }
 
 /**
 * Start the App's main loop
 */
-void App::run() {
+void App::Run() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
-		double delta = calculateDeltaTime() * timeWarp;
-		calculateFrameRate();
+		double delta = CalculateDeltaTime();
+		CalculateFrameRate(delta);
 		scene->update(delta);
-		myApp->playerController->rotationVector.y = 0;
-		myApp->playerController->rotationVector.z = 0;
+		playerController->rotationVector.y = 0;
+		playerController->rotationVector.z = 0;
 		physicsEngine->update(delta);
 		graphicsEngine->render(scene);
 	}
 }
 
-void App::nextCamera() {
+void App::NextCamera() {
 	scene->cycleCamera(playerController);
 }
 
-void App::resetCamera() {
+void App::ResetCamera() {
 	scene->getCamera()->reset();
 }
 
-/**
-* App destructor.
-*/
 App::~App() {
-
 	glfwDestroyWindow(window);
 	glfwTerminate();
 

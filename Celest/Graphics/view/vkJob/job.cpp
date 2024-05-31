@@ -1,6 +1,6 @@
 #include "job.h"
 
-vkJob::MakeModel::MakeModel(Fileloader::Mesh_Loader* mesh) {
+vkJob::MakeModel::MakeModel(Meshloader::Mesh_Loader* mesh) {
 	this->mesh = mesh;
 }
 

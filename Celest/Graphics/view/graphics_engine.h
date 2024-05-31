@@ -1,6 +1,6 @@
 #pragma once 
 #include "../../cfg.h"
-#include "../model/vertex_menagerie.h"
+#include "vkMesh/vertex_menagerie.h"
 #include "vkUtil/frame.h"
 #include "vkImage/texture.h"
 #include "vkImage/cubemap.h"
@@ -18,7 +18,7 @@ namespace Graphics {
 
 		~Engine();
 
-		void load_assets(Game::AssetPack assetPackage);
+		void loadAssets(Game::AssetPack assetPackage);
 
 		void render(Game::Scene* scene);
 
@@ -64,7 +64,7 @@ namespace Graphics {
 		int maxFramesInFlight, frameNumber;
 
 		//asset pointers
-		VertexMenagerie* meshes;
+		vkMesh::VertexMenagerie* meshes;
 		std::unordered_map<std::string, vkImage::Texture*> materials;
 		vkImage::CubeMap* cubemap;
 
@@ -74,34 +74,34 @@ namespace Graphics {
 		std::vector<std::thread> workers;
 
 		//instance setup
-		void make_instance();
+		void createInstance();
 
 		//device setup
-		void make_device();
-		void make_swapchain();
-		void recreate_swapchain();
+		void createDevice();
+		void createSwapchain();
+		void recreateSwapchain();
 
 		//pipeline setup
-		void make_descriptor_set_layouts();
-		void make_pipelines();
+		void createDescriptorSetLayouts();
+		void createPipelines();
 
 		//final setup steps
-		void finalize_setup();
-		void make_framebuffers();
-		void make_frame_resources();
+		void finalizeSetup();
+		void createFramebuffers();
+		void createFrameResources();
 
 		//asset creation
-		void make_worker_threads();
-		void end_worker_threads();
-		void make_assets(Game::AssetPack assetPack);
+		void createWorkerThreads();
+		void endWorkerThreads();
+		void createAssets(Game::AssetPack assetPack);
 
-		void prepare_frame(uint32_t imageIndex, Game::Scene* scene);
-		void prepare_scene(vk::CommandBuffer commandBuffer);
-		void record_draw_commands_sky(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene);
-		void record_draw_commands_scene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene);
-		void render_objects(vk::CommandBuffer commandBuffer, std::string objectType, uint32_t& startInstance, uint32_t instanceCount);
+		void prepareFrame(uint32_t imageIndex, Game::Scene* scene);
+		void prepareScene(vk::CommandBuffer commandBuffer);
+		void recordDrawCommandsSky(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene);
+		void recordDrawCommandsScene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene);
+		void renderObjects(vk::CommandBuffer commandBuffer, std::string objectType, uint32_t& startInstance, uint32_t instanceCount);
 
 		//Cleanup functions
-		void cleanup_swapchain();
+		void cleanupSwapchain();
 	};
 }

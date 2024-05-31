@@ -65,7 +65,7 @@ namespace Game {
 		CameraView cameraViewData;
 		CameraView initialCameraViewData;
 
-		double movementSpeed = 15.0;
+		double movementSpeed = 5.0;
 		double rotationSpeed = 5.0;
 
 		CameraMode mode;

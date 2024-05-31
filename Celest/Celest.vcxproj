@@ -146,13 +146,12 @@
     <ClCompile Include="Game\scene.cpp" />
     <ClCompile Include="Game\util\node.cpp" />
     <ClCompile Include="Game\util\tree.cpp" />
-    <ClCompile Include="Graphics\view\vkMesh\fbx_loader.cpp" />
-    <ClCompile Include="Graphics\view\vkMesh\mtl_loader.cpp" />
-    <ClCompile Include="Graphics\view\vkMesh\obj_loader.cpp" />
+    <ClCompile Include="Graphics\Meshloader\fbx_loader.cpp" />
+    <ClCompile Include="Graphics\Meshloader\obj_loader.cpp" />
     <ClCompile Include="Graphics\view\graphics_engine.cpp" />
     <ClCompile Include="Game\camera.cpp" />
     <ClCompile Include="Graphics\control\logger.cpp" />
-    <ClCompile Include="Graphics\model\vertex_menagerie.cpp" />
+    <ClCompile Include="Graphics\view\vkMesh\vertex_menagerie.cpp" />
     <ClCompile Include="Graphics\view\vkImage\cubemap.cpp" />
     <ClCompile Include="Graphics\view\vkImage\image.cpp" />
     <ClCompile Include="Graphics\view\vkImage\texture.cpp" />
@@ -160,12 +159,15 @@
     <ClCompile Include="Graphics\view\vkInit\pipeline.cpp" />
     <ClCompile Include="Graphics\view\vkJob\job.cpp" />
     <ClCompile Include="Graphics\view\vkJob\worker_thread.cpp" />
+    <ClCompile Include="Graphics\Meshloader\OpenFBX\libdeflate.c" />
+    <ClCompile Include="Graphics\Meshloader\OpenFBX\ofbx.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\frame.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\shaders.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\single_time_commands.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\memory.cpp" />
-    <ClCompile Include="Physics\body.cpp" />
+    <ClCompile Include="Physics\objects\body.cpp" />
+    <ClCompile Include="Physics\objects\dynamic_body.cpp" />
     <ClCompile Include="Physics\physics_engine.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -178,11 +180,10 @@
     <ClInclude Include="cfg.h" />
     <ClInclude Include="Game\camera.h" />
     <ClInclude Include="Game\util\node.h" />
-    <ClInclude Include="Graphics\view\vkMesh\fbx_loader.h" />
+    <ClInclude Include="Graphics\Meshloader\fbx_loader.h" />
     <ClInclude Include="Game\util\file_loader.h" />
-    <ClInclude Include="Graphics\view\vkMesh\mtl_loader.h" />
-    <ClInclude Include="Graphics\view\vkMesh\mesh_loader.h" />
-    <ClInclude Include="Graphics\view\vkMesh\obj_loader.h" />
+    <ClInclude Include="Graphics\Meshloader\mesh_loader.h" />
+    <ClInclude Include="Graphics\Meshloader\obj_loader.h" />
     <ClInclude Include="Game\util\tree.h" />
     <ClInclude Include="Graphics\view\vkImage\cubemap.h" />
     <ClInclude Include="Graphics\view\vkImage\image.h" />
@@ -194,13 +195,15 @@
     <ClInclude Include="Graphics\view\graphics_engine.h" />
     <ClInclude Include="Graphics\view\vkJob\job.h" />
     <ClInclude Include="Graphics\view\vkJob\worker_thread.h" />
+    <ClInclude Include="Graphics\Meshloader\OpenFBX\libdeflate.h" />
+    <ClInclude Include="Graphics\Meshloader\OpenFBX\ofbx.h" />
     <ClInclude Include="Graphics\view\vkUtil\frame.h" />
     <ClInclude Include="Graphics\view\vkInit\framebuffer.h" />
     <ClInclude Include="Graphics\view\vkInit\instance.h" />
     <ClInclude Include="Graphics\control\logging.h" />
     <ClInclude Include="Graphics\view\vkUtil\memory.h" />
     <ClInclude Include="Graphics\view\vkMesh\mesh.h" />
-    <ClInclude Include="Graphics\model\vertex_menagerie.h" />
+    <ClInclude Include="Graphics\view\vkMesh\vertex_menagerie.h" />
     <ClInclude Include="Graphics\view\vkInit\pipeline.h" />
     <ClInclude Include="Graphics\view\vkUtil\queue_families.h" />
     <ClInclude Include="Graphics\view\vkUtil\render_structs.h" />
@@ -208,11 +211,12 @@
     <ClInclude Include="Graphics\view\vkInit\swapchain.h" />
     <ClInclude Include="Graphics\view\vkInit\sync.h" />
     <ClInclude Include="Graphics\view\vkUtil\single_time_commands.h" />
-    <ClInclude Include="Physics\body.h" />
+    <ClInclude Include="Physics\objects\body.h" />
     <ClInclude Include="Physics\collider.h" />
-    <ClInclude Include="Physics\constants.h" />
+    <ClInclude Include="Physics\objects\dynamic_body.h" />
     <ClInclude Include="Physics\physics_engine.h" />
     <ClInclude Include="Physics\quaternion.h" />
+    <ClInclude Include="thirdParty\include\tiny_obj_loader.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="assets\models\abom.fbx">
@@ -223,6 +227,8 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>
+    <None Include="assets\models\scav.fbx" />
+    <None Include="assets\models\scav_back.fbx" />
     <None Include="assets\scenes\fbx.scene">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -247,6 +253,9 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\textures\scav.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

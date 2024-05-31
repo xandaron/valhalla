@@ -42,13 +42,6 @@ struct Buffer {
 	vk::DeviceMemory bufferMemory;
 };
 
-//--------- Assets -------------//
-enum class meshTypes {
-	GIRL,
-	GROUND,
-	SKULL
-};
-
 enum class pipelineType {
 	SKY,
 	STANDARD

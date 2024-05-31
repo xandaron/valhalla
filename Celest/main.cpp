@@ -14,7 +14,8 @@ int main() {
 		return -1;
 	}
 
-	myApp->run();
+	myApp->Run();
+
 	delete myApp;
 
 	return 0;

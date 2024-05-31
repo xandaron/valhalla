@@ -14,36 +14,33 @@ public:
 	Graphics::Engine* graphicsEngine;
 	Game::Scene* scene;
 
-	Controller::PlayerController* playerController = new Controller::PlayerController();
+	Controller::PlayerController* playerController;
 
 	double lastTime, currentTime;
-	double fpsTimer = glfwGetTime();
+	double fpsTimer;
 	int numFrames;
 	float frameTime;
 
-	double timeWarp = 1;
+	glm::vec2 mousePos;
+	float mouseSensitivity;
+	float movementSpeed;
+	bool mouseLock;
 
-	glm::vec2 mousePos = glm::vec2(0);
-	float mouseSensitivity = 0.5;
-	float movementSpeed = 0.3;
-	bool mouseLock = false;
-
-	
 	App(int width, int height, bool debug);
 
-	bool build_glfw_window(int width, int height, bool debug);
+	bool Build_GLFW_Window(int width, int height, bool debug);
 
-	void updateTitle(std::string title);
+	void UpdateTitle(std::string title);
 
-	double calculateDeltaTime();
+	double CalculateDeltaTime();
 
-	void calculateFrameRate();
+	void CalculateFrameRate(double delta);
 
-	void run();
+	void Run();
 
-	void nextCamera();
+	void NextCamera();
 
-	void resetCamera();
+	void ResetCamera();
 
 	~App();
 };
@@ -58,10 +55,10 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
 	}
-	
+
 	if (key == GLFW_KEY_L) {
 		if (action == GLFW_PRESS) {
-			myApp->nextCamera();
+			myApp->NextCamera();
 		}
 	}
 
@@ -118,7 +115,7 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 			myApp->playerController->movementVector.y++;
 		}
 	}
-	
+
 	if (key == GLFW_KEY_SPACE) {
 		if (action == GLFW_PRESS) {
 			myApp->playerController->movementVector.z++;
@@ -138,7 +135,7 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 	}
 
 	if (key == GLFW_KEY_R && action == GLFW_PRESS) {
-		myApp->resetCamera();
+		myApp->ResetCamera();
 	}
 }
 
