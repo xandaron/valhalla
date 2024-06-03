@@ -1,11 +1,12 @@
 #include "app.h"
-//#include "Game/console/logging.h"
 
 App* myApp;
 
 int main() {
 
-	//Logging::Logger::createLogger("logs/", 0);
+	int type = Debug::MESSAGE | Debug::DEBUG | Debug::MINOR_ERROR | Debug::MAJOR_ERROR;
+	Debug::Logger::setup(type);
+
 	try {
 		myApp = new App(640, 480, true);
 	}

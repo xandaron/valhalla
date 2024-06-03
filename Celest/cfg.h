@@ -3,6 +3,11 @@
 
 #include <GLFW/glfw3.h>
 
+#define GLM_FORCE_SWIZZLE
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <iostream>
 #include <vector>
 #include <set>
@@ -11,16 +16,10 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
-
-#define GLM_FORCE_SWIZZLE
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 #include <thread>
 #include <mutex>
 
-#include "Game/debugging/logging.h"
+#include "Game/debug/logger.h"
 
 /**
 	Data structures used for creating buffers

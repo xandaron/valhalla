@@ -35,7 +35,7 @@ App::App(int width, int height, bool debug) {
 	}
 
 	graphicsEngine = new Graphics::Engine(width, height, window, camera);
-	graphicsEngine->load_assets(scene->getAssetPack());
+	graphicsEngine->loadAssets(scene->getAssetPack());
 
 	physicsEngine = new Physics::Engine();
 
