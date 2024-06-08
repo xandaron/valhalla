@@ -9,15 +9,14 @@ int main() {
 
 	try {
 		myApp = new App(640, 480, true);
+		myApp->Run();
 	}
-	catch (std::string e) {
-		std::cerr << e << std::endl;
+	catch (std::exception err) {
+		Debug::Logger::log(Debug::MAJOR_ERROR, err.what());
+		std::cerr << err.what() << std::endl;
 		return -1;
 	}
 
-	myApp->Run();
-
 	delete myApp;
-
 	return 0;
 }

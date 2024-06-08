@@ -1,6 +1,6 @@
 #pragma once
 #include "../../../cfg.h"
-#include "../../Meshloader/mesh_loader.h"
+#include "../vkUtil/mesh_loader.h"
 #include "../vkImage/image.h"
 #include "../vkImage/texture.h"
 
@@ -21,8 +21,8 @@ namespace vkJob {
 
 	class MakeModel : public Job {
 	public:
-		Meshloader::Mesh_Loader* mesh;
-		MakeModel(Meshloader::Mesh_Loader* mesh);
+		vkUtil::MeshLoader* mesh;
+		MakeModel(vkUtil::MeshLoader* mesh);
 		virtual void execute(vk::CommandBuffer commandBuffer, vk::Queue queue) final;
 	};
 

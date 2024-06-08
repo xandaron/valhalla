@@ -3,6 +3,7 @@
 #include "../vkUtil/memory.h"
 #include "../../control/logging.h"
 #include "../vkInit/descriptors.h"
+#include "../vkInit/image_views.h"
 
 void vkImage::Texture::load(TextureInputChunk input) {
 
@@ -26,8 +27,8 @@ void vkImage::Texture::load(TextureInputChunk input) {
 	imageInput.tiling = vk::ImageTiling::eOptimal;
 	imageInput.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
 	imageInput.memoryProperties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-	image = make_image(imageInput);
-	imageMemory = make_image_memory(imageInput, image);
+	image = makeImage(imageInput);
+	imageMemory = makeImageMemory(imageInput, image);
 
 	populate();
 
@@ -81,7 +82,7 @@ void vkImage::Texture::populate() {
 	transitionJob.oldLayout = vk::ImageLayout::eUndefined;
 	transitionJob.newLayout = vk::ImageLayout::eTransferDstOptimal;
 	transitionJob.arrayCount = 1;
-	transition_image_layout(transitionJob);
+	transitionImageLayout(transitionJob);
 
 	BufferImageCopyJob copyJob;
 	copyJob.commandBuffer = commandBuffer;
@@ -91,11 +92,11 @@ void vkImage::Texture::populate() {
 	copyJob.width = width;
 	copyJob.height = height;
 	copyJob.arrayCount = 1;
-	copy_buffer_to_image(copyJob);
+	copyBufferToImage(copyJob);
 
 	transitionJob.oldLayout = vk::ImageLayout::eTransferDstOptimal;
 	transitionJob.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-	transition_image_layout(transitionJob);
+	transitionImageLayout(transitionJob);
 
 	//Now the staging buffer can be destroyed
 	logicalDevice.freeMemory(stagingBuffer.bufferMemory);
@@ -103,10 +104,9 @@ void vkImage::Texture::populate() {
 }
 
 void vkImage::Texture::make_view() {
-	imageView = make_image_view(
-		logicalDevice, image, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor,
-		vk::ImageViewType::e2D, 1
-	);
+	imageView = logicalDevice.createImageView(vkInit::createImageViewCreateInfo(
+		image, vk::Format::eR8G8B8A8Unorm, vk::ImageViewType::e2D, vk::ImageAspectFlagBits::eColor, 1
+	));
 }
 
 void vkImage::Texture::make_sampler() {
@@ -165,7 +165,7 @@ void vkImage::Texture::make_sampler() {
 
 void vkImage::Texture::make_descriptor_set() {
 
-	descriptorSet = vkInit::allocate_descriptor_set(logicalDevice, descriptorPool, layout);
+	descriptorSet = vkInit::allocateDescriptorSet(logicalDevice, descriptorPool, layout);
 
 	vk::DescriptorImageInfo imageDescriptor;
 	imageDescriptor.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;

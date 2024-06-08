@@ -1,6 +1,6 @@
 #pragma once
 #include "../../../cfg.h"
-#include "../vkUtil/queue_families.h"
+#include "../vkUtil/queue_family.h"
 #include "../vkUtil/frame.h"
 
 namespace vkInit {
@@ -11,7 +11,7 @@ namespace vkInit {
 	struct commandBufferInputChunk {
 		vk::Device device;
 		vk::CommandPool commandPool;
-		std::vector<vkUtil::SwapChainFrame>& frames;
+		std::vector<vkUtil::SwapchainFrame>& frames;
 	};
 
 	/**

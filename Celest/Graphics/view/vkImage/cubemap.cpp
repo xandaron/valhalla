@@ -3,6 +3,7 @@
 #include "../vkUtil/memory.h"
 #include "../../control/logging.h"
 #include "../vkInit/descriptors.h"
+#include "../vkInit/image_views.h"
 
 vkImage::CubeMap::CubeMap(TextureInputChunk input) {
 
@@ -28,8 +29,8 @@ vkImage::CubeMap::CubeMap(TextureInputChunk input) {
 	imageInput.memoryProperties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 	imageInput.flags = vk::ImageCreateFlagBits::eCubeCompatible;
 
-	image = make_image(imageInput);
-	imageMemory = make_image_memory(imageInput, image);
+	image = makeImage(imageInput);
+	imageMemory = makeImageMemory(imageInput, image);
 
 	populate();
 
@@ -88,7 +89,7 @@ void vkImage::CubeMap::populate() {
 	transitionJob.oldLayout = vk::ImageLayout::eUndefined;
 	transitionJob.newLayout = vk::ImageLayout::eTransferDstOptimal;
 	transitionJob.arrayCount = 6;
-	transition_image_layout(transitionJob);
+	transitionImageLayout(transitionJob);
 
 	BufferImageCopyJob copyJob;
 	copyJob.commandBuffer = commandBuffer;
@@ -98,11 +99,11 @@ void vkImage::CubeMap::populate() {
 	copyJob.width = width;
 	copyJob.height = height;
 	copyJob.arrayCount = 6;
-	copy_buffer_to_image(copyJob);
+	copyBufferToImage(copyJob);
 
 	transitionJob.oldLayout = vk::ImageLayout::eTransferDstOptimal;
 	transitionJob.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-	transition_image_layout(transitionJob);
+	transitionImageLayout(transitionJob);
 
 	//Now the staging buffer can be destroyed
 	logicalDevice.freeMemory(stagingBuffer.bufferMemory);
@@ -110,10 +111,9 @@ void vkImage::CubeMap::populate() {
 }
 
 void vkImage::CubeMap::make_view() {
-	imageView = make_image_view(
-		logicalDevice, image, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor,
-		vk::ImageViewType::eCube, 6
-	);
+	imageView = logicalDevice.createImageView(vkInit::createImageViewCreateInfo(
+		image, vk::Format::eR8G8B8A8Unorm, vk::ImageViewType::eCube, vk::ImageAspectFlagBits::eColor, 6
+	));
 }
 
 void vkImage::CubeMap::make_sampler() {
@@ -172,7 +172,7 @@ void vkImage::CubeMap::make_sampler() {
 
 void vkImage::CubeMap::make_descriptor_set() {
 
-	descriptorSet = vkInit::allocate_descriptor_set(logicalDevice, descriptorPool, layout);
+	descriptorSet = vkInit::allocateDescriptorSet(logicalDevice, descriptorPool, layout);
 
 	vk::DescriptorImageInfo imageDescriptor;
 	imageDescriptor.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;

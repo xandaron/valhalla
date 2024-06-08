@@ -120,7 +120,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -138,20 +138,23 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="app.cpp" />
     <ClCompile Include="Game\debug\logger.cpp" />
     <ClCompile Include="Game\scene.cpp" />
-    <ClCompile Include="Game\util\node.cpp" />
-    <ClCompile Include="Game\util\tree.cpp" />
-    <ClCompile Include="Graphics\Meshloader\fbx_loader.cpp" />
-    <ClCompile Include="Graphics\Meshloader\obj_loader.cpp" />
+    <ClCompile Include="Graphics\debug\vkLogging.cpp" />
+    <ClCompile Include="Graphics\view\vkInit\image_views.cpp" />
+    <ClCompile Include="Graphics\view\vkUtil\fbx_loader.cpp" />
+    <ClCompile Include="Graphics\view\vkUtil\obj_loader.cpp" />
     <ClCompile Include="Graphics\view\graphics_engine.cpp" />
     <ClCompile Include="Game\camera.cpp" />
     <ClCompile Include="Graphics\control\logging.cpp" />
+    <ClCompile Include="Graphics\view\vkInit\device.cpp" />
+    <ClCompile Include="Graphics\view\vkInit\instance.cpp" />
+    <ClCompile Include="Graphics\view\vkInit\swap_chain.cpp" />
     <ClCompile Include="Graphics\view\vkMesh\vertex_menagerie.cpp" />
     <ClCompile Include="Graphics\view\vkImage\cubemap.cpp" />
     <ClCompile Include="Graphics\view\vkImage\image.cpp" />
@@ -160,9 +163,10 @@
     <ClCompile Include="Graphics\view\vkInit\pipeline.cpp" />
     <ClCompile Include="Graphics\view\vkJob\job.cpp" />
     <ClCompile Include="Graphics\view\vkJob\worker_thread.cpp" />
-    <ClCompile Include="Graphics\Meshloader\OpenFBX\libdeflate.c" />
-    <ClCompile Include="Graphics\Meshloader\OpenFBX\ofbx.cpp" />
+    <ClCompile Include="Graphics\view\vkUtil\OpenFBX\libdeflate.c" />
+    <ClCompile Include="Graphics\view\vkUtil\OpenFBX\ofbx.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\frame.cpp" />
+    <ClCompile Include="Graphics\view\vkUtil\queue_family.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\shaders.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\single_time_commands.cpp" />
     <ClCompile Include="main.cpp" />
@@ -180,12 +184,12 @@
     <ClInclude Include="Game\scene.h" />
     <ClInclude Include="cfg.h" />
     <ClInclude Include="Game\camera.h" />
-    <ClInclude Include="Game\util\node.h" />
-    <ClInclude Include="Graphics\Meshloader\fbx_loader.h" />
     <ClInclude Include="Game\util\file_loader.h" />
-    <ClInclude Include="Graphics\Meshloader\mesh_loader.h" />
-    <ClInclude Include="Graphics\Meshloader\obj_loader.h" />
-    <ClInclude Include="Game\util\tree.h" />
+    <ClInclude Include="Graphics\debug\vkLogging.h" />
+    <ClInclude Include="Graphics\view\vkInit\image_views.h" />
+    <ClInclude Include="Graphics\view\vkUtil\fbx_loader.h" />
+    <ClInclude Include="Graphics\view\vkUtil\mesh_loader.h" />
+    <ClInclude Include="Graphics\view\vkUtil\obj_loader.h" />
     <ClInclude Include="Graphics\view\vkImage\cubemap.h" />
     <ClInclude Include="Graphics\view\vkImage\image.h" />
     <ClInclude Include="Graphics\view\vkImage\stb_image.h" />
@@ -194,10 +198,11 @@
     <ClInclude Include="Graphics\view\vkInit\descriptors.h" />
     <ClInclude Include="Graphics\view\vkInit\device.h" />
     <ClInclude Include="Graphics\view\graphics_engine.h" />
+    <ClInclude Include="Graphics\view\vkInit\swap_chain.h" />
     <ClInclude Include="Graphics\view\vkJob\job.h" />
     <ClInclude Include="Graphics\view\vkJob\worker_thread.h" />
-    <ClInclude Include="Graphics\Meshloader\OpenFBX\libdeflate.h" />
-    <ClInclude Include="Graphics\Meshloader\OpenFBX\ofbx.h" />
+    <ClInclude Include="Graphics\view\vkUtil\OpenFBX\libdeflate.h" />
+    <ClInclude Include="Graphics\view\vkUtil\OpenFBX\ofbx.h" />
     <ClInclude Include="Graphics\view\vkUtil\frame.h" />
     <ClInclude Include="Graphics\view\vkInit\framebuffer.h" />
     <ClInclude Include="Graphics\view\vkInit\instance.h" />
@@ -207,6 +212,7 @@
     <ClInclude Include="Graphics\view\vkMesh\vertex_menagerie.h" />
     <ClInclude Include="Graphics\view\vkInit\pipeline.h" />
     <ClInclude Include="Graphics\view\vkUtil\queue_families.h" />
+    <ClInclude Include="Graphics\view\vkUtil\queue_family.h" />
     <ClInclude Include="Graphics\view\vkUtil\render_structs.h" />
     <ClInclude Include="Graphics\view\vkUtil\shaders.h" />
     <ClInclude Include="Graphics\view\vkInit\swapchain.h" />
@@ -251,9 +257,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </Object>
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="LICENSE.txt" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\textures\scav.png" />

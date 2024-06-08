@@ -1,6 +1,5 @@
 #pragma once
 #include <vulkan/vulkan.hpp>
-
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_SWIZZLE
@@ -9,21 +8,24 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <iostream>
+#include <fstream>
+
 #include <vector>
 #include <set>
-#include <string>
-#include <optional>
-#include <fstream>
-#include <sstream>
 #include <unordered_map>
+
+#include <string>
+#include <sstream>
+#include <format>
+
 #include <thread>
 #include <mutex>
 
 #include "Game/debug/logger.h"
 
 /**
-	Data structures used for creating buffers
-	and allocating memory
+*	Data structures used for creating buffers
+*	and allocating memory
 */
 struct BufferInputChunk {
 	size_t size;
@@ -34,7 +36,7 @@ struct BufferInputChunk {
 };
 
 /**
-	holds a vulkan buffer and memory allocation
+*	holds a vulkan buffer and memory allocation
 */
 struct Buffer {
 	vk::Buffer buffer;
@@ -67,16 +69,30 @@ static std::vector<std::string> split(std::string line, std::string delimiter) {
 
 // trim from start (in place)
 inline void ltrim(std::string& s) {
-	s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
-		return !std::isspace(ch);
-		}));
+	s.erase(
+		s.begin(),
+		std::find_if(
+			s.begin(),
+			s.end(),
+			[](unsigned char ch) {
+				return !std::isspace(ch);
+			}
+		)
+	);
 }
 
 // trim from end (in place)
 inline void rtrim(std::string& s) {
-	s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
-		return !std::isspace(ch);
-		}).base(), s.end());
+	s.erase(
+		std::find_if(
+			s.rbegin(),
+			s.rend(),
+			[](unsigned char ch) {
+				return !std::isspace(ch);
+			}
+		).base(),
+		s.end()
+	);
 }
 
 // trim from both ends (in place)

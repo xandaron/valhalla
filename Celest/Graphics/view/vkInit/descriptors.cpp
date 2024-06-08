@@ -1,64 +1,60 @@
 #include "descriptors.h"
 #include "../../control/logging.h"
 
-
-vk::DescriptorSetLayout vkInit::make_descriptor_set_layout(
-	vk::Device device, const descriptorSetLayoutData& bindings) {
-
-	/*
-		Bindings describes a whole bunch of descriptor types, collect them all into a
-		list of some kind.
+inline vk::DescriptorSetLayoutCreateInfo vkInit::makeDescriptorSetLayoutCreateInfo(
+	const std::vector<vk::DescriptorSetLayoutBinding>& layoutBindings
+) {
+	/**
+	* DescriptorSetLayoutCreateInfo(
+	*	vk::DescriptorSetLayoutCreateFlags    flags_        = {},
+	*	uint32_t                              bindingCount_ = {},
+	*	const vk::DescriptorSetLayoutBinding* pBindings_    = {},
+	*	const void *                          pNext_        = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
 	*/
-	std::vector<vk::DescriptorSetLayoutBinding> layoutBindings;
-	layoutBindings.reserve(bindings.count);
+	return {
+			vk::DescriptorSetLayoutCreateFlagBits(),
+			static_cast<uint32_t>(layoutBindings.size()),
+			layoutBindings.data(),
+			nullptr
+	};
+}
 
+vk::DescriptorSetLayout vkInit::makeDescriptorSetLayout(
+	vk::Device device, const descriptorSetLayoutData& bindings
+) {
+	std::vector<vk::DescriptorSetLayoutBinding> layoutBindings(bindings.count);
 	for (int i = 0; i < bindings.count; i++) {
-
-		/*
-			typedef struct VkDescriptorSetLayoutBinding {
-				uint32_t              binding;
-				VkDescriptorType      descriptorType;
-				uint32_t              descriptorCount;
-				VkShaderStageFlags    stageFlags;
-				const VkSampler*      pImmutableSamplers;
-			} VkDescriptorSetLayoutBinding;
+		/**
+		* DescriptorSetLayoutBinding(
+		*	uint32_t             binding_			 = {},
+        *	vk::DescriptorType   descriptorType_	 = vk::DescriptorType::eSampler,
+        *	uint32_t             descriptorCount_	 = {},
+        *	vk::ShaderStageFlags stageFlags_		 = {},
+        *	const vk::Sampler *  pImmutableSamplers_ = {}
+		* ) VULKAN_HPP_NOEXCEPT
 		*/
-
-		vk::DescriptorSetLayoutBinding layoutBinding;
-		layoutBinding.binding = bindings.indices[i];
-		layoutBinding.descriptorType = bindings.types[i];
-		layoutBinding.descriptorCount = bindings.counts[i];
-		layoutBinding.stageFlags = bindings.stages[i];
-		layoutBindings.push_back(layoutBinding);
+		layoutBindings[i] = {
+			bindings.indices[i],
+			bindings.types[i],
+			bindings.counts[i],
+			bindings.stages[i],
+			{}
+		};
 	}
-
-	/*
-		typedef struct VkDescriptorSetLayoutCreateInfo {
-			VkStructureType                        sType;
-			const void*                            pNext;
-			VkDescriptorSetLayoutCreateFlags       flags;
-			uint32_t                               bindingCount;
-			const VkDescriptorSetLayoutBinding*    pBindings;
-		} VkDescriptorSetLayoutCreateInfo;
-	*/
-	vk::DescriptorSetLayoutCreateInfo layoutInfo;
-	layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits();
-	layoutInfo.bindingCount = bindings.count;
-	layoutInfo.pBindings = layoutBindings.data();
-
 
 	try {
-		return device.createDescriptorSetLayout(layoutInfo);
+		return device.createDescriptorSetLayout(
+			makeDescriptorSetLayoutCreateInfo(layoutBindings)
+		);
 	}
 	catch (vk::SystemError err) {
-
-		vkLogging::Logger::get_logger()->print("Failed to create Descriptor Set Layout");
-
+		Debug::Logger::log(Debug::WARNING, "Failed to create Descriptor Set Layout.");
 		return nullptr;
 	}
 }
 
-vk::DescriptorPool vkInit::make_descriptor_pool(
+vk::DescriptorPool vkInit::makeDescriptorPool(
 	vk::Device device, uint32_t size, const descriptorSetLayoutData& bindings) {
 
 	std::vector<vk::DescriptorPoolSize> poolSizes;
@@ -103,7 +99,7 @@ vk::DescriptorPool vkInit::make_descriptor_pool(
 	}
 }
 
-vk::DescriptorSet vkInit::allocate_descriptor_set(
+vk::DescriptorSet vkInit::allocateDescriptorSet(
 	vk::Device device, vk::DescriptorPool descriptorPool,
 	vk::DescriptorSetLayout layout) {
 

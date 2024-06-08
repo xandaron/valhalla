@@ -4,10 +4,35 @@
 #include "../vkUtil/render_structs.h"
 
 namespace vkInit {
+	struct VertexInputInfo {
+		vk::VertexInputBindingDescription bindingDescription;
+		std::vector<vk::VertexInputAttributeDescription> attributeDescriptions;
+	};
+
+	struct AttachmentInfo {
+		vk::Format format;
+		uint32_t index;
+	};
+
+	struct shaderInfo {
+		vk::ShaderStageFlagBits flag;
+		const char* shaderPath;
+	};
+
+	struct PipelineBuildInfo {
+		vk::Device& device;
+		bool overwrite;
+		VertexInputInfo vertexInputInfo;
+		std::vector<shaderInfo> shaderStages;
+		vk::Extent2D swapchainExtent;
+		AttachmentInfo colourAttachmentInfo;
+		AttachmentInfo depthAttachmentInfo;
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
+	};
 
 	/**
-		Used for returning the pipeline, along with associated data structures,
-		after creation.
+	* Used for returning the pipeline, along with associated data structures,
+	* after creation.
 	*/
 	struct GraphicsPipelineOutBundle {
 		vk::PipelineLayout layout;
@@ -15,185 +40,58 @@ namespace vkInit {
 		vk::Pipeline pipeline;
 	};
 
-	class PipelineBuilder {
+	/**
+	* Builds a graphics pipeline.
+	* 
+	* @param buildInfo A struct containing required data.
+	*/
+	GraphicsPipelineOutBundle buildPipeline(PipelineBuildInfo& buildInfo);
 
-	public:
+	/**
+	* Configure a programmable shader stage.
+	*
+	* @param shaderModule The compiled shader module.
+	* @param stage		The shader stage which the module is for.
+	*
+	* @return The shader stage creation info.
+	*/
+	inline vk::PipelineShaderStageCreateInfo makeShaderInfo(vk::Device device, std::string filename, const vk::ShaderStageFlagBits& stage);
 
-		PipelineBuilder(vk::Device device);
-		~PipelineBuilder();
+	inline void createShaderStages(vk::Device device, std::vector<shaderInfo> shaderStages, std::vector<vk::PipelineShaderStageCreateInfo>& stages);
 
-		void reset();
+	inline vk::PipelineVertexInputStateCreateInfo* createVertexInputState(const VertexInputInfo& vertexFormatInfo);
 
-		/**
-			Configure the vertex input stage.
+	inline vk::PipelineInputAssemblyStateCreateInfo* createInputAssemblyState();
 
-			\param bindingDescription describes the vertex inputs (ie. layouts)
-			\param attributeDescriptions describes the attributes
-			\returns the vertex input stage creation info
+	inline vk::Viewport* createViewport(vk::Extent2D swapchainExtent);
 
-		*/
-		void specify_vertex_format(
-			vk::VertexInputBindingDescription bindingDescription,
-			std::vector<vk::VertexInputAttributeDescription> attributeDescriptions);
+	inline vk::Rect2D* createScissor(vk::Extent2D swapchainExtent);
 
-		void specify_vertex_shader(const char* filename);
+	inline vk::PipelineViewportStateCreateInfo* createViewportState(vk::Extent2D swapchainExtent);
 
-		void specify_fragment_shader(const char* filename);
+	inline vk::PipelineRasterizationStateCreateInfo* createRasterizationState();
 
-		void specify_swapchain_extent(vk::Extent2D screen_size);
+	inline vk::PipelineMultisampleStateCreateInfo* createMultisampleState();
 
-		void specify_depth_attachment(const vk::Format& depthFormat, uint32_t attachment_index);
+	inline vk::PipelineDepthStencilStateCreateInfo* createDepthStencilState();
 
-		void clear_depth_attachment();
+	inline vk::PipelineColorBlendAttachmentState* createColourBlendAttachment();
 
-		void add_color_attachment(const vk::Format& format, uint32_t attachment_index);
+	inline vk::PipelineColorBlendStateCreateInfo* createColourBlendState();
 
-		void set_overwrite_mode(bool mode);
+	inline vk::PipelineLayoutCreateInfo createLayoutInfo(const std::vector<vk::DescriptorSetLayout>& descriptorSetLayouts);
 
-		/**
-			Make a graphics pipeline, along with renderpass and pipeline layout
+	vk::PipelineLayout createLayout(vk::Device device, const std::vector<vk::DescriptorSetLayout>& descriptorSetLayouts);
 
-			\param specification the struct holding input data, as specified at the top of the file.
-			\returns the bundle of data structures created
-		*/
-		GraphicsPipelineOutBundle build();
+	inline std::vector<vk::AttachmentDescription> createAttachmentDescriptions(bool overwrite, vk::Format depthAttachmentFormat, vk::Format colourAttachmentFormat);
 
-		void add_descriptor_set_layout(vk::DescriptorSetLayout descriptorSetLayout);
+	inline std::vector<vk::AttachmentReference> createAttachmentReferences(AttachmentInfo depthAttachment, uint32_t colourAttachmentIndex);
 
-		void reset_descriptor_set_layouts();
+	inline vk::SubpassDescription createSubpass(const std::vector<vk::AttachmentReference>& attachmentReferences);
 
-	private:
-		vk::Device device;
-		vk::GraphicsPipelineCreateInfo pipelineInfo = {};
+	inline vk::RenderPassCreateInfo createRenderPassInfo(const vk::SubpassDescription& subpass, const std::vector<vk::AttachmentDescription>& attachmentDescriptions);
 
-		vk::VertexInputBindingDescription bindingDescription;
-		std::vector<vk::VertexInputAttributeDescription> attributeDescriptions;
-		vk::PipelineVertexInputStateCreateInfo vertexInputInfo = {};
-		vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {};
+	vk::RenderPass createRenderPass(vk::Device device, bool overwrite, AttachmentInfo depthAttachmentInfo, AttachmentInfo colourAttachmentInfo);
 
-		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
-		vk::ShaderModule vertexShader = nullptr, fragmentShader = nullptr;
-		vk::PipelineShaderStageCreateInfo vertexShaderInfo, fragmentShaderInfo;
-
-		vk::Extent2D swapchainExtent;
-		vk::Viewport viewport = {};
-		vk::Rect2D scissor = {};
-		vk::PipelineViewportStateCreateInfo viewportState = {};
-
-		vk::PipelineRasterizationStateCreateInfo rasterizer = {};
-
-		vk::PipelineDepthStencilStateCreateInfo depthState;
-		std::unordered_map<uint32_t, vk::AttachmentDescription> attachmentDescriptions;
-		std::unordered_map<uint32_t, vk::AttachmentReference> attachmentReferences;
-		std::vector<vk::AttachmentDescription> flattenedAttachmentDescriptions;
-		std::vector<vk::AttachmentReference> flattenedAttachmentReferences;
-
-		vk::PipelineMultisampleStateCreateInfo multisampling = {};
-
-		vk::PipelineColorBlendAttachmentState colorBlendAttachment = {};
-		vk::PipelineColorBlendStateCreateInfo colorBlending = {};
-
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
-		bool overwrite;
-
-		void reset_vertex_format();
-
-		void reset_shader_modules();
-
-		void reset_renderpass_attachments();
-
-		/**
-			Make an attachment description
-
-			\param format the image format for the underlying resource
-			\param finalLayout the expected final layout after implicit transition (acquisition)
-			\returns a description of the corresponding attachment
-		*/
-		vk::AttachmentDescription make_renderpass_attachment(
-			const vk::Format& format, vk::AttachmentLoadOp loadOp,
-			vk::AttachmentStoreOp storeOp, vk::ImageLayout initialLayout, vk::ImageLayout finalLayout);
-
-		/**
-			\returns Make a renderpass attachment reference
-		*/
-		vk::AttachmentReference make_attachment_reference(
-			uint32_t attachment_index, vk::ImageLayout layout);
-
-		/**
-			set up the input assembly stage
-		*/
-		void configure_input_assembly();
-
-		/**
-			Configure a programmable shader stage.
-
-			\param shaderModule the compiled shader module
-			\param stage the shader stage which the module is for
-			\returns the shader stage creation info
-		*/
-		vk::PipelineShaderStageCreateInfo make_shader_info(
-			const vk::ShaderModule& shaderModule, const vk::ShaderStageFlagBits& stage);
-
-		/**
-			Configure the pipeline's viewport stage.
-
-			\param viewport the viewport specification
-			\param scissor the scissor rectangle to apply
-			\returns the viewport state creation info
-		*/
-		vk::PipelineViewportStateCreateInfo make_viewport_state();
-
-		/**
-			sets the creation info for the configured rasterizer stage
-		*/
-		void make_rasterizer_info();
-
-		/**
-			configures the multisampling stage
-		*/
-		void configure_multisampling();
-
-		/**
-			configures the color blending stage
-		*/
-		void configure_color_blending();
-
-		/**
-			Make a pipeline layout, this consists mostly of describing the
-			push constants and descriptor set layouts which will be used.
-
-			\returns the created pipeline layout
-		*/
-		vk::PipelineLayout make_pipeline_layout();
-
-		/**
-			Make a renderpass, a renderpass describes the subpasses involved
-			as well as the attachments which will be used.
-
-			\returns the created renderpass
-		*/
-		vk::RenderPass make_renderpass();
-
-		/**
-			Make a simple subpass.
-
-			\param colorAttachmentRef a reference to a color attachment for the color buffer
-			\returns a description of the subpass
-		*/
-		vk::SubpassDescription make_subpass(
-			const std::vector<vk::AttachmentReference>& attachments
-		);
-
-		/**
-			Make a simple renderpass.
-
-			\param colorAttachment the color attachment for the color buffer
-			\param subpass a description of the subpass
-			\returns creation info for the renderpass
-		*/
-		vk::RenderPassCreateInfo make_renderpass_info(
-			const std::vector<vk::AttachmentDescription>& attachments,
-			const vk::SubpassDescription& subpass
-		);
-	};
+	vk::Pipeline createPipeline(vk::Device device, const vk::GraphicsPipelineCreateInfo& pipelineInfo);
 }

@@ -6,50 +6,51 @@
 #include "../vkUtil/single_time_commands.h"
 #include "../vkInit/descriptors.h"
 
-vk::Image vkImage::make_image(ImageInputChunk input) {
-
+vk::Image vkImage::makeImage(ImageInputChunk input) {
 	/*
-	typedef struct VkImageCreateInfo {
-		VkStructureType          sType;
-		const void* pNext;
-		VkImageCreateFlags       flags;
-		VkImageType              imageType;
-		VkFormat                 format;
-		VkExtent3D               extent;
-		uint32_t                 mipLevels;
-		uint32_t                 arrayLayers;
-		VkSampleCountFlagBits    samples;
-		VkImageTiling            tiling;
-		VkImageUsageFlags        usage;
-		VkSharingMode            sharingMode;
-		uint32_t                 queueFamilyIndexCount;
-		const uint32_t*          pQueueFamilyIndices;
-		VkImageLayout            initialLayout;
-	} VkImageCreateInfo;
+	* ImageCreateInfo(
+	*	vk::ImageCreateFlags    flags_                 = {},
+    *	vk::ImageType           imageType_             = vk::ImageType::e1D,
+    *	vk::Format              format_                = vk::Format::eUndefined,
+    *	vk::Extent3D            extent_                = {},
+    *	uint32_t                mipLevels_             = {},
+    *	uint32_t                arrayLayers_           = {},
+    *	vk::SampleCountFlagBits samples_               = vk::SampleCountFlagBits::e1,
+    *	vk::ImageTiling         tiling_                = vk::ImageTiling::eOptimal,
+    *	vk::ImageUsageFlags     usage_                 = {},
+    *	vk::SharingMode         sharingMode_           = vk::SharingMode::eExclusive,
+    *	uint32_t                queueFamilyIndexCount_ = {},
+    *	const uint32_t *        pQueueFamilyIndices_   = {},
+    *	vk::ImageLayout         initialLayout_         = vk::ImageLayout::eUndefined,
+    *	const void *            pNext_                 = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
 	*/
-
-	vk::ImageCreateInfo imageInfo;
-	imageInfo.flags = vk::ImageCreateFlagBits() | input.flags;
-	imageInfo.imageType = vk::ImageType::e2D;
-	imageInfo.extent = vk::Extent3D(input.width, input.height, 1);
-	imageInfo.mipLevels = 1;
-	imageInfo.arrayLayers = input.arrayCount;
-	imageInfo.format = input.format;
-	imageInfo.tiling = input.tiling;
-	imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-	imageInfo.usage = input.usage;
-	imageInfo.sharingMode = vk::SharingMode::eExclusive;
-	imageInfo.samples = vk::SampleCountFlagBits::e1;
-
+	vk::ImageCreateInfo imageInfo{
+		vk::ImageCreateFlagBits() | input.flags,
+		vk::ImageType::e2D,
+		input.format,
+		vk::Extent3D(input.width, input.height, 1),
+		1,
+		input.arrayCount,
+		vk::SampleCountFlagBits::e1,
+		input.tiling,
+		input.usage,
+		vk::SharingMode::eExclusive,
+		{},
+		{},
+		imageInfo.initialLayout = vk::ImageLayout::eUndefined,
+		nullptr
+	};
+	
 	try {
 		return input.logicalDevice.createImage(imageInfo);
 	}
 	catch (vk::SystemError err) {
-		vkLogging::Logger::get_logger()->print("Unable to make image");
+		Debug::Logger::log(Debug::WARNING, "Unable to make image.");
 	}
 }
 
-vk::DeviceMemory vkImage::make_image_memory(ImageInputChunk input, vk::Image image) {
+vk::DeviceMemory vkImage::makeImageMemory(ImageInputChunk input, vk::Image image) {
 
 	vk::MemoryRequirements requirements = input.logicalDevice.getImageMemoryRequirements(image);
 
@@ -69,7 +70,7 @@ vk::DeviceMemory vkImage::make_image_memory(ImageInputChunk input, vk::Image ima
 	}
 }
 
-void vkImage::transition_image_layout(ImageLayoutTransitionJob transitionJob) {
+void vkImage::transitionImageLayout(ImageLayoutTransitionJob transitionJob) {
 
 	vkUtil::startJob(transitionJob.commandBuffer);
 
@@ -136,7 +137,7 @@ void vkImage::transition_image_layout(ImageLayoutTransitionJob transitionJob) {
 	vkUtil::endJob(transitionJob.commandBuffer, transitionJob.queue);
 }
 
-void vkImage::copy_buffer_to_image(BufferImageCopyJob copyJob) {
+void vkImage::copyBufferToImage(BufferImageCopyJob copyJob) {
 
 	vkUtil::startJob(copyJob.commandBuffer);
 
@@ -176,63 +177,85 @@ void vkImage::copy_buffer_to_image(BufferImageCopyJob copyJob) {
 	vkUtil::endJob(copyJob.commandBuffer, copyJob.queue);
 }
 
-vk::ImageView vkImage::make_image_view(
-	vk::Device logicalDevice, vk::Image image, vk::Format format,
-	vk::ImageAspectFlags aspect, vk::ImageViewType type, uint32_t arrayCount) {
+//vk::ImageView vkImage::makeImageView(
+//	vk::Device logicalDevice, vk::Image image, vk::Format format,
+//	vk::ImageAspectFlags aspect, vk::ImageViewType type, uint32_t arrayCount) {
+//	/*
+//	* ImageViewCreateInfo( 
+//	*	vk::ImageViewCreateFlags  flags_			= {},
+//	*	vk::Image                 image_			= {},
+//	*	vk::ImageViewType         viewType_			= vk::ImageViewType::e1D,
+//	*	vk::Format                format_			= vk::Format::eUndefined,
+//	*	vk::ComponentMapping	  components_       = {},
+//	*	vk::ImageSubresourceRange subresourceRange_ = {}
+//	* ) VULKAN_HPP_NOEXCEPT
+//	*/
+//	vk::ImageViewCreateInfo createInfo{
+//		vk::ImageViewCreateFlagBits(),
+//		image,
+//		type,
+//		format,
+//		/**
+//		* ComponentMapping(
+//		*	vk::ComponentSwizzle r_ = vk::ComponentSwizzle::eIdentity,
+//        *	vk::ComponentSwizzle g_ = vk::ComponentSwizzle::eIdentity,
+//        *	vk::ComponentSwizzle b_ = vk::ComponentSwizzle::eIdentity,
+//        *	vk::ComponentSwizzle a_ = vk::ComponentSwizzle::eIdentity
+//		* ) VULKAN_HPP_NOEXCEPT
+//		*/
+//		{
+//			vk::ComponentSwizzle::eIdentity,
+//			vk::ComponentSwizzle::eIdentity,
+//			vk::ComponentSwizzle::eIdentity,
+//			vk::ComponentSwizzle::eIdentity
+//		},
+//		/**
+//		* ImageSubresourceRange(
+//		*	vk::ImageAspectFlags aspectMask_	 = {},
+//        *	uint32_t             baseMipLevel_   = {},
+//        *	uint32_t             levelCount_     = {},
+//        *	uint32_t             baseArrayLayer_ = {},
+//        *	uint32_t             layerCount_     = {}
+//		* ) VULKAN_HPP_NOEXCEPT
+//		*/
+//		{
+//			aspect,
+//			0,
+//			1,
+//			0,
+//			arrayCount
+//		}
+//	};
+//	try {
+//		return logicalDevice.createImageView(createInfo);
+//	}
+//	catch (vk::SystemError err) {
+//		throw std::runtime_error(std::format("Failed to create image view. Reason:\n\t{}", err.what()).c_str());
+//	}
+//}
 
-	/*
-	* ImageViewCreateInfo( VULKAN_HPP_NAMESPACE::ImageViewCreateFlags flags_ = {},
-		VULKAN_HPP_NAMESPACE::Image                image_ = {},
-		VULKAN_HPP_NAMESPACE::ImageViewType    viewType_  = VULKAN_HPP_NAMESPACE::ImageViewType::e1D,
-		VULKAN_HPP_NAMESPACE::Format           format_    = VULKAN_HPP_NAMESPACE::Format::eUndefined,
-		VULKAN_HPP_NAMESPACE::ComponentMapping components_            = {},
-		VULKAN_HPP_NAMESPACE::ImageSubresourceRange subresourceRange_ = {} ) VULKAN_HPP_NOEXCEPT
-	*/
-
-	vk::ImageViewCreateInfo createInfo = {};
-	createInfo.image = image;
-	createInfo.viewType = type;
-	createInfo.format = format;
-	createInfo.components.r = vk::ComponentSwizzle::eIdentity;
-	createInfo.components.g = vk::ComponentSwizzle::eIdentity;
-	createInfo.components.b = vk::ComponentSwizzle::eIdentity;
-	createInfo.components.a = vk::ComponentSwizzle::eIdentity;
-	createInfo.subresourceRange.aspectMask = aspect;
-	createInfo.subresourceRange.baseMipLevel = 0;
-	createInfo.subresourceRange.levelCount = 1;
-	createInfo.subresourceRange.baseArrayLayer = 0;
-	createInfo.subresourceRange.layerCount = arrayCount;
-
-	return logicalDevice.createImageView(createInfo);
-}
-
-vk::Format vkImage::find_supported_format(
+vk::Format vkImage::findSupportedFormat(
 	vk::PhysicalDevice physicalDevice,
 	const std::vector<vk::Format>& candidates,
 	vk::ImageTiling tiling, vk::FormatFeatureFlags features) {
 
 	for (vk::Format format : candidates) {
-
-		vk::FormatProperties properties = physicalDevice.getFormatProperties(format);
-
 		/*
-		typedef struct VkFormatProperties {
-			VkFormatFeatureFlags    linearTilingFeatures;
-			VkFormatFeatureFlags    optimalTilingFeatures;
-			VkFormatFeatureFlags    bufferFeatures;
-		} VkFormatProperties;
+		* FormatProperties(
+		*	vk::FormatFeatureFlags linearTilingFeatures_  = {},
+        *	vk::FormatFeatureFlags optimalTilingFeatures_ = {},
+        *	vk::FormatFeatureFlags bufferFeatures_        = {}
+		* ) VULKAN_HPP_NOEXCEPT
 		*/
-
+		vk::FormatProperties properties = physicalDevice.getFormatProperties(format);
 		if (tiling == vk::ImageTiling::eLinear
 			&& (properties.linearTilingFeatures & features) == features) {
 			return format;
 		}
-
 		if (tiling == vk::ImageTiling::eOptimal
 			&& (properties.optimalTilingFeatures & features) == features) {
 			return format;
 		}
-
 		throw std::runtime_error("Unable to find suitable format");
 	}
 }

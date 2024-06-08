@@ -1,9 +1,9 @@
 #include "fbx_loader.h"
 #include "OpenFBX/ofbx.h"
 
-Meshloader::FBX_Loader::FBX_Loader(std::string filedir, std::string filename, glm::mat4 preTransform) : Mesh_Loader(filedir, filename, preTransform) {}
+vkUtil::FBXLoader::FBXLoader(std::string filedir, std::string filename, glm::mat4 preTransform) : MeshLoader(filedir, filename, preTransform) {}
 
-bool Meshloader::FBX_Loader::load() {
+bool vkUtil::FBXLoader::load() {
 	FILE* fp;
 	fopen_s(&fp, filepath.c_str(), "rb");
 

@@ -15,55 +15,55 @@ namespace Graphics {
 	class Engine {
 	public:
 		Engine(int width, int height, GLFWwindow* window, Game::Camera* camera);
-
-		~Engine();
-
+		
 		void loadAssets(Game::AssetPack assetPackage);
 
 		void render(Game::Scene* scene);
 
+		~Engine();
+
 	private:
-		//glfw-related variables
+		//GLFW variables
 		int width;
 		int height;
 		GLFWwindow* window;
 
-		//instance-related variables
+		//Instance variables
 		vk::Instance instance{ nullptr };
 		vk::DebugUtilsMessengerEXT debugMessenger{ nullptr };
 		vk::DispatchLoaderDynamic dldi;
 		vk::SurfaceKHR surface;
 
-		//device-related variables
+		//Device variables
 		vk::PhysicalDevice physicalDevice{ nullptr };
 		vk::Device device{ nullptr };
 		vk::Queue graphicsQueue{ nullptr };
 		vk::Queue presentQueue{ nullptr };
 		vk::SwapchainKHR swapchain{ nullptr };
-		std::vector<vkUtil::SwapChainFrame> swapchainFrames;
+		std::vector<vkUtil::SwapchainFrame> swapchainImageViews;
 		vk::Format swapchainFormat;
 		vk::Extent2D swapchainExtent;
 
-		//pipeline-related variables
+		//Pipeline variables
 		std::vector<pipelineType> pipelineTypes = { {pipelineType::SKY, pipelineType::STANDARD} };
 		std::unordered_map<pipelineType, vk::PipelineLayout> pipelineLayout;
-		std::unordered_map <pipelineType, vk::RenderPass> renderpass;
-		std::unordered_map <pipelineType, vk::Pipeline> pipeline;
+		std::unordered_map<pipelineType, vk::RenderPass> renderpass;
+		std::unordered_map<pipelineType, vk::Pipeline> pipeline;
 
-		//descriptor-related variables
-		std::unordered_map <pipelineType, vk::DescriptorSetLayout> frameSetLayout;
+		//Descriptor variables
+		std::unordered_map<pipelineType, vk::DescriptorSetLayout> frameSetLayout;
 		vk::DescriptorPool frameDescriptorPool; //Descriptors bound on a "per frame" basis
-		std::unordered_map <pipelineType, vk::DescriptorSetLayout> meshSetLayout;
+		std::unordered_map<pipelineType, vk::DescriptorSetLayout> meshSetLayout;
 		vk::DescriptorPool meshDescriptorPool; //Descriptors bound on a "per mesh" basis
 
-		//Command-related variables
+		//Command variables
 		vk::CommandPool commandPool;
 		vk::CommandBuffer mainCommandBuffer;
 
 		//Synchronization objects
 		int maxFramesInFlight, frameNumber;
 
-		//asset pointers
+		//Asset pointers
 		vkMesh::VertexMenagerie* meshes;
 		std::unordered_map<std::string, vkImage::Texture*> materials;
 		vkImage::CubeMap* cubemap;
@@ -73,13 +73,47 @@ namespace Graphics {
 		vkJob::WorkQueue workQueue;
 		std::vector<std::thread> workers;
 
-		//instance setup
+		/**
+		* Creates an instance.
+		*
+		* @throws std::runtime_error if instance creation fails.
+		*/
 		void createInstance();
 
-		//device setup
+		/**
+		* Creates a Vulkan debug messenger for validation layers.
+		*/
+		void createDebugMessenger();
+
+		/**
+		* Creates a GLFW surface.
+		*
+		* @throws std::runtime_error when GLFW fails to create a surface.
+		*/
+		void createSurface();
+
+		/**
+		* Creates physical and logical devices as well and assigning queue families.
+		*
+		* @throws std::runtime_error Couldn't create physical or logical device.
+		*/
 		void createDevice();
+
+		/**
+		* Creates a swap chain.
+		* 
+		* @throws std::runtime_error Couldn't create a swap chain.
+		*/
 		void createSwapchain();
+
+		/**
+		* Destroys old swap chain and creates a new one.
+		* 
+		* @throws std::runtime_error Couldn't create new swap chain.
+		*/
 		void recreateSwapchain();
+
+		void createImageViews();
 
 		//pipeline setup
 		void createDescriptorSetLayouts();

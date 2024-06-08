@@ -34,12 +34,16 @@ App::App(int width, int height, bool debug) {
 		camera->setController(playerController);
 	}
 
-	graphicsEngine = new Graphics::Engine(width, height, window, camera);
-	graphicsEngine->loadAssets(scene->getAssetPack());
-
 	physicsEngine = new Physics::Engine();
 
-	graphicsEngine->render(scene);
+	try {
+		graphicsEngine = new Graphics::Engine(width, height, window, camera);
+		graphicsEngine->loadAssets(scene->getAssetPack());
+		graphicsEngine->render(scene);
+	}
+	catch (std::runtime_error err) {
+		throw err;
+	}
 }
 
 /**

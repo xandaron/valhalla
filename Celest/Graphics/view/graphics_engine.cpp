@@ -1,7 +1,9 @@
 #include "graphics_engine.h"
+#include "../debug/vkLogging.h"
 #include "vkInit/instance.h"
 #include "vkInit/device.h"
-#include "vkInit/swapchain.h"
+#include "vkInit/swap_chain.h"
+#include "vkInit/image_views.h"
 #include "vkInit/pipeline.h"
 #include "vkInit/framebuffer.h"
 #include "vkInit/commands.h"
@@ -10,79 +12,62 @@
 #include "vkMesh/mesh.h"
 
 Graphics::Engine::Engine(int width, int height, GLFWwindow* window, Game::Camera* camera) {
-
 	this->width = width;
 	this->height = height;
 	this->window = window;
 
-	vkLogging::Logger::get_logger()->print("Making a graphics engine...");
-
+	Debug::Logger::log(Debug::MESSAGE, "Creating new graphics engine");
+	
 	createInstance();
+	createDebugMessenger();
+	createSurface();
 	createDevice();
+	createSwapchain();
+	createImageViews();
 	createDescriptorSetLayouts();
 	createPipelines();
 	finalizeSetup();
 }
 
 void Graphics::Engine::createInstance() {
+	instance = vkInit::makeInstance("Celest");
+}
 
-	instance = vkInit::make_instance("New Innsmouth");
+void Graphics::Engine::createDebugMessenger() {
 	dldi = vk::DispatchLoaderDynamic(instance, vkGetInstanceProcAddr);
-	if (vkLogging::Logger::get_logger()->get_debug_mode()) {
-		debugMessenger = vkLogging::make_debug_messenger(instance, dldi);
-	}
+	debugMessenger = Debug::makeDebugMessenger(instance, dldi);
+}
+
+void Graphics::Engine::createSurface() {
 	VkSurfaceKHR c_style_surface;
 	if (glfwCreateWindowSurface(instance, window, nullptr, &c_style_surface) != VK_SUCCESS) {
-		vkLogging::Logger::get_logger()->print("Failed to abstract glfw surface for Vulkan.");
+		throw std::runtime_error("Failed to create a glfw surface for Vulkan.");
 	}
 	else {
-		vkLogging::Logger::get_logger()->print(
-			"Successfully abstracted glfw surface for Vulkan.");
+		Debug::Logger::log(Debug::MESSAGE, "Successfully abstracted glfw surface for Vulkan.");
 	}
-	//copy constructor converts to hpp convention
 	surface = c_style_surface;
 }
 
 void Graphics::Engine::createDevice() {
-
-	physicalDevice = vkInit::choose_physical_device(instance);
-	device = vkInit::create_logical_device(physicalDevice, surface);
-	std::array<vk::Queue, 2> queues = vkInit::get_queues(physicalDevice, device, surface);
-	graphicsQueue = queues[0];
-	presentQueue = queues[1];
-	createSwapchain();
-	frameNumber = 0;
+	physicalDevice = vkInit::choosePhysicalDevice(instance, surface);
+	device = vkInit::createLogicalDevice(physicalDevice, surface);
+	vkUtil::QueueFamilyIndices familyIndices = vkUtil::findQueueFamilies(physicalDevice, surface);
+	graphicsQueue = device.getQueue(familyIndices.graphicsFamily.value(), 0);
+	presentQueue = device.getQueue(familyIndices.presentFamily.value(), 0);
 }
 
-/**
-* Make a swapchain
-*/
 void Graphics::Engine::createSwapchain() {
-
-	vkInit::SwapChainBundle bundle = vkInit::create_swapchain(
-		device, physicalDevice, surface, width, height
+	vkInit::SwapchainBundle swapchainBundle = vkInit::createSwapchain(
+		device, physicalDevice, surface,
+		{ static_cast<uint32_t>(width), static_cast<uint32_t>(height) }, swapchain
 	);
-	swapchain = bundle.swapchain;
-	swapchainFrames = bundle.frames;
-	swapchainFormat = bundle.format;
-	swapchainExtent = bundle.extent;
-	maxFramesInFlight = static_cast<int>(swapchainFrames.size());
-
-	for (vkUtil::SwapChainFrame& frame : swapchainFrames) {
-		frame.logicalDevice = device;
-		frame.physicalDevice = physicalDevice;
-		frame.width = swapchainExtent.width;
-		frame.height = swapchainExtent.height;
-
-		frame.make_depth_resources();
-	}
+	swapchain = swapchainBundle.swapchain;
+	swapchainFormat = swapchainBundle.format;
+	swapchainExtent = swapchainBundle.extent;
 }
 
-/**
-* The swapchain must be recreated upon resize or minimization, among other cases
-*/
 void Graphics::Engine::recreateSwapchain() {
-
 	width = 0;
 	height = 0;
 	while (width == 0 || height == 0) {
@@ -96,95 +81,113 @@ void Graphics::Engine::recreateSwapchain() {
 	createSwapchain();
 	createFramebuffers();
 	createFrameResources();
-	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainFrames };
+	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainImageViews };
 	vkInit::make_frame_command_buffers(commandBufferInput);
 }
 
+void Graphics::Engine::createImageViews() {
+	swapchainImageViews = vkInit::createImageViews(device, swapchain, swapchainFormat);
+	maxFramesInFlight = static_cast<int>(swapchainImageViews.size());
+	for (vkUtil::SwapchainFrame& frame : swapchainImageViews) {
+		frame.logicalDevice = device;
+		frame.physicalDevice = physicalDevice;
+		frame.width = swapchainExtent.width;
+		frame.height = swapchainExtent.height;
+		frame.make_depth_resources();
+	}
+	frameNumber = 0;
+}
+
 void Graphics::Engine::createDescriptorSetLayouts() {
-
-	//Binding once per frame
-	vkInit::descriptorSetLayoutData bindings;
-	bindings.count = 1;
-
-	bindings.indices.push_back(0);
-	bindings.types.push_back(vk::DescriptorType::eUniformBuffer);
-	bindings.counts.push_back(1);
-	bindings.stages.push_back(vk::ShaderStageFlagBits::eVertex);
-
-	frameSetLayout[pipelineType::SKY] = vkInit::make_descriptor_set_layout(device, bindings);
-
-	bindings.count = 2;
-
-	bindings.indices.push_back(1);
-	bindings.types.push_back(vk::DescriptorType::eStorageBuffer);
-	bindings.counts.push_back(1);
-	bindings.stages.push_back(vk::ShaderStageFlagBits::eVertex);
+	Debug::Logger::log(Debug::MESSAGE, "Creating descriptor sets.");
+	/**
+	* struct descriptorSetLayoutData {
+	*	int								  count;
+	*	std::vector<uint32_t>			  indices;
+	*	std::vector<vk::DescriptorType>	  types;
+	*	std::vector<uint32_t>			  counts;
+	*	std::vector<vk::ShaderStageFlags> stages;
+	* };
+	*/
+	vkInit::descriptorSetLayoutData bindings{
+		2,
+		{ 0u, 1u },
+		{ vk::DescriptorType::eUniformBuffer, vk::DescriptorType::eStorageBuffer },
+		{ 1u, 1u },
+		{ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eVertex }
+	};
+	frameSetLayout[pipelineType::SKY] = vkInit::makeDescriptorSetLayout(device, bindings);
+	frameSetLayout[pipelineType::STANDARD] = vkInit::makeDescriptorSetLayout(device, bindings);
 	
-	frameSetLayout[pipelineType::STANDARD] = vkInit::make_descriptor_set_layout(device, bindings);
-
-	//Binding for individual draw calls
-	bindings.count = 1;
-
-	bindings.indices[0] = 0;
-	bindings.types[0] = vk::DescriptorType::eCombinedImageSampler;
-	bindings.counts[0] = 1;
-	bindings.stages[0] = vk::ShaderStageFlagBits::eFragment;
-
-	meshSetLayout[pipelineType::SKY] = vkInit::make_descriptor_set_layout(device, bindings);
-	meshSetLayout[pipelineType::STANDARD] = vkInit::make_descriptor_set_layout(device, bindings);
+	bindings = {
+		1,
+		{ 0u },
+		{ vk::DescriptorType::eCombinedImageSampler },
+		{ 1u },
+		{ vk::ShaderStageFlagBits::eFragment }
+	};
+	meshSetLayout[pipelineType::SKY] = vkInit::makeDescriptorSetLayout(device, bindings);
+	meshSetLayout[pipelineType::STANDARD] = vkInit::makeDescriptorSetLayout(device, bindings);
 }
 
 void Graphics::Engine::createPipelines() {
-
-	vkInit::PipelineBuilder pipelineBuilder(device);
-
-	//Sky
-	pipelineBuilder.set_overwrite_mode(false);
-	pipelineBuilder.specify_vertex_shader("Graphics/shaders/sky_vertex.spv");
-	pipelineBuilder.specify_fragment_shader("Graphics/shaders/sky_fragment.spv");
-	pipelineBuilder.specify_swapchain_extent(swapchainExtent);
-	pipelineBuilder.clear_depth_attachment();
-	pipelineBuilder.add_descriptor_set_layout(frameSetLayout[pipelineType::SKY]);
-	pipelineBuilder.add_descriptor_set_layout(meshSetLayout[pipelineType::SKY]);
-	pipelineBuilder.add_color_attachment(swapchainFormat, 0);
-
-	vkInit::GraphicsPipelineOutBundle output = pipelineBuilder.build();
-
+	/**
+	* struct PipelineBuildInfo {
+	*	vk::Device& device;
+	*	bool overwrite;
+	*	VertexInputInfo vertexInputInfo;
+	*	std::vector<shaderInfo> shaderStages;
+	*	vk::Extent2D swapchainExtent;
+	*	AttachmentInfo depthAttachmentInfo;
+	*	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
+	*	AttachmentInfo colourAttachmentInfo;
+	* };
+	*/
+	vkInit::PipelineBuildInfo skyPipelineBuildInfo{
+		device,
+		false,
+		{ vkMesh::Vertex::getBindingDescription(), vkMesh::Vertex::getAttributeDescriptions() },
+		{
+			{ vk::ShaderStageFlagBits::eVertex, "Graphics/shaders/sky_vertex.spv" },
+			{ vk::ShaderStageFlagBits::eFragment, "Graphics/shaders/sky_fragment.spv" }
+		},
+		swapchainExtent,
+		{ swapchainFormat, 0 },
+		{ vk::Format::eUndefined, 1},
+		{ frameSetLayout[pipelineType::SKY], meshSetLayout[pipelineType::SKY] }
+	};
+	vkInit::GraphicsPipelineOutBundle output = vkInit::buildPipeline(skyPipelineBuildInfo);
 	pipelineLayout[pipelineType::SKY] = output.layout;
 	renderpass[pipelineType::SKY] = output.renderpass;
 	pipeline[pipelineType::SKY] = output.pipeline;
-	pipelineBuilder.reset();
 
-	//Standard
-	pipelineBuilder.set_overwrite_mode(true);
-	pipelineBuilder.specify_vertex_format(
-		vkMesh::Vertex::getBindingDescription(),
-		vkMesh::Vertex::getAttributeDescriptions());
-	pipelineBuilder.specify_vertex_shader("Graphics/shaders/vertex.spv");
-	pipelineBuilder.specify_fragment_shader("Graphics/shaders/fragment.spv");
-	pipelineBuilder.specify_swapchain_extent(swapchainExtent);
-	pipelineBuilder.specify_depth_attachment(swapchainFrames[0].depthFormat, 1);
-	pipelineBuilder.add_descriptor_set_layout(frameSetLayout[pipelineType::STANDARD]);
-	pipelineBuilder.add_descriptor_set_layout(meshSetLayout[pipelineType::STANDARD]);
-	pipelineBuilder.add_color_attachment(swapchainFormat, 0);
-
-	output = pipelineBuilder.build();
-
+	vkInit::PipelineBuildInfo pipelineBuildInfo = {
+		device,
+		true,
+		{ vkMesh::Vertex::getBindingDescription(), vkMesh::Vertex::getAttributeDescriptions() },
+		{
+			{ vk::ShaderStageFlagBits::eVertex, "Graphics/shaders/vertex.spv" },
+			{ vk::ShaderStageFlagBits::eFragment, "Graphics/shaders/fragment.spv" }
+			//{ vk::ShaderStageFlagBits::eCompute, "Graphics/shaders/compute.spv" }
+		},
+		swapchainExtent,
+		{ swapchainFormat, 0 },
+		{ swapchainImageViews[0].depthFormat, 1 },
+		{ frameSetLayout[pipelineType::STANDARD], meshSetLayout[pipelineType::STANDARD] }
+	};
+	output = vkInit::buildPipeline(pipelineBuildInfo);
 	pipelineLayout[pipelineType::STANDARD] = output.layout;
 	renderpass[pipelineType::STANDARD] = output.renderpass;
 	pipeline[pipelineType::STANDARD] = output.pipeline;
 }
 
-/**
-* Make a framebuffer for each frame
-*/
 void Graphics::Engine::createFramebuffers() {
-
-	vkInit::framebufferInput frameBufferInput;
-	frameBufferInput.device = device;
-	frameBufferInput.renderpass = renderpass;
-	frameBufferInput.swapchainExtent = swapchainExtent;
-	vkInit::make_framebuffers(frameBufferInput, swapchainFrames);
+	vkInit::framebufferInput frameBufferInput{
+		device,
+		renderpass,
+		swapchainExtent
+	};
+	vkInit::make_framebuffers(frameBufferInput, swapchainImageViews);
 }
 
 void Graphics::Engine::finalizeSetup() {
@@ -193,7 +196,7 @@ void Graphics::Engine::finalizeSetup() {
 
 	commandPool = vkInit::make_command_pool(device, physicalDevice, surface);
 
-	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainFrames };
+	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainImageViews };
 	mainCommandBuffer = vkInit::make_command_buffer(commandBufferInput);
 	vkInit::make_frame_command_buffers(commandBufferInput);
 
@@ -208,9 +211,9 @@ void Graphics::Engine::createFrameResources() {
 	bindings.types.push_back(vk::DescriptorType::eStorageBuffer);
 	uint32_t descriptor_sets_per_frame = 2;
 
-	frameDescriptorPool = vkInit::make_descriptor_pool(device, static_cast<uint32_t>(swapchainFrames.size() * descriptor_sets_per_frame), bindings);
+	frameDescriptorPool = vkInit::makeDescriptorPool(device, static_cast<uint32_t>(swapchainImageViews.size() * descriptor_sets_per_frame), bindings);
 
-	for (vkUtil::SwapChainFrame& frame : swapchainFrames) {
+	for (vkUtil::SwapchainFrame& frame : swapchainImageViews) {
 
 		frame.imageAvailable = vkInit::make_semaphore(device);
 		frame.renderFinished = vkInit::make_semaphore(device);
@@ -218,8 +221,8 @@ void Graphics::Engine::createFrameResources() {
 
 		frame.make_descriptor_resources();
 
-		frame.descriptorSet[pipelineType::SKY] = vkInit::allocate_descriptor_set(device, frameDescriptorPool, frameSetLayout[pipelineType::SKY]);
-		frame.descriptorSet[pipelineType::STANDARD] = vkInit::allocate_descriptor_set(device, frameDescriptorPool, frameSetLayout[pipelineType::STANDARD]);
+		frame.descriptorSet[pipelineType::SKY] = vkInit::allocateDescriptorSet(device, frameDescriptorPool, frameSetLayout[pipelineType::SKY]);
+		frame.descriptorSet[pipelineType::STANDARD] = vkInit::allocateDescriptorSet(device, frameDescriptorPool, frameSetLayout[pipelineType::STANDARD]);
 
 		frame.record_write_operations();
 	}
@@ -231,7 +234,7 @@ void Graphics::Engine::createWorkerThreads() {
 	size_t threadCount = std::thread::hardware_concurrency() - 1;
 
 	workers.reserve(threadCount);
-	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainFrames };
+	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainImageViews };
 	for (size_t i = 0; i < threadCount; ++i) {
 		vk::CommandBuffer commandBuffer = vkInit::make_command_buffer(commandBufferInput);
 		workers.push_back(
@@ -258,14 +261,14 @@ void Graphics::Engine::createAssets(Game::AssetPack assetPack) {
 
 	//Meshes
 	meshes = new vkMesh::VertexMenagerie();
-	std::unordered_map<std::string, Meshloader::Mesh_Loader*> loaded_models;
+	std::unordered_map<std::string, vkUtil::MeshLoader*> loaded_models;
 
 	//Make a descriptor pool to allocate sets.
 	vkInit::descriptorSetLayoutData bindings;
 	bindings.count = 1;
 	bindings.types.push_back(vk::DescriptorType::eCombinedImageSampler);
 
-	meshDescriptorPool = vkInit::make_descriptor_pool(device, static_cast<uint32_t>(assetPack.texture_filenames.size()) + 1, bindings);
+	meshDescriptorPool = vkInit::makeDescriptorPool(device, static_cast<uint32_t>(assetPack.texture_filenames.size()) + 1, bindings);
 
 	//Submit loading work
 	workQueue.lock.lock();
@@ -305,7 +308,7 @@ void Graphics::Engine::createAssets(Game::AssetPack assetPack) {
 	}
 
 	//Consume loaded meshes
-	for (std::pair<std::string, Meshloader::Mesh_Loader*> pair : loaded_models) {
+	for (std::pair<std::string, vkUtil::MeshLoader*> pair : loaded_models) {
 		meshes->consume(pair.first, pair.second->vertices, pair.second->indices);
 		delete pair.second;
 	}
@@ -318,7 +321,7 @@ void Graphics::Engine::createAssets(Game::AssetPack assetPack) {
 	meshes->finalize(finalizationInfo);
 
 	//Proceed when work is done
-
+	
 	vkImage::TextureInputChunk textureInfo;
 	textureInfo.commandBuffer = mainCommandBuffer;
 	textureInfo.queue = graphicsQueue;
@@ -327,12 +330,12 @@ void Graphics::Engine::createAssets(Game::AssetPack assetPack) {
 	textureInfo.layout = meshSetLayout[pipelineType::STANDARD];
 	textureInfo.descriptorPool = meshDescriptorPool;
 	textureInfo.layout = meshSetLayout[pipelineType::SKY];
-	textureInfo.filenames.push_back("assets/textures/sky_front.png");
-	textureInfo.filenames.push_back("assets/textures/sky_back.png");
-	textureInfo.filenames.push_back("assets/textures/sky_right.png");
-	textureInfo.filenames.push_back("assets/textures/sky_left.png");
-	textureInfo.filenames.push_back("assets/textures/sky_top.png");
-	textureInfo.filenames.push_back("assets/textures/sky_bottom.png");
+	textureInfo.filenames.push_back("assets/textures/blue.png");
+	textureInfo.filenames.push_back("assets/textures/blue.png");
+	textureInfo.filenames.push_back("assets/textures/blue.png");
+	textureInfo.filenames.push_back("assets/textures/blue.png");
+	textureInfo.filenames.push_back("assets/textures/blue.png");
+	textureInfo.filenames.push_back("assets/textures/blue.png");
 	cubemap = new vkImage::CubeMap(textureInfo);
 }
 
@@ -344,7 +347,7 @@ void Graphics::Engine::loadAssets(Game::AssetPack assetPack) {
 
 void Graphics::Engine::prepareFrame(uint32_t imageIndex, Game::Scene* scene) {
 
-	vkUtil::SwapChainFrame& _frame = swapchainFrames[imageIndex];
+	vkUtil::SwapchainFrame& _frame = swapchainImageViews[imageIndex];
 
 	Game::CameraView cameraViewData = scene->getCamera()->getCameraViewData();
 	Game::CameraVectors cameraVectorData;
@@ -387,7 +390,7 @@ void Graphics::Engine::recordDrawCommandsSky(vk::CommandBuffer commandBuffer, ui
 
 	vk::RenderPassBeginInfo renderPassInfo = {};
 	renderPassInfo.renderPass = renderpass[pipelineType::SKY];
-	renderPassInfo.framebuffer = swapchainFrames[imageIndex].framebuffer[pipelineType::SKY];
+	renderPassInfo.framebuffer = swapchainImageViews[imageIndex].framebuffer[pipelineType::SKY];
 	renderPassInfo.renderArea.offset.x = 0;
 	renderPassInfo.renderArea.offset.y = 0;
 	renderPassInfo.renderArea.extent = swapchainExtent;
@@ -404,7 +407,7 @@ void Graphics::Engine::recordDrawCommandsSky(vk::CommandBuffer commandBuffer, ui
 
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline[pipelineType::SKY]);
 
-	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout[pipelineType::SKY], 0, swapchainFrames[imageIndex].descriptorSet[pipelineType::SKY], nullptr);
+	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout[pipelineType::SKY], 0, swapchainImageViews[imageIndex].descriptorSet[pipelineType::SKY], nullptr);
 
 	cubemap->use(commandBuffer, pipelineLayout[pipelineType::SKY]);
 	commandBuffer.draw(6, 1, 0, 0);
@@ -416,7 +419,7 @@ void Graphics::Engine::recordDrawCommandsScene(vk::CommandBuffer commandBuffer, 
 
 	vk::RenderPassBeginInfo renderPassInfo = {};
 	renderPassInfo.renderPass = renderpass[pipelineType::STANDARD];
-	renderPassInfo.framebuffer = swapchainFrames[imageIndex].framebuffer[pipelineType::STANDARD];
+	renderPassInfo.framebuffer = swapchainImageViews[imageIndex].framebuffer[pipelineType::STANDARD];
 	renderPassInfo.renderArea.offset.x = 0;
 	renderPassInfo.renderArea.offset.y = 0;
 	renderPassInfo.renderArea.extent = swapchainExtent;
@@ -436,7 +439,7 @@ void Graphics::Engine::recordDrawCommandsScene(vk::CommandBuffer commandBuffer, 
 
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline[pipelineType::STANDARD]);
 
-	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout[pipelineType::STANDARD], 0, swapchainFrames[imageIndex].descriptorSet[pipelineType::STANDARD], nullptr);
+	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout[pipelineType::STANDARD], 0, swapchainImageViews[imageIndex].descriptorSet[pipelineType::STANDARD], nullptr);
 
 	prepareScene(commandBuffer);
 
@@ -461,14 +464,14 @@ void Graphics::Engine::renderObjects(vk::CommandBuffer commandBuffer, std::strin
 
 void Graphics::Engine::render(Game::Scene* scene) {
 
-	device.waitForFences(1, &(swapchainFrames[frameNumber].inFlight), VK_TRUE, UINT64_MAX);
-	device.resetFences(1, &(swapchainFrames[frameNumber].inFlight));
+	device.waitForFences(1, &(swapchainImageViews[frameNumber].inFlight), VK_TRUE, UINT64_MAX);
+	device.resetFences(1, &(swapchainImageViews[frameNumber].inFlight));
 
 	uint32_t imageIndex;
 	try {
 		vk::ResultValue acquire = device.acquireNextImageKHR(
 			swapchain, UINT64_MAX,
-			swapchainFrames[frameNumber].imageAvailable, nullptr
+			swapchainImageViews[frameNumber].imageAvailable, nullptr
 		);
 		imageIndex = acquire.value;
 	}
@@ -486,7 +489,7 @@ void Graphics::Engine::render(Game::Scene* scene) {
 		std::cout << "Failed to acquire swapchain image!" << std::endl;
 	}
 
-	vk::CommandBuffer commandBuffer = swapchainFrames[frameNumber].commandBuffer;
+	vk::CommandBuffer commandBuffer = swapchainImageViews[frameNumber].commandBuffer;
 
 	commandBuffer.reset();
 
@@ -514,7 +517,7 @@ void Graphics::Engine::render(Game::Scene* scene) {
 
 	vk::SubmitInfo submitInfo = {};
 
-	vk::Semaphore waitSemaphores[] = { swapchainFrames[frameNumber].imageAvailable };
+	vk::Semaphore waitSemaphores[] = { swapchainImageViews[frameNumber].imageAvailable };
 	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 	submitInfo.waitSemaphoreCount = 1;
 	submitInfo.pWaitSemaphores = waitSemaphores;
@@ -523,12 +526,12 @@ void Graphics::Engine::render(Game::Scene* scene) {
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffer;
 
-	vk::Semaphore signalSemaphores[] = { swapchainFrames[frameNumber].renderFinished };
+	vk::Semaphore signalSemaphores[] = { swapchainImageViews[frameNumber].renderFinished };
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
 	try {
-		graphicsQueue.submit(submitInfo, swapchainFrames[frameNumber].inFlight);
+		graphicsQueue.submit(submitInfo, swapchainImageViews[frameNumber].inFlight);
 	}
 	catch (vk::SystemError err) {
 		vkLogging::Logger::get_logger()->print("failed to submit draw command buffer!");
@@ -538,9 +541,9 @@ void Graphics::Engine::render(Game::Scene* scene) {
 	presentInfo.waitSemaphoreCount = 1;
 	presentInfo.pWaitSemaphores = signalSemaphores;
 
-	vk::SwapchainKHR swapChains[] = { swapchain };
+	vk::SwapchainKHR swapchains[] = { swapchain };
 	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = swapChains;
+	presentInfo.pSwapchains = swapchains;
 
 	presentInfo.pImageIndices = &imageIndex;
 
@@ -567,11 +570,10 @@ void Graphics::Engine::render(Game::Scene* scene) {
 */
 void Graphics::Engine::cleanupSwapchain() {
 
-	for (vkUtil::SwapChainFrame& frame : swapchainFrames) {
+	for (vkUtil::SwapchainFrame& frame : swapchainImageViews) {
 		frame.destroy();
 	}
 	device.destroySwapchainKHR(swapchain);
-
 	device.destroyDescriptorPool(frameDescriptorPool);
 }
 
@@ -579,7 +581,7 @@ Graphics::Engine::~Engine() {
 
 	device.waitIdle();
 
-	vkLogging::Logger::get_logger()->print("Goodbye see you!");
+	Debug::Logger::log(Debug::MESSAGE, "Destroying graphics engine.");
 
 	device.destroyCommandPool(commandPool);
 
@@ -606,17 +608,8 @@ Graphics::Engine::~Engine() {
 	device.destroy();
 
 	instance.destroySurfaceKHR(surface);
-	if (vkLogging::Logger::get_logger()->get_debug_mode()) {
-		instance.destroyDebugUtilsMessengerEXT(debugMessenger, nullptr, dldi);
-	}
-	/*
-	* from vulkan_funcs.hpp:
-	*
-	* void Instance::destroy( Optional<const VULKAN_HPP_NAMESPACE::AllocationCallbacks> allocator = nullptr,
-											Dispatch const & d = ::vk::getDispatchLoaderStatic())
-	*/
+	instance.destroyDebugUtilsMessengerEXT(debugMessenger, nullptr, dldi);
 	instance.destroy();
 
-	//terminate glfw
 	glfwTerminate();
 }

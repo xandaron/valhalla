@@ -9,22 +9,9 @@ namespace vkLogging {
 		static Logger* get_logger();
 		void set_debug_mode(bool mode);
 		bool get_debug_mode();
-		//void log_device_properties(vk::PhysicalDevice physical_device);
 		void print(std::string message);
 		void print_list(std::vector<std::string> items);
-		//void log_device_properties(vk::PhysicalDevice device);
-		//void log_surface_capabilities(vk::SurfaceCapabilitiesKHR surfaceCapabilities);
-		//void log_surface_format(vk::SurfaceFormatKHR surfaceFormat);
 	private:
-		//std::array<int, 4> extract_version_number;
-		//std::string extract_driver_version_nvidia;
-		//std::string extract_driver_version_intel;
-		//std::string extract_driver_version_standard;
-		//void log_physical_device_limits(vk::PhysicalDeviceLimits limits);
-		//std::vector<std::string> log_transform_bits(vk::SurfaceTransformFlagsKHR bits);
-		//std::vector<std::string> log_alpha_composite_bits(vk::CompositeAlphaFlagsKHR bits);
-		//std::vector<std::string> log_image_usage_bits(vk::ImageUsageFlags bits);
-		//std::string log_present_mode(vk::PresentModeKHR presentMode);
 		bool debugMode;
 	};
 
@@ -51,9 +38,7 @@ namespace vkLogging {
 		\param dldi dynamically loads instance based dispatch functions
 		\returns the created messenger
 	*/
-	vk::DebugUtilsMessengerEXT make_debug_messenger(
-		vk::Instance& instance, vk::DispatchLoaderDynamic& dldi
-	);
+	vk::DebugUtilsMessengerEXT makeDebugMessenger(vk::Instance& instance, vk::DispatchLoaderDynamic& dldi);
 
 	/**
 		Extract the transforms from the given bitmask.

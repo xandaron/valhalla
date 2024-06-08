@@ -1,6 +1,6 @@
 #include "job.h"
 
-vkJob::MakeModel::MakeModel(Meshloader::Mesh_Loader* mesh) {
+vkJob::MakeModel::MakeModel(vkUtil::MeshLoader* mesh) {
 	this->mesh = mesh;
 }
 
@@ -22,7 +22,6 @@ void vkJob::MakeTexture::execute(vk::CommandBuffer commandBuffer, vk::Queue queu
 }
 
 void vkJob::WorkQueue::add(Job* job) {
-
 	if (length == 0) {
 		first = job;
 		last = job;
@@ -31,52 +30,41 @@ void vkJob::WorkQueue::add(Job* job) {
 		last->next = job;
 		last = job;
 	}
-
 	length += 1;
 }
 
 vkJob::Job* vkJob::WorkQueue::get_next() {
-
 	Job* current = first;
 	while (current) {
 		if (current->status == JobStatus::PENDING) {
 			return current;
 		}
-
 		current = current->next;
 	}
-
 	return nullptr;
 }
 
 bool vkJob::WorkQueue::done() {
-
 	Job* current = first;
 	while (current) {
 		if (current->status != JobStatus::COMPLETE) {
 			return false;
 		}
-
 		current = current->next;
 	}
-
 	return true;
 }
 
 void vkJob::WorkQueue::clear() {
-
 	if (length == 0) {
 		return;
 	}
-
 	Job* current = first;
 	while (current) {
-
 		Job* previous = current;
 		current = current->next;
 		delete previous;
 	}
-
 	first = nullptr;
 	last = nullptr;
 	length = 0;

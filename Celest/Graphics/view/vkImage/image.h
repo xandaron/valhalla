@@ -5,7 +5,7 @@
 namespace vkImage {
 
 	/**
-		For making the Image class
+	* For making the Image class.
 	*/
 	struct TextureInputChunk {
 		vk::Device logicalDevice;
@@ -18,7 +18,7 @@ namespace vkImage {
 	};
 
 	/**
-		For making individual vulkan images
+	* For making individual vulkan images.
 	*/
 	struct ImageInputChunk {
 		vk::Device logicalDevice;
@@ -33,7 +33,7 @@ namespace vkImage {
 	};
 
 	/**
-		For transitioning image layouts
+	* For transitioning image layouts.
 	*/
 	struct ImageLayoutTransitionJob {
 		vk::CommandBuffer commandBuffer;
@@ -44,7 +44,7 @@ namespace vkImage {
 	};
 
 	/**
-		For copying a buffer to an image
+	* For copying a buffer to an image.
 	*/
 	struct BufferImageCopyJob {
 		vk::CommandBuffer commandBuffer;
@@ -56,42 +56,72 @@ namespace vkImage {
 	};
 
 	/**
-		Make a Vulkan Image
+	* Make a Vulkan Image.
+	* 
+	* @param input
+	* 
+	* @return
 	*/
-	vk::Image make_image(ImageInputChunk input);
+	vk::Image makeImage(ImageInputChunk input);
 
 	/**
-		Allocate and bind the backing memory for a Vulkan Image, this memory must
-		be freed upon image destruction.
+	* Allocate and bind the backing memory for a Vulkan Image, this memory must
+	* be freed upon image destruction.
+	* 
+	* @param input
+	* @param image
+	* 
+	* @return
 	*/
-	vk::DeviceMemory make_image_memory(ImageInputChunk input, vk::Image image);
+	vk::DeviceMemory makeImageMemory(ImageInputChunk input, vk::Image image);
 
 	/**
-		Transition the layout of an image.
-
-		Currently supports:
-
-		undefined -> transfer_dst_optimal,
-		transfer_dst_optimal -> shader_read_only_optimal,
+	* Transition the layout of an image.
+	*
+	* Currently supports:
+	* undefined -> transfer_dst_optimal,
+	* transfer_dst_optimal -> shader_read_only_optimal,
+	* 
+	* @param transitionJob
 	*/
-	void transition_image_layout(ImageLayoutTransitionJob transitionJob);
+	void transitionImageLayout(ImageLayoutTransitionJob transitionJob);
 
 	/**
-		Copy from a buffer to an image. Image must be in the transfer_dst_optimal layout.
+	* Copy from a buffer to an image. Image must be in the transfer_dst_optimal layout.
+	* 
+	* @param copyJob
 	*/
-	void copy_buffer_to_image(BufferImageCopyJob copyJob);
+	void copyBufferToImage(BufferImageCopyJob copyJob);
 
 	/**
-		Create a view of a vulkan image.
+	* Create a view of a vulkan image.
+	* 
+	* @param logicalDevice The device used to create the image view.
+	* @param image		   The image for the view.
+	* @param format		   The image format.
+	* @param aspect		   The image aspect
+	* @param type		   The view type.
+	* @param arrayCount	   Number of layers.
+	* 
+	* @return The created image view.
+	* 
+	* @throws std::runtime_error If creation failed
 	*/
-	vk::ImageView make_image_view(
+	/*vk::ImageView makeImageView(
 		vk::Device logicalDevice, vk::Image image, vk::Format format,
-		vk::ImageAspectFlags aspect, vk::ImageViewType type, uint32_t arrayCount);
+		vk::ImageAspectFlags aspect, vk::ImageViewType type, uint32_t arrayCount);*/
 
 	/**
-		\returns an image format supporting the requested tiling and features
+	* Finds supported image formats.
+	* 
+	* @param physicalDevice
+	* @param candidates
+	* @param tiling
+	* @param features
+	* 
+	* @return An image format supporting the requested tiling and features.
 	*/
-	vk::Format find_supported_format(
+	vk::Format findSupportedFormat(
 		vk::PhysicalDevice physicalDevice,
 		const std::vector<vk::Format>& candidates,
 		vk::ImageTiling tiling, vk::FormatFeatureFlags features);

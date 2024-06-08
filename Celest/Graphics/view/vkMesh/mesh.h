@@ -1,17 +1,16 @@
 #pragma once
 #include "../../../cfg.h"
-#include "../../Meshloader/fbx_loader.h"
-#include "../../Meshloader/obj_loader.h"
+#include "../vkUtil/fbx_loader.h"
+#include "../vkUtil/obj_loader.h"
 
 namespace vkMesh {
-
-	static Meshloader::Mesh_Loader* createMeshLoader(std::string filedir, std::string filename, glm::mat4 preTransform) {
+	vkUtil::MeshLoader* createMeshLoader(std::string filedir, std::string filename, glm::mat4 preTransform) {
 		std::vector<std::string> words = split(filename, ".");
 		if (words[1] == "obj") {
-			return new Meshloader::OBJ_Loader(filedir, filename, preTransform);
+			return new vkUtil::OBJLoader(filedir, filename, preTransform);
 		}
 		else if (words[1] == "fbx") {
-			return new Meshloader::FBX_Loader(filedir, filename, preTransform);
+			return new vkUtil::FBXLoader(filedir, filename, preTransform);
 		}
 		throw std::invalid_argument("invalid file type");
 	}

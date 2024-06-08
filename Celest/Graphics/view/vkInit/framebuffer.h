@@ -21,7 +21,7 @@ namespace vkInit {
 		\param inputChunk required input for creation
 		\param frames the vector to be populated with the created framebuffers
 	*/
-	void make_framebuffers(framebufferInput inputChunk, std::vector<vkUtil::SwapChainFrame>& frames) {
+	void make_framebuffers(framebufferInput inputChunk, std::vector<vkUtil::SwapchainFrame>& frames) {
 
 		std::stringstream message;
 

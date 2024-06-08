@@ -2,9 +2,9 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <TinyOBJ/tiny_obj_loader.h>
 
-Meshloader::OBJ_Loader::OBJ_Loader(std::string filedir, std::string filename, glm::mat4 preTransform) : Mesh_Loader(filedir, filename, preTransform) {}
+vkUtil::OBJLoader::OBJLoader(std::string filedir, std::string filename, glm::mat4 preTransform) : MeshLoader(filedir, filename, preTransform) {}
 
-bool Meshloader::OBJ_Loader::load() {
+bool vkUtil::OBJLoader::load() {
 	tinyobj::attrib_t attrib;
 	std::vector<tinyobj::shape_t> shapes;
 	std::vector<tinyobj::material_t> materials;

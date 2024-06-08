@@ -7,7 +7,7 @@ namespace vkUtil {
 	/**
 		Holds the data structures associated with a "Frame"
 	*/
-	class SwapChainFrame {
+	class SwapchainFrame {
 
 	public:
 

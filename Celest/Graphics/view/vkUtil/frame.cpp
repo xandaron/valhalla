@@ -1,8 +1,9 @@
 #include "frame.h"
 #include "memory.h"
 #include "../vkImage/image.h"
+#include "../vkInit/image_views.h"
 
-void vkUtil::SwapChainFrame::make_descriptor_resources() {
+void vkUtil::SwapchainFrame::make_descriptor_resources() {
 
 	BufferInputChunk input;
 	input.logicalDevice = logicalDevice;
@@ -50,9 +51,9 @@ void vkUtil::SwapChainFrame::make_descriptor_resources() {
 	ssboDescriptor.range = 1024 * sizeof(glm::mat4);
 }
 
-void vkUtil::SwapChainFrame::make_depth_resources() {
+void vkUtil::SwapchainFrame::make_depth_resources() {
 
-	depthFormat = vkImage::find_supported_format(
+	depthFormat = vkImage::findSupportedFormat(
 		physicalDevice,
 		{ vk::Format::eD32Sfloat, vk::Format::eD24UnormS8Uint },
 		vk::ImageTiling::eOptimal,
@@ -69,15 +70,14 @@ void vkUtil::SwapChainFrame::make_depth_resources() {
 	imageInfo.height = height;
 	imageInfo.format = depthFormat;
 	imageInfo.arrayCount = 1;
-	depthBuffer = vkImage::make_image(imageInfo);
-	depthBufferMemory = vkImage::make_image_memory(imageInfo, depthBuffer);
-	depthBufferView = vkImage::make_image_view(
-		logicalDevice, depthBuffer, depthFormat, vk::ImageAspectFlagBits::eDepth,
-		vk::ImageViewType::e2D, 1
-	);
+	depthBuffer = vkImage::makeImage(imageInfo);
+	depthBufferMemory = vkImage::makeImageMemory(imageInfo, depthBuffer);
+	depthBufferView = logicalDevice.createImageView(vkInit::createImageViewCreateInfo(
+		depthBuffer, depthFormat, vk::ImageViewType::e2D, vk::ImageAspectFlagBits::eDepth, 1
+	));
 }
 
-void vkUtil::SwapChainFrame::record_write_operations() {
+void vkUtil::SwapchainFrame::record_write_operations() {
 
 	/*
 	typedef struct VkWriteDescriptorSet {
@@ -120,12 +120,12 @@ void vkUtil::SwapChainFrame::record_write_operations() {
 
 }
 
-void vkUtil::SwapChainFrame::write_descriptor_set() {
+void vkUtil::SwapchainFrame::write_descriptor_set() {
 
 	logicalDevice.updateDescriptorSets(writeOps, nullptr);
 }
 
-void vkUtil::SwapChainFrame::destroy() {
+void vkUtil::SwapchainFrame::destroy() {
 
 	logicalDevice.destroyImageView(imageView);
 	logicalDevice.destroyFramebuffer(framebuffer[pipelineType::SKY]);

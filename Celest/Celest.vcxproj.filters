@@ -74,28 +74,40 @@
     <ClCompile Include="Physics\objects\dynamic_body.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\Meshloader\fbx_loader.cpp">
+    <ClCompile Include="Graphics\view\vkUtil\fbx_loader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\Meshloader\obj_loader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Game\util\tree.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Game\util\node.cpp">
+    <ClCompile Include="Graphics\view\vkUtil\obj_loader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Physics\objects\body.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\Meshloader\OpenFBX\ofbx.cpp">
+    <ClCompile Include="Graphics\view\vkUtil\OpenFBX\ofbx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\Meshloader\OpenFBX\libdeflate.c">
+    <ClCompile Include="Graphics\view\vkUtil\OpenFBX\libdeflate.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Game\debug\logger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\debug\vkLogging.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkInit\device.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkInit\instance.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkInit\swap_chain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkUtil\queue_family.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkInit\image_views.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -199,19 +211,13 @@
     <ClInclude Include="Game\util\file_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\Meshloader\mesh_loader.h">
+    <ClInclude Include="Graphics\view\vkUtil\mesh_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Game\util\tree.h">
+    <ClInclude Include="Graphics\view\vkUtil\fbx_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\Meshloader\fbx_loader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Graphics\Meshloader\obj_loader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Game\util\node.h">
+    <ClInclude Include="Graphics\view\vkUtil\obj_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Game\entity.h">
@@ -229,13 +235,25 @@
     <ClInclude Include="thirdParty\include\tiny_obj_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\Meshloader\OpenFBX\ofbx.h">
+    <ClInclude Include="Graphics\view\vkUtil\OpenFBX\ofbx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\Meshloader\OpenFBX\libdeflate.h">
+    <ClInclude Include="Graphics\view\vkUtil\OpenFBX\libdeflate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Game\debug\logger.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\debug\vkLogging.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\view\vkInit\swap_chain.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\view\vkUtil\queue_family.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\view\vkInit\image_views.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -266,9 +284,6 @@
   <ItemGroup>
     <Object Include="assets\models\sphere.obj" />
     <Object Include="assets\models\cube.obj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="LICENSE.txt" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\textures\scav.png" />

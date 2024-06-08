@@ -1,11 +1,11 @@
 #pragma once
 #include "../../cfg.h"
 
-namespace Fileloader {
-	class File_Loader {
+namespace util {
+	class FileLoader {
 
 	public:
-		File_Loader(std::string filedir, std::string filename) {
+		FileLoader(std::string filedir, std::string filename) {
 			this->filedir = filedir;
 			this->filepath = filedir + filename;
 		}
