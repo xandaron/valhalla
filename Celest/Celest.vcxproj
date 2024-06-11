@@ -146,7 +146,10 @@
     <ClCompile Include="Game\debug\logger.cpp" />
     <ClCompile Include="Game\scene.cpp" />
     <ClCompile Include="Graphics\debug\vkLogging.cpp" />
+    <ClCompile Include="Graphics\view\vkInit\command_pool.cpp" />
+    <ClCompile Include="Graphics\view\vkInit\framebuffer.cpp" />
     <ClCompile Include="Graphics\view\vkInit\image_views.cpp" />
+    <ClCompile Include="Graphics\view\vkInit\sync.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\fbx_loader.cpp" />
     <ClCompile Include="Graphics\view\vkUtil\obj_loader.cpp" />
     <ClCompile Include="Graphics\view\graphics_engine.cpp" />
@@ -154,7 +157,7 @@
     <ClCompile Include="Graphics\control\logging.cpp" />
     <ClCompile Include="Graphics\view\vkInit\device.cpp" />
     <ClCompile Include="Graphics\view\vkInit\instance.cpp" />
-    <ClCompile Include="Graphics\view\vkInit\swap_chain.cpp" />
+    <ClCompile Include="Graphics\view\vkInit\swapchain.cpp" />
     <ClCompile Include="Graphics\view\vkMesh\vertex_menagerie.cpp" />
     <ClCompile Include="Graphics\view\vkImage\cubemap.cpp" />
     <ClCompile Include="Graphics\view\vkImage\image.cpp" />
@@ -194,11 +197,11 @@
     <ClInclude Include="Graphics\view\vkImage\image.h" />
     <ClInclude Include="Graphics\view\vkImage\stb_image.h" />
     <ClInclude Include="Graphics\view\vkImage\texture.h" />
-    <ClInclude Include="Graphics\view\vkInit\commands.h" />
+    <ClInclude Include="Graphics\view\vkInit\command_pool.h" />
     <ClInclude Include="Graphics\view\vkInit\descriptors.h" />
     <ClInclude Include="Graphics\view\vkInit\device.h" />
     <ClInclude Include="Graphics\view\graphics_engine.h" />
-    <ClInclude Include="Graphics\view\vkInit\swap_chain.h" />
+    <ClInclude Include="Graphics\view\vkInit\swapchain.h" />
     <ClInclude Include="Graphics\view\vkJob\job.h" />
     <ClInclude Include="Graphics\view\vkJob\worker_thread.h" />
     <ClInclude Include="Graphics\view\vkUtil\OpenFBX\libdeflate.h" />
@@ -215,7 +218,6 @@
     <ClInclude Include="Graphics\view\vkUtil\queue_family.h" />
     <ClInclude Include="Graphics\view\vkUtil\render_structs.h" />
     <ClInclude Include="Graphics\view\vkUtil\shaders.h" />
-    <ClInclude Include="Graphics\view\vkInit\swapchain.h" />
     <ClInclude Include="Graphics\view\vkInit\sync.h" />
     <ClInclude Include="Graphics\view\vkUtil\single_time_commands.h" />
     <ClInclude Include="Physics\objects\body.h" />

@@ -14,5 +14,5 @@ const vec4 sunColor = vec4(1.0, 1.0, 1.0, 1.0);
 const vec3 sunDirection = normalize(vec3(1.0, 1.0, -1.0));
 
 void main() {
-	outColor = sunColor * max(ambiantLightIntencity, dot(fragNormal, -sunDirection)) * vec4(fragColor, 1.0) * texture(material, fragTexCoord);
+	outColor = vec4(fragNormal, 1.0);
 }

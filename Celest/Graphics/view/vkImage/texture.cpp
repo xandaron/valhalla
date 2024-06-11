@@ -42,7 +42,6 @@ void vkImage::Texture::load(TextureInputChunk input) {
 }
 
 vkImage::Texture::~Texture() {
-
 	logicalDevice.freeMemory(imageMemory);
 	logicalDevice.destroyImage(image);
 	logicalDevice.destroyImageView(imageView);
@@ -50,7 +49,6 @@ vkImage::Texture::~Texture() {
 }
 
 void vkImage::Texture::load() {
-
 	pixels = stbi_load(filename.c_str(), &width, &height, &channels, STBI_rgb_alpha);
 	if (!pixels) {
 		vkLogging::Logger::get_logger()->print_list({ "Unable to load: ", filename});

@@ -1,21 +1,21 @@
 #include "graphics_engine.h"
-#include "../debug/vkLogging.h"
 #include "vkInit/instance.h"
+#include "../debug/vkLogging.h"
 #include "vkInit/device.h"
-#include "vkInit/swap_chain.h"
+#include "vkInit/swapchain.h"
 #include "vkInit/image_views.h"
+#include "vkInit/descriptors.h"
 #include "vkInit/pipeline.h"
 #include "vkInit/framebuffer.h"
-#include "vkInit/commands.h"
+#include "vkInit/command_pool.h"
 #include "vkInit/sync.h"
-#include "vkInit/descriptors.h"
 #include "vkMesh/mesh.h"
 
 Graphics::Engine::Engine(int width, int height, GLFWwindow* window, Game::Camera* camera) {
 	this->width = width;
 	this->height = height;
 	this->window = window;
-
+	
 	Debug::Logger::log(Debug::MESSAGE, "Creating new graphics engine");
 	
 	createInstance();
@@ -26,19 +26,21 @@ Graphics::Engine::Engine(int width, int height, GLFWwindow* window, Game::Camera
 	createImageViews();
 	createDescriptorSetLayouts();
 	createPipelines();
-	finalizeSetup();
+	createFramebuffers();
+	createCommandPool();
+	createFrameResources();
 }
 
-void Graphics::Engine::createInstance() {
+inline void Graphics::Engine::createInstance() {
 	instance = vkInit::makeInstance("Celest");
 }
 
-void Graphics::Engine::createDebugMessenger() {
+inline void Graphics::Engine::createDebugMessenger() {
 	dldi = vk::DispatchLoaderDynamic(instance, vkGetInstanceProcAddr);
 	debugMessenger = Debug::makeDebugMessenger(instance, dldi);
 }
 
-void Graphics::Engine::createSurface() {
+inline void Graphics::Engine::createSurface() {
 	VkSurfaceKHR c_style_surface;
 	if (glfwCreateWindowSurface(instance, window, nullptr, &c_style_surface) != VK_SUCCESS) {
 		throw std::runtime_error("Failed to create a glfw surface for Vulkan.");
@@ -49,7 +51,7 @@ void Graphics::Engine::createSurface() {
 	surface = c_style_surface;
 }
 
-void Graphics::Engine::createDevice() {
+inline void Graphics::Engine::createDevice() {
 	physicalDevice = vkInit::choosePhysicalDevice(instance, surface);
 	device = vkInit::createLogicalDevice(physicalDevice, surface);
 	vkUtil::QueueFamilyIndices familyIndices = vkUtil::findQueueFamilies(physicalDevice, surface);
@@ -57,10 +59,9 @@ void Graphics::Engine::createDevice() {
 	presentQueue = device.getQueue(familyIndices.presentFamily.value(), 0);
 }
 
-void Graphics::Engine::createSwapchain() {
+inline void Graphics::Engine::createSwapchain() {
 	vkInit::SwapchainBundle swapchainBundle = vkInit::createSwapchain(
-		device, physicalDevice, surface,
-		{ static_cast<uint32_t>(width), static_cast<uint32_t>(height) }, swapchain
+		device, physicalDevice, surface, { static_cast<uint32_t>(width), static_cast<uint32_t>(height) }, nullptr
 	);
 	swapchain = swapchainBundle.swapchain;
 	swapchainFormat = swapchainBundle.format;
@@ -68,37 +69,37 @@ void Graphics::Engine::createSwapchain() {
 }
 
 void Graphics::Engine::recreateSwapchain() {
-	width = 0;
-	height = 0;
+	int width = 0, height = 0;
+	glfwGetFramebufferSize(window, &width, &height);
 	while (width == 0 || height == 0) {
 		glfwGetFramebufferSize(window, &width, &height);
 		glfwWaitEvents();
 	}
-
 	device.waitIdle();
 
+	Debug::Logger::log(Debug::DEBUG, "Recreating swapchain.");
 	cleanupSwapchain();
 	createSwapchain();
+	createImageViews();
 	createFramebuffers();
 	createFrameResources();
-	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainImageViews };
-	vkInit::make_frame_command_buffers(commandBufferInput);
+	vkInit::createFrameCommandBuffers({ device, commandPool, swapchainImageViews });
 }
 
-void Graphics::Engine::createImageViews() {
+inline void Graphics::Engine::createImageViews() {
 	swapchainImageViews = vkInit::createImageViews(device, swapchain, swapchainFormat);
 	maxFramesInFlight = static_cast<int>(swapchainImageViews.size());
-	for (vkUtil::SwapchainFrame& frame : swapchainImageViews) {
+	for (vkUtil::SwapchainImageView& frame : swapchainImageViews) {
 		frame.logicalDevice = device;
 		frame.physicalDevice = physicalDevice;
 		frame.width = swapchainExtent.width;
 		frame.height = swapchainExtent.height;
-		frame.make_depth_resources();
+		frame.makeDepthResources();
 	}
 	frameNumber = 0;
 }
 
-void Graphics::Engine::createDescriptorSetLayouts() {
+inline void Graphics::Engine::createDescriptorSetLayouts() {
 	Debug::Logger::log(Debug::MESSAGE, "Creating descriptor sets.");
 	/**
 	* struct descriptorSetLayoutData {
@@ -130,7 +131,7 @@ void Graphics::Engine::createDescriptorSetLayouts() {
 	meshSetLayout[pipelineType::STANDARD] = vkInit::makeDescriptorSetLayout(device, bindings);
 }
 
-void Graphics::Engine::createPipelines() {
+inline void Graphics::Engine::createPipelines() {
 	/**
 	* struct PipelineBuildInfo {
 	*	vk::Device& device;
@@ -160,8 +161,9 @@ void Graphics::Engine::createPipelines() {
 	pipelineLayout[pipelineType::SKY] = output.layout;
 	renderpass[pipelineType::SKY] = output.renderpass;
 	pipeline[pipelineType::SKY] = output.pipeline;
+	shaderStages[pipelineType::SKY] = output.shaders;
 
-	vkInit::PipelineBuildInfo pipelineBuildInfo = {
+	vkInit::PipelineBuildInfo pipelineBuildInfo{
 		device,
 		true,
 		{ vkMesh::Vertex::getBindingDescription(), vkMesh::Vertex::getAttributeDescriptions() },
@@ -179,64 +181,61 @@ void Graphics::Engine::createPipelines() {
 	pipelineLayout[pipelineType::STANDARD] = output.layout;
 	renderpass[pipelineType::STANDARD] = output.renderpass;
 	pipeline[pipelineType::STANDARD] = output.pipeline;
+	shaderStages[pipelineType::STANDARD] = output.shaders;
 }
 
-void Graphics::Engine::createFramebuffers() {
-	vkInit::framebufferInput frameBufferInput{
-		device,
-		renderpass,
-		swapchainExtent
-	};
-	vkInit::make_framebuffers(frameBufferInput, swapchainImageViews);
+inline void Graphics::Engine::createFramebuffers() {
+	vkInit::createFramebuffers(
+		{
+			device,
+			swapchainExtent,
+			renderpass
+		}, 
+		swapchainImageViews
+	);
 }
 
-void Graphics::Engine::finalizeSetup() {
-
-	createFramebuffers();
-
-	commandPool = vkInit::make_command_pool(device, physicalDevice, surface);
-
+inline void Graphics::Engine::createCommandPool() {
+	commandPool = vkInit::createCommandPool(device, physicalDevice, surface);
 	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainImageViews };
-	mainCommandBuffer = vkInit::make_command_buffer(commandBufferInput);
-	vkInit::make_frame_command_buffers(commandBufferInput);
-
-	createFrameResources();
+	mainCommandBuffer = vkInit::createCommandBuffer(commandBufferInput);
+	vkInit::createFrameCommandBuffers(commandBufferInput);
 }
 
-void Graphics::Engine::createFrameResources() {
-
+inline void Graphics::Engine::createFrameResources() {
+	/**
+	* struct descriptorSetLayoutData {
+	*	int                               count;
+	*	std::vector<uint32_t>             indices;
+	*	std::vector<vk::DescriptorType>   types;
+	*	std::vector<uint32_t>             counts;
+	*	std::vector<vk::ShaderStageFlags> stages;
+	* };
+	*/
 	vkInit::descriptorSetLayoutData bindings;
 	bindings.count = 2;
 	bindings.types.push_back(vk::DescriptorType::eUniformBuffer);
 	bindings.types.push_back(vk::DescriptorType::eStorageBuffer);
 	uint32_t descriptor_sets_per_frame = 2;
-
 	frameDescriptorPool = vkInit::makeDescriptorPool(device, static_cast<uint32_t>(swapchainImageViews.size() * descriptor_sets_per_frame), bindings);
-
-	for (vkUtil::SwapchainFrame& frame : swapchainImageViews) {
-
-		frame.imageAvailable = vkInit::make_semaphore(device);
-		frame.renderFinished = vkInit::make_semaphore(device);
-		frame.inFlight = vkInit::make_fence(device);
-
-		frame.make_descriptor_resources();
-
+	for (vkUtil::SwapchainImageView& frame : swapchainImageViews) {
+		frame.imageAvailable = vkInit::makeSemaphore(device);
+		frame.renderFinished = vkInit::makeSemaphore(device);
+		frame.inFlight = vkInit::makeFence(device);
+		frame.makeDescriptorResources();
 		frame.descriptorSet[pipelineType::SKY] = vkInit::allocateDescriptorSet(device, frameDescriptorPool, frameSetLayout[pipelineType::SKY]);
 		frame.descriptorSet[pipelineType::STANDARD] = vkInit::allocateDescriptorSet(device, frameDescriptorPool, frameSetLayout[pipelineType::STANDARD]);
-
-		frame.record_write_operations();
+		frame.recordWriteOperations();
 	}
 }
 
 void Graphics::Engine::createWorkerThreads() {
-
 	done = false;
 	size_t threadCount = std::thread::hardware_concurrency() - 1;
-
 	workers.reserve(threadCount);
 	vkInit::commandBufferInputChunk commandBufferInput = { device, commandPool, swapchainImageViews };
 	for (size_t i = 0; i < threadCount; ++i) {
-		vk::CommandBuffer commandBuffer = vkInit::make_command_buffer(commandBufferInput);
+		vk::CommandBuffer commandBuffer = vkInit::createCommandBuffer(commandBufferInput);
 		workers.push_back(
 			std::thread(
 				vkJob::WorkerThread(workQueue, done, commandBuffer, graphicsQueue)
@@ -246,31 +245,23 @@ void Graphics::Engine::createWorkerThreads() {
 }
 
 void Graphics::Engine::endWorkerThreads() {
-
 	done = true;
 	size_t threadCount = std::thread::hardware_concurrency() - 1;
-
 	for (size_t i = 0; i < threadCount; ++i) {
 		workers[i].join();
 	}
-
-	std::cout << "Threads ended successfully." << std::endl;
+	Debug::Logger::log(Debug::MESSAGE, "Threads ended successfully.");
 }
 
 void Graphics::Engine::createAssets(Game::AssetPack assetPack) {
-
-	//Meshes
 	meshes = new vkMesh::VertexMenagerie();
 	std::unordered_map<std::string, vkUtil::MeshLoader*> loaded_models;
 
-	//Make a descriptor pool to allocate sets.
 	vkInit::descriptorSetLayoutData bindings;
 	bindings.count = 1;
 	bindings.types.push_back(vk::DescriptorType::eCombinedImageSampler);
-
 	meshDescriptorPool = vkInit::makeDescriptorPool(device, static_cast<uint32_t>(assetPack.texture_filenames.size()) + 1, bindings);
 
-	//Submit loading work
 	workQueue.lock.lock();
 	for (int i = 0; i < assetPack.objectTypes.size(); i++) {
 		vkImage::TextureInputChunk textureInfo;
@@ -346,25 +337,24 @@ void Graphics::Engine::loadAssets(Game::AssetPack assetPack) {
 }
 
 void Graphics::Engine::prepareFrame(uint32_t imageIndex, Game::Scene* scene) {
-
-	vkUtil::SwapchainFrame& _frame = swapchainImageViews[imageIndex];
-
+	vkUtil::SwapchainImageView& _frame = swapchainImageViews[imageIndex];
 	Game::CameraView cameraViewData = scene->getCamera()->getCameraViewData();
-	Game::CameraVectors cameraVectorData;
-	cameraVectorData.forward = { cameraViewData.forward.x, cameraViewData.forward.y, cameraViewData.forward.z, 0.0 };
-	cameraVectorData.right = { cameraViewData.right.x,   cameraViewData.right.y,   cameraViewData.right.z, 0.0 };
-	cameraVectorData.up = { cameraViewData.up.x,      cameraViewData.up.y,      cameraViewData.up.z, 0.0 };
+	Game::CameraVectors cameraVectorData{
+		{ cameraViewData.forward.x, cameraViewData.forward.y, cameraViewData.forward.z, 0.0 },
+		{ cameraViewData.right.x,   cameraViewData.right.y,   cameraViewData.right.z, 0.0 },
+		{ cameraViewData.up.x,      cameraViewData.up.y,      cameraViewData.up.z, 0.0 }
+	};
 	memcpy(_frame.cameraVectorWriteLocation, &(cameraVectorData), sizeof(Game::CameraVectors));
 
 	glm::mat4 view = glm::lookAt(cameraViewData.eye, cameraViewData.center, cameraViewData.up);
-
 	glm::mat4 projection = glm::perspective(glm::radians(45.0), static_cast<double>(swapchainExtent.width) / static_cast<double>(swapchainExtent.height), 0.1, 1000.0);
 	projection[1][1] *= -1;
 
-	Game::CameraMatrices cameraMatrixData;
-	cameraMatrixData.view = view;
-	cameraMatrixData.projection = projection;
-	cameraMatrixData.viewProjection = projection * view;
+	Game::CameraMatrices cameraMatrixData{
+		view,
+		projection,
+		projection * view
+	};
 	memcpy(_frame.cameraMatrixWriteLocation, &(cameraMatrixData), sizeof(Game::CameraMatrices));
 
 	size_t i = 0;
@@ -374,74 +364,93 @@ void Graphics::Engine::prepareFrame(uint32_t imageIndex, Game::Scene* scene) {
 		}
 	}
 	memcpy(_frame.modelBufferWriteLocation, _frame.modelTransforms.data(), i * sizeof(glm::f64mat4));
-
-	_frame.write_descriptor_set();
+	_frame.writeDescriptorSet();
 }
 
 void Graphics::Engine::prepareScene(vk::CommandBuffer commandBuffer) {
-
-	vk::Buffer vertexBuffers[] = { meshes->vertexBuffer.buffer };
-	vk::DeviceSize offsets[] = { 0 };
-	commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+	commandBuffer.setViewport(0, 1, createViewport(swapchainExtent));
+	commandBuffer.setScissor(0, 1, createScissor(swapchainExtent));
+	commandBuffer.bindVertexBuffers(0, 1, new vk::Buffer{ meshes->vertexBuffer.buffer }, new vk::DeviceSize{0});
 	commandBuffer.bindIndexBuffer(meshes->indexBuffer.buffer, 0, vk::IndexType::eUint32);
 }
 
 void Graphics::Engine::recordDrawCommandsSky(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene) {
-
-	vk::RenderPassBeginInfo renderPassInfo = {};
-	renderPassInfo.renderPass = renderpass[pipelineType::SKY];
-	renderPassInfo.framebuffer = swapchainImageViews[imageIndex].framebuffer[pipelineType::SKY];
-	renderPassInfo.renderArea.offset.x = 0;
-	renderPassInfo.renderArea.offset.y = 0;
-	renderPassInfo.renderArea.extent = swapchainExtent;
-
-	vk::ClearValue colorClear;
-	std::array<float, 4> colors = { 1.0f, 0.5f, 0.25f, 1.0f };
-
-	std::vector<vk::ClearValue> clearValues = { {colorClear} };
-
-	renderPassInfo.clearValueCount = clearValues.size();
-	renderPassInfo.pClearValues = clearValues.data();
-
+	/**
+	* RenderPassBeginInfo(
+	*	vk::RenderPass         renderPass_      = {},
+	*	vk::Framebuffer        framebuffer_     = {},
+	*	vk::Rect2D             renderArea_      = {},
+	*	uint32_t               clearValueCount_ = {},
+	*	const vk::ClearValue * pClearValues_    = {},
+	*	const void *           pNext_           = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	vk::RenderPassBeginInfo renderPassInfo{
+		renderpass[pipelineType::SKY],
+		swapchainImageViews[imageIndex].framebuffer[pipelineType::SKY],
+		{ { 0, 0 }, swapchainExtent },
+		1u,
+		/**
+		* ClearColorValue(
+		*	const std::array<float, 4>& float32_ = {}
+		* )
+		*/
+		new vk::ClearValue{ vk::ClearColorValue({ 0.0f, 0.0f, 0.0f, 1.0f }) },
+		nullptr
+	};
 	commandBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
-
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline[pipelineType::SKY]);
-
-	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout[pipelineType::SKY], 0, swapchainImageViews[imageIndex].descriptorSet[pipelineType::SKY], nullptr);
-
+	commandBuffer.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics, pipelineLayout[pipelineType::SKY],
+		0, swapchainImageViews[imageIndex].descriptorSet[pipelineType::SKY],
+		nullptr
+	);
 	cubemap->use(commandBuffer, pipelineLayout[pipelineType::SKY]);
 	commandBuffer.draw(6, 1, 0, 0);
-
 	commandBuffer.endRenderPass();
 }
 
 void Graphics::Engine::recordDrawCommandsScene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene) {
-
-	vk::RenderPassBeginInfo renderPassInfo = {};
-	renderPassInfo.renderPass = renderpass[pipelineType::STANDARD];
-	renderPassInfo.framebuffer = swapchainImageViews[imageIndex].framebuffer[pipelineType::STANDARD];
-	renderPassInfo.renderArea.offset.x = 0;
-	renderPassInfo.renderArea.offset.y = 0;
-	renderPassInfo.renderArea.extent = swapchainExtent;
-
-	vk::ClearValue colorClear;
-	std::array<float, 4> colors = { 1.0f, 0.5f, 0.25f, 1.0f };
-	colorClear.color = vk::ClearColorValue(colors);
-	vk::ClearValue depthClear;
-
-	depthClear.depthStencil = vk::ClearDepthStencilValue({ 1.0f, 0 });
-	std::vector<vk::ClearValue> clearValues = { {colorClear,depthClear} };
-
-	renderPassInfo.clearValueCount = 2;
-	renderPassInfo.pClearValues = clearValues.data();
+	/**
+	* ClearColorValue(
+	*	const std::array<float, 4>& float32_ = {}
+	* )
+	*
+	* ClearDepthStencilValue(
+	*	float    depth_   = {},
+	*	uint32_t stencil_ = {}
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	std::vector<vk::ClearValue> clearValues{
+		{ vk::ClearColorValue({ 0.0f, 0.0f, 0.0f, 1.0f }) },
+		{ vk::ClearDepthStencilValue({ 1.0f, 0 }) }
+	};
+	/**
+	* RenderPassBeginInfo(
+	*	vk::RenderPass         renderPass_      = {},
+    *	vk::Framebuffer        framebuffer_     = {},
+    *	vk::Rect2D             renderArea_      = {},
+    *	uint32_t               clearValueCount_ = {},
+    *	const vk::ClearValue * pClearValues_    = {},
+    *	const void *           pNext_           = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	vk::RenderPassBeginInfo renderPassInfo{
+		renderpass[pipelineType::STANDARD],
+		swapchainImageViews[imageIndex].framebuffer[pipelineType::STANDARD],
+		{ { 0, 0 }, swapchainExtent },
+		static_cast<uint32_t>(clearValues.size()),
+		clearValues.data(),
+		nullptr
+	};
 
 	commandBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
-
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline[pipelineType::STANDARD]);
-
-	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout[pipelineType::STANDARD], 0, swapchainImageViews[imageIndex].descriptorSet[pipelineType::STANDARD], nullptr);
-
-	prepareScene(commandBuffer);
+	commandBuffer.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics, pipelineLayout[pipelineType::STANDARD],
+		0, swapchainImageViews[imageIndex].descriptorSet[pipelineType::STANDARD],
+		nullptr
+	);
 
 	uint32_t startInstance = 0;
 	for (std::pair<std::string, std::vector<Entitys::Entity*>> pair : scene->getMappedObjects()) {
@@ -449,12 +458,10 @@ void Graphics::Engine::recordDrawCommandsScene(vk::CommandBuffer commandBuffer, 
 			commandBuffer, pair.first, startInstance, static_cast<uint32_t>(pair.second.size())
 		);
 	}
-
 	commandBuffer.endRenderPass();
 }
 
 void Graphics::Engine::renderObjects(vk::CommandBuffer commandBuffer, std::string objectType, uint32_t& startInstance, uint32_t instanceCount) {
-
 	int indexCount = meshes->indexCounts.find(objectType)->second;
 	int firstIndex = meshes->firstIndices.find(objectType)->second;
 	materials[objectType]->use(commandBuffer, pipelineLayout[pipelineType::STANDARD]);
@@ -463,47 +470,57 @@ void Graphics::Engine::renderObjects(vk::CommandBuffer commandBuffer, std::strin
 }
 
 void Graphics::Engine::render(Game::Scene* scene) {
-
-	device.waitForFences(1, &(swapchainImageViews[frameNumber].inFlight), VK_TRUE, UINT64_MAX);
-	device.resetFences(1, &(swapchainImageViews[frameNumber].inFlight));
-
+	if (device.waitForFences(1, &(swapchainImageViews[frameNumber].inFlight), VK_TRUE, UINT64_MAX) != vk::Result::eSuccess) {
+		throw std::runtime_error("Fence returned a bad result.");
+	}
+	
 	uint32_t imageIndex;
 	try {
 		vk::ResultValue acquire = device.acquireNextImageKHR(
-			swapchain, UINT64_MAX,
-			swapchainImageViews[frameNumber].imageAvailable, nullptr
+			swapchain, UINT64_MAX, swapchainImageViews[frameNumber].imageAvailable, nullptr
 		);
 		imageIndex = acquire.value;
 	}
-	catch (vk::OutOfDateKHRError error) {
-		std::cout << "Recreate" << std::endl;
+	catch (vk::OutOfDateKHRError err) {
 		recreateSwapchain();
 		return;
 	}
-	catch (vk::IncompatibleDisplayKHRError error) {
-		std::cout << "Recreate" << std::endl;
+	catch (vk::IncompatibleDisplayKHRError err) {
 		recreateSwapchain();
 		return;
 	}
-	catch (vk::SystemError error) {
-		std::cout << "Failed to acquire swapchain image!" << std::endl;
+	catch (vk::SystemError err) {
+		throw std::runtime_error(std::format("Failed to acquire swapchain image! Reason:\n\t{}", err.what()).c_str());
+	}
+
+	if (device.resetFences(1, &(swapchainImageViews[frameNumber].inFlight)) != vk::Result::eSuccess) {
+		throw std::runtime_error("Fence reset returned a bad result.");
 	}
 
 	vk::CommandBuffer commandBuffer = swapchainImageViews[frameNumber].commandBuffer;
-
 	commandBuffer.reset();
-
 	prepareFrame(imageIndex, scene);
-
-	vk::CommandBufferBeginInfo beginInfo = {};
+	/**
+	* CommandBufferBeginInfo(
+	*	vk::CommandBufferUsageFlags              flags_            = {},
+    *	const vk::CommandBufferInheritanceInfo * pInheritanceInfo_ = {},
+    *	const void *                             pNext_            = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	vk::CommandBufferBeginInfo beginInfo{
+		vk::CommandBufferUsageFlags(),
+		0,
+		nullptr
+	};
 
 	try {
 		commandBuffer.begin(beginInfo);
 	}
 	catch (vk::SystemError err) {
-		vkLogging::Logger::get_logger()->print("Failed to begin recording command buffer!");
+		throw std::runtime_error(std::format("Failed to begin recording command buffer! Reason:\n\t{}", err.what()).c_str());
 	}
 
+	prepareScene(commandBuffer);
 	recordDrawCommandsSky(commandBuffer, imageIndex, scene);
 	recordDrawCommandsScene(commandBuffer, imageIndex, scene);
 
@@ -511,66 +528,116 @@ void Graphics::Engine::render(Game::Scene* scene) {
 		commandBuffer.end();
 	}
 	catch (vk::SystemError err) {
-
-		vkLogging::Logger::get_logger()->print("failed to record command buffer!");
+		throw std::runtime_error(std::format("Failed to record command buffer! Reason:\n\t{}", err.what()).c_str());
 	}
 
-	vk::SubmitInfo submitInfo = {};
-
 	vk::Semaphore waitSemaphores[] = { swapchainImageViews[frameNumber].imageAvailable };
-	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-	submitInfo.waitSemaphoreCount = 1;
-	submitInfo.pWaitSemaphores = waitSemaphores;
-	submitInfo.pWaitDstStageMask = waitStages;
-
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
-
 	vk::Semaphore signalSemaphores[] = { swapchainImageViews[frameNumber].renderFinished };
-	submitInfo.signalSemaphoreCount = 1;
-	submitInfo.pSignalSemaphores = signalSemaphores;
+	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+	/**
+	* SubmitInfo(
+	*	uint32_t                      waitSemaphoreCount_   = {},
+	*	const vk::Semaphore*          pWaitSemaphores_      = {},
+	*	const vk::PipelineStageFlags* pWaitDstStageMask_    = {},
+	*	uint32_t                      commandBufferCount_   = {},
+	*	const vk::CommandBuffer*      pCommandBuffers_      = {},
+	*	uint32_t                      signalSemaphoreCount_ = {},
+	*	const vk::Semaphore*          pSignalSemaphores_    = {},
+	*	const void*                   pNext_                = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	vk::SubmitInfo submitInfo = {
+		1,
+		waitSemaphores,
+		waitStages,
+		1,
+		&commandBuffer,
+		1,
+		signalSemaphores,
+		nullptr
+	};
 
 	try {
 		graphicsQueue.submit(submitInfo, swapchainImageViews[frameNumber].inFlight);
 	}
 	catch (vk::SystemError err) {
-		vkLogging::Logger::get_logger()->print("failed to submit draw command buffer!");
+		throw std::runtime_error(std::format("Failed to submit draw command buffer! Reason\n\t{}", err.what()).c_str());
 	}
 
-	vk::PresentInfoKHR presentInfo = {};
-	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = signalSemaphores;
-
-	vk::SwapchainKHR swapchains[] = { swapchain };
-	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = swapchains;
-
-	presentInfo.pImageIndices = &imageIndex;
-
-	vk::Result present;
+	vk::Result result;
+	/**
+	* PresentInfoKHR(
+	*	uint32_t                 waitSemaphoreCount_ = {},
+    *	const vk::Semaphore *    pWaitSemaphores_    = {},
+    *	uint32_t                 swapchainCount_     = {},
+    *	const vk::SwapchainKHR * pSwapchains_        = {},
+    *	const uint32_t *         pImageIndices_      = {},
+    *	vk::Result *             pResults_           = {},
+    *	const void *             pNext_              = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	vk::PresentInfoKHR presentInfo{
+		1,
+		signalSemaphores,
+		1,
+		&swapchain,
+		&imageIndex,
+		&result,
+		nullptr
+	};
 
 	try {
-		present = presentQueue.presentKHR(presentInfo);
+		presentQueue.presentKHR(presentInfo);
 	}
-	catch (vk::OutOfDateKHRError error) {
-		present = vk::Result::eErrorOutOfDateKHR;
+	catch (vk::SystemError err) {
+		if (result != vk::Result::eErrorOutOfDateKHR) {
+			throw std::runtime_error(std::format("Failed to present to KHR. Reason\n\t{}", err.what()).c_str());
+		}
 	}
 
-	if (present == vk::Result::eErrorOutOfDateKHR || present == vk::Result::eSuboptimalKHR) {
-		std::cout << "Recreate" << std::endl;
+	if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
 		recreateSwapchain();
 		return;
 	}
-
 	frameNumber = (frameNumber + 1) % maxFramesInFlight;
 }
 
-/**
-* Free the memory associated with the swapchain objects
-*/
-void Graphics::Engine::cleanupSwapchain() {
+inline vk::Viewport* Graphics::Engine::createViewport(vk::Extent2D swapchainExtent) {
+	/**
+	* Viewport(
+	*	float x_ = {},
+	*	float y_ = {},
+	*	float width_ = {},
+	*	float height_ = {},
+	*	float minDepth_ = {},
+	*	float maxDepth_ = {}
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	return new vk::Viewport{
+		0.0f,
+		0.0f,
+		static_cast<float>(swapchainExtent.width),
+		static_cast<float>(swapchainExtent.height),
+		0.0f,
+		1.0f
+	};
+}
 
-	for (vkUtil::SwapchainFrame& frame : swapchainImageViews) {
+inline vk::Rect2D* Graphics::Engine::createScissor(vk::Extent2D swapchainExtent) {
+	/**
+	* Rect2D(
+	*	vk::Offset2D offset_ = {},
+	*	vk::Extent2D extent_ = {}
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	return new vk::Rect2D{
+		vk::Offset2D{ 0, 0 },
+		swapchainExtent
+	};
+}
+
+void Graphics::Engine::cleanupSwapchain() {
+	for (vkUtil::SwapchainImageView& frame : swapchainImageViews) {
 		frame.destroy();
 	}
 	device.destroySwapchainKHR(swapchain);
@@ -578,7 +645,6 @@ void Graphics::Engine::cleanupSwapchain() {
 }
 
 Graphics::Engine::~Engine() {
-
 	device.waitIdle();
 
 	Debug::Logger::log(Debug::MESSAGE, "Destroying graphics engine.");
@@ -589,15 +655,16 @@ Graphics::Engine::~Engine() {
 		device.destroyPipeline(pipeline[pipeline_type]);
 		device.destroyPipelineLayout(pipelineLayout[pipeline_type]);
 		device.destroyRenderPass(renderpass[pipeline_type]);
+		device.destroyDescriptorSetLayout(frameSetLayout[pipeline_type]);
+		device.destroyDescriptorSetLayout(meshSetLayout[pipeline_type]);
+		for (vk::PipelineShaderStageCreateInfo stage : shaderStages[pipeline_type]) {
+			device.destroyShaderModule(stage.module);
+		}
 	}
 
 	cleanupSwapchain();
-	for (pipelineType pipeline_type : pipelineTypes) {
-		device.destroyDescriptorSetLayout(frameSetLayout[pipeline_type]);
-		device.destroyDescriptorSetLayout(meshSetLayout[pipeline_type]);
-	}
-	device.destroyDescriptorPool(meshDescriptorPool);
 
+	device.destroyDescriptorPool(meshDescriptorPool);
 	delete meshes;
 
 	for (const auto& [key, texture] : materials) {

@@ -5,28 +5,29 @@ vkInit::GraphicsPipelineOutBundle vkInit::buildPipeline(PipelineBuildInfo& build
 	std::vector<vk::PipelineShaderStageCreateInfo> stages;
 	createShaderStages(buildInfo.device, buildInfo.shaderStages, stages);
 	vk::PipelineLayout layout = createLayout(buildInfo.device, buildInfo.descriptorSetLayouts);
-	vk::RenderPass renderPass = createRenderPass(buildInfo.device, buildInfo.overwrite, buildInfo.depthAttachmentInfo, buildInfo.colourAttachmentInfo);
-
+	vk::RenderPass renderPass = createRenderPass(
+		buildInfo.device, buildInfo.overwrite, buildInfo.depthAttachmentInfo, buildInfo.colourAttachmentInfo
+	);
 	/**
 	* GraphicsPipelineCreateInfo(
-	*	vk::PipelineCreateFlags                          flags_               = {},
-	*	uint32_t                                         stageCount_          = {},
-	*	const vk::PipelineShaderStageCreateInfo *        pStages_             = {},
-	*	const vk::PipelineVertexInputStateCreateInfo *   pVertexInputState_   = {},
-	*	const vk::PipelineInputAssemblyStateCreateInfo * pInputAssemblyState_ = {},
-	*	const vk::PipelineTessellationStateCreateInfo *  pTessellationState_  = {},
-	*	const vk::PipelineViewportStateCreateInfo *      pViewportState_      = {},
-	*	const vk::PipelineRasterizationStateCreateInfo * pRasterizationState_ = {},
-	*	const vk::PipelineMultisampleStateCreateInfo *   pMultisampleState_   = {},
-	*	const vk::PipelineDepthStencilStateCreateInfo *  pDepthStencilState_  = {},
-	*	const vk::PipelineColorBlendStateCreateInfo *    pColorBlendState_    = {},
-	*	const vk::PipelineDynamicStateCreateInfo *       pDynamicState_       = {},
-	*	vk::PipelineLayout                               layout_              = {},
-	*	vk::RenderPass                                   renderPass_          = {},
-	*	uint32_t                                         subpass_             = {},
-	*	vk::Pipeline                                     basePipelineHandle_  = {},
-	*	int32_t                                          basePipelineIndex_   = {},
-	*	const void *									 pNext_				  = nullptr
+	*	vk::PipelineCreateFlags                         flags_               = {},
+	*	uint32_t                                        stageCount_          = {},
+	*	const vk::PipelineShaderStageCreateInfo*        pStages_             = {},
+	*	const vk::PipelineVertexInputStateCreateInfo*   pVertexInputState_   = {},
+	*	const vk::PipelineInputAssemblyStateCreateInfo* pInputAssemblyState_ = {},
+	*	const vk::PipelineTessellationStateCreateInfo*  pTessellationState_  = {},
+	*	const vk::PipelineViewportStateCreateInfo*      pViewportState_      = {},
+	*	const vk::PipelineRasterizationStateCreateInfo* pRasterizationState_ = {},
+	*	const vk::PipelineMultisampleStateCreateInfo*   pMultisampleState_   = {},
+	*	const vk::PipelineDepthStencilStateCreateInfo*  pDepthStencilState_  = {},
+	*	const vk::PipelineColorBlendStateCreateInfo*    pColorBlendState_    = {},
+	*	const vk::PipelineDynamicStateCreateInfo*       pDynamicState_       = {},
+	*	vk::PipelineLayout                              layout_              = {},
+	*	vk::RenderPass                                  renderPass_          = {},
+	*	uint32_t                                        subpass_             = {},
+	*	vk::Pipeline                                    basePipelineHandle_  = {},
+	*	int32_t                                         basePipelineIndex_   = {},
+	*	const void *									pNext_               = nullptr
 	* ) VULKAN_HPP_NOEXCEPT
 	*/
 	vk::GraphicsPipelineCreateInfo pipelineInfo{
@@ -36,12 +37,12 @@ vkInit::GraphicsPipelineOutBundle vkInit::buildPipeline(PipelineBuildInfo& build
 		createVertexInputState(buildInfo.vertexInputInfo),
 		createInputAssemblyState(),
 		{},
-		createViewportState(buildInfo.swapchainExtent),
+		createViewportState(),
 		createRasterizationState(),
 		createMultisampleState(),
 		(buildInfo.depthAttachmentInfo.format == vk::Format::eUndefined) ? nullptr : createDepthStencilState(),
 		createColourBlendState(),
-		{},
+		createDynamicStateInfo(),
 		layout,
 		renderPass,
 		0,
@@ -54,7 +55,8 @@ vkInit::GraphicsPipelineOutBundle vkInit::buildPipeline(PipelineBuildInfo& build
 	return {
 		layout,
 		renderPass,
-		pipeline
+		pipeline,
+		stages
 	};
 }
 
@@ -80,9 +82,10 @@ inline vk::PipelineShaderStageCreateInfo vkInit::makeShaderInfo(vk::Device devic
 }
 
 inline void vkInit::createShaderStages(vk::Device device, std::vector<shaderInfo> shaderStages, std::vector<vk::PipelineShaderStageCreateInfo>& stages) {
-	for (shaderInfo shaderStage : shaderStages) {
-		Debug::Logger::log(Debug::MESSAGE, std::format("Creating shader module: \"{}\"", shaderStage.shaderPath));
-		stages.push_back(makeShaderInfo(device, shaderStage.shaderPath, shaderStage.flag));
+	stages.resize(shaderStages.size());
+	for (int i = 0; i < shaderStages.size(); i++) {
+		Debug::Logger::log(Debug::MESSAGE, std::format("Creating shader module: \"{}\"", shaderStages[i].shaderPath));
+		stages[i] = makeShaderInfo(device, shaderStages[i].shaderPath, shaderStages[i].flag);
 	}
 }
 
@@ -124,41 +127,7 @@ inline vk::PipelineInputAssemblyStateCreateInfo* vkInit::createInputAssemblyStat
 	};
 }
 
-inline vk::Viewport* vkInit::createViewport(vk::Extent2D swapchainExtent) {
-	/**
-	* Viewport(
-	*	float x_ = {},
-	*	float y_ = {},
-	*	float width_ = {},
-	*	float height_ = {},
-	*	float minDepth_ = {},
-	*	float maxDepth_ = {}
-	* ) VULKAN_HPP_NOEXCEPT
-	*/
-	return new vk::Viewport{
-		0.0f,
-		0.0f,
-		static_cast<float>(swapchainExtent.width),
-		static_cast<float>(swapchainExtent.height),
-		0.0f,
-		1.0f
-	};
-}
-
-inline vk::Rect2D* vkInit::createScissor(vk::Extent2D swapchainExtent) {
-	/**
-	* Rect2D(
-	*	vk::Offset2D offset_ = {},
-	*	vk::Extent2D extent_ = {}
-	* ) VULKAN_HPP_NOEXCEPT
-	*/
-	return new vk::Rect2D{
-		vk::Offset2D{ 0, 0 },
-		swapchainExtent
-	};
-}
-
-inline vk::PipelineViewportStateCreateInfo* vkInit::createViewportState(vk::Extent2D swapchainExtent) {
+inline vk::PipelineViewportStateCreateInfo* vkInit::createViewportState() {
 	/**
 		* PipelineViewportStateCreateInfo(
 		*	vk::PipelineViewportStateCreateFlags flags_         = {},
@@ -172,9 +141,9 @@ inline vk::PipelineViewportStateCreateInfo* vkInit::createViewportState(vk::Exte
 	return new vk::PipelineViewportStateCreateInfo{
 		vk::PipelineViewportStateCreateFlags(),
 		1,
-		createViewport(swapchainExtent),
+		{},
 		1,
-		createScissor(swapchainExtent),
+		{},
 		nullptr
 	};
 }
@@ -317,6 +286,30 @@ inline vk::PipelineColorBlendStateCreateInfo* vkInit::createColourBlendState() {
 	};
 }
 
+inline vk::DynamicState* vkInit::createDynamicState() {
+	return new vk::DynamicState[]{
+		vk::DynamicState::eViewport,
+		vk::DynamicState::eScissor
+	};
+}
+
+inline vk::PipelineDynamicStateCreateInfo* vkInit::createDynamicStateInfo() {
+	/**
+	* PipelineDynamicStateCreateInfo(
+	*	vk::PipelineDynamicStateCreateFlags flags_             = {},
+    *	uint32_t                            dynamicStateCount_ = {},
+    *	const vk::DynamicState*             pDynamicStates_    = {},
+    *	const void*                         pNext_             = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	return new vk::PipelineDynamicStateCreateInfo{
+		vk::PipelineDynamicStateCreateFlags(),
+		2u,
+		createDynamicState(),
+		nullptr
+	};
+}
+
 inline vk::PipelineLayoutCreateInfo vkInit::createLayoutInfo(const std::vector<vk::DescriptorSetLayout>& descriptorSetLayouts) {
 	/*
 	* PipelineLayoutCreateInfo(
@@ -452,6 +445,29 @@ inline vk::SubpassDescription vkInit::createSubpass(const std::vector<vk::Attach
 	};
 }
 
+inline vk::SubpassDependency* vkInit::createSubpassDependence() {
+	/**
+	* SubpassDependency(
+	*	uint32_t               srcSubpass_      = {},
+    *	uint32_t               dstSubpass_      = {},
+    *	vk::PipelineStageFlags srcStageMask_    = {},
+    *	vk::PipelineStageFlags dstStageMask_    = {},
+    *	vk::AccessFlags        srcAccessMask_   = {},
+    *	vk::AccessFlags        dstAccessMask_   = {},
+    *	vk::DependencyFlags    dependencyFlags_ = {}
+	* ) VULKAN_HPP_NOEXCEPT
+	*/
+	return new vk::SubpassDependency{
+		vk::SubpassExternal,
+		0u,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::AccessFlagBits::eNone,
+		vk::AccessFlagBits::eColorAttachmentWrite,
+		{}
+	};
+}
+
 inline vk::RenderPassCreateInfo vkInit::createRenderPassInfo(const vk::SubpassDescription& subpass, const std::vector<vk::AttachmentDescription>& attachmentDescriptions) {
 	/**
 	* RenderPassCreateInfo(
@@ -471,8 +487,8 @@ inline vk::RenderPassCreateInfo vkInit::createRenderPassInfo(const vk::SubpassDe
 		attachmentDescriptions.data(),
 		1,
 		&subpass,
-		{},
-		{},
+		1,
+		createSubpassDependence(),
 		nullptr
 	};
 }

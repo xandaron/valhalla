@@ -38,6 +38,7 @@ namespace vkInit {
 		vk::PipelineLayout layout;
 		vk::RenderPass renderpass;
 		vk::Pipeline pipeline;
+		std::vector<vk::PipelineShaderStageCreateInfo> shaders;
 	};
 
 	/**
@@ -63,11 +64,7 @@ namespace vkInit {
 
 	inline vk::PipelineInputAssemblyStateCreateInfo* createInputAssemblyState();
 
-	inline vk::Viewport* createViewport(vk::Extent2D swapchainExtent);
-
-	inline vk::Rect2D* createScissor(vk::Extent2D swapchainExtent);
-
-	inline vk::PipelineViewportStateCreateInfo* createViewportState(vk::Extent2D swapchainExtent);
+	inline vk::PipelineViewportStateCreateInfo* createViewportState();
 
 	inline vk::PipelineRasterizationStateCreateInfo* createRasterizationState();
 
@@ -79,6 +76,10 @@ namespace vkInit {
 
 	inline vk::PipelineColorBlendStateCreateInfo* createColourBlendState();
 
+	inline vk::DynamicState* createDynamicState();
+
+	inline vk::PipelineDynamicStateCreateInfo* createDynamicStateInfo();
+
 	inline vk::PipelineLayoutCreateInfo createLayoutInfo(const std::vector<vk::DescriptorSetLayout>& descriptorSetLayouts);
 
 	vk::PipelineLayout createLayout(vk::Device device, const std::vector<vk::DescriptorSetLayout>& descriptorSetLayouts);
@@ -88,6 +89,8 @@ namespace vkInit {
 	inline std::vector<vk::AttachmentReference> createAttachmentReferences(AttachmentInfo depthAttachment, uint32_t colourAttachmentIndex);
 
 	inline vk::SubpassDescription createSubpass(const std::vector<vk::AttachmentReference>& attachmentReferences);
+
+	inline vk::SubpassDependency* createSubpassDependence();
 
 	inline vk::RenderPassCreateInfo createRenderPassInfo(const vk::SubpassDescription& subpass, const std::vector<vk::AttachmentDescription>& attachmentDescriptions);
 

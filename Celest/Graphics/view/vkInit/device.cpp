@@ -1,12 +1,11 @@
 #include "device.h"
-#include "swap_chain.h"
+#include "swapchain.h"
 #include <map>
 
 vk::PhysicalDevice vkInit::choosePhysicalDevice(const vk::Instance& instance, const vk::SurfaceKHR& surface) {
 	std::vector<vk::PhysicalDevice> availableDevices = instance.enumeratePhysicalDevices();
 
 	Debug::Logger::log(Debug::MESSAGE, std::format("{} physical devices available.", availableDevices.size()));
-
 	if (availableDevices.size() == 0) {
 		throw std::runtime_error("No GPU with Vulkan support found.");
 	}

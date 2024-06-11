@@ -26,9 +26,9 @@ public:
 	float movementSpeed;
 	bool mouseLock;
 
-	App(int width, int height, bool debug);
+	App(int width, int height);
 
-	bool Build_GLFW_Window(int width, int height, bool debug);
+	bool Build_GLFW_Window(int width, int height);
 
 	void UpdateTitle(std::string title);
 

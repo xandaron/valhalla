@@ -101,13 +101,19 @@
     <ClCompile Include="Graphics\view\vkInit\instance.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Graphics\view\vkInit\swap_chain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Graphics\view\vkUtil\queue_family.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\view\vkInit\image_views.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkInit\framebuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkInit\command_pool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\view\vkInit\sync.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -125,9 +131,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\view\vkInit\device.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Graphics\view\vkInit\swapchain.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\view\vkUtil\queue_families.h">
@@ -148,7 +151,7 @@
     <ClInclude Include="Graphics\view\vkInit\pipeline.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Graphics\view\vkInit\commands.h">
+    <ClInclude Include="Graphics\view\vkInit\command_pool.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="app.h">
@@ -241,19 +244,16 @@
     <ClInclude Include="Graphics\view\vkUtil\OpenFBX\libdeflate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Game\debug\logger.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Graphics\debug\vkLogging.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Graphics\view\vkInit\swap_chain.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\view\vkUtil\queue_family.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Graphics\view\vkInit\image_views.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\debug\logger.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

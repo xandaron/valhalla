@@ -3,7 +3,6 @@
 
 //namespace for creation functions/definitions etc.
 namespace vkInit {
-
 	/**
 	* Create a Vulkan instance.
 	*

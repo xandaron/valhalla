@@ -11,7 +11,6 @@
 #include "../../Game/entity.h"
 
 namespace Graphics {
-
 	class Engine {
 	public:
 		Engine(int width, int height, GLFWwindow* window, Game::Camera* camera);
@@ -29,18 +28,18 @@ namespace Graphics {
 		GLFWwindow* window;
 
 		//Instance variables
-		vk::Instance instance{ nullptr };
-		vk::DebugUtilsMessengerEXT debugMessenger{ nullptr };
+		vk::Instance instance;
+		vk::DebugUtilsMessengerEXT debugMessenger;
 		vk::DispatchLoaderDynamic dldi;
 		vk::SurfaceKHR surface;
 
 		//Device variables
-		vk::PhysicalDevice physicalDevice{ nullptr };
-		vk::Device device{ nullptr };
-		vk::Queue graphicsQueue{ nullptr };
-		vk::Queue presentQueue{ nullptr };
-		vk::SwapchainKHR swapchain{ nullptr };
-		std::vector<vkUtil::SwapchainFrame> swapchainImageViews;
+		vk::PhysicalDevice physicalDevice;
+		vk::Device device;
+		vk::Queue graphicsQueue;
+		vk::Queue presentQueue;
+		vk::SwapchainKHR swapchain;
+		std::vector<vkUtil::SwapchainImageView> swapchainImageViews;
 		vk::Format swapchainFormat;
 		vk::Extent2D swapchainExtent;
 
@@ -49,6 +48,7 @@ namespace Graphics {
 		std::unordered_map<pipelineType, vk::PipelineLayout> pipelineLayout;
 		std::unordered_map<pipelineType, vk::RenderPass> renderpass;
 		std::unordered_map<pipelineType, vk::Pipeline> pipeline;
+		std::unordered_map<pipelineType, std::vector<vk::PipelineShaderStageCreateInfo>> shaderStages;
 
 		//Descriptor variables
 		std::unordered_map<pipelineType, vk::DescriptorSetLayout> frameSetLayout;
@@ -78,33 +78,33 @@ namespace Graphics {
 		*
 		* @throws std::runtime_error if instance creation fails.
 		*/
-		void createInstance();
+		inline void createInstance();
 
 		/**
 		* Creates a Vulkan debug messenger for validation layers.
 		*/
-		void createDebugMessenger();
+		inline void createDebugMessenger();
 
 		/**
 		* Creates a GLFW surface.
 		*
 		* @throws std::runtime_error when GLFW fails to create a surface.
 		*/
-		void createSurface();
+		inline void createSurface();
 
 		/**
 		* Creates physical and logical devices as well and assigning queue families.
 		*
 		* @throws std::runtime_error Couldn't create physical or logical device.
 		*/
-		void createDevice();
+		inline void createDevice();
 
 		/**
 		* Creates a swap chain.
 		* 
 		* @throws std::runtime_error Couldn't create a swap chain.
 		*/
-		void createSwapchain();
+		inline void createSwapchain();
 
 		/**
 		* Destroys old swap chain and creates a new one.
@@ -113,16 +113,19 @@ namespace Graphics {
 		*/
 		void recreateSwapchain();
 
-		void createImageViews();
+		inline void createImageViews();
 
 		//pipeline setup
-		void createDescriptorSetLayouts();
-		void createPipelines();
+		inline void createDescriptorSetLayouts();
+
+		inline void createPipelines();
 
 		//final setup steps
-		void finalizeSetup();
-		void createFramebuffers();
-		void createFrameResources();
+		inline void createCommandPool();
+
+
+		inline void createFramebuffers();
+		inline void createFrameResources();
 
 		//asset creation
 		void createWorkerThreads();
@@ -135,7 +138,13 @@ namespace Graphics {
 		void recordDrawCommandsScene(vk::CommandBuffer commandBuffer, uint32_t imageIndex, Game::Scene* scene);
 		void renderObjects(vk::CommandBuffer commandBuffer, std::string objectType, uint32_t& startInstance, uint32_t instanceCount);
 
-		//Cleanup functions
+		inline vk::Viewport* createViewport(vk::Extent2D swapchainExtent);
+
+		inline vk::Rect2D* createScissor(vk::Extent2D swapchainExtent);
+
+		/**
+		* Free the memory associated with the swapchain objects
+		*/
 		void cleanupSwapchain();
 	};
 }

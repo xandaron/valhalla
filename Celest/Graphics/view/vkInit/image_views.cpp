@@ -1,8 +1,9 @@
 #include "image_views.h"
 #include "../vkImage/image.h"
 
-inline vk::ImageViewCreateInfo vkInit::createImageViewCreateInfo(vk::Image image, vk::Format format,
-	vk::ImageViewType type, vk::ImageAspectFlagBits aspect, uint32_t layerCount)
+inline vk::ImageViewCreateInfo vkInit::createImageViewCreateInfo(
+	vk::Image image, vk::Format format, vk::ImageViewType type, vk::ImageAspectFlagBits aspect, uint32_t layerCount
+)
 {
 	/*
 	* ImageViewCreateInfo(
@@ -52,11 +53,11 @@ inline vk::ImageViewCreateInfo vkInit::createImageViewCreateInfo(vk::Image image
 	};
 }
 
-std::vector<vkUtil::SwapchainFrame> vkInit::createImageViews(vk::Device device,
-	vk::SwapchainKHR swapchain, vk::Format format) 
-{
+std::vector<vkUtil::SwapchainImageView> vkInit::createImageViews(
+	vk::Device device, vk::SwapchainKHR swapchain, vk::Format format
+) {
 	std::vector<vk::Image> images = device.getSwapchainImagesKHR(swapchain);
-	std::vector<vkUtil::SwapchainFrame> frames(images.size());
+	std::vector<vkUtil::SwapchainImageView> frames(images.size());
 	for (size_t i = 0; i < images.size(); i++) {
 		frames[i].image = images[i];
 		try {

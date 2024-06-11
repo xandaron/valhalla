@@ -13,10 +13,10 @@ inline vk::DescriptorSetLayoutCreateInfo vkInit::makeDescriptorSetLayoutCreateIn
 	* ) VULKAN_HPP_NOEXCEPT
 	*/
 	return {
-			vk::DescriptorSetLayoutCreateFlagBits(),
-			static_cast<uint32_t>(layoutBindings.size()),
-			layoutBindings.data(),
-			nullptr
+		vk::DescriptorSetLayoutCreateFlagBits(),
+		static_cast<uint32_t>(layoutBindings.size()),
+		layoutBindings.data(),
+		nullptr
 	};
 }
 
@@ -49,80 +49,73 @@ vk::DescriptorSetLayout vkInit::makeDescriptorSetLayout(
 		);
 	}
 	catch (vk::SystemError err) {
-		Debug::Logger::log(Debug::WARNING, "Failed to create Descriptor Set Layout.");
-		return nullptr;
+		throw std::runtime_error(std::format("Failed to create Descriptor Set Layout. Reason:\n\t{}", err.what()).c_str());
 	}
 }
 
 vk::DescriptorPool vkInit::makeDescriptorPool(
-	vk::Device device, uint32_t size, const descriptorSetLayoutData& bindings) {
-
-	std::vector<vk::DescriptorPoolSize> poolSizes;
-	/*
-		typedef struct VkDescriptorPoolSize {
-			VkDescriptorType    type;
-			uint32_t            descriptorCount;
-		} VkDescriptorPoolSize;
-	*/
-
+	vk::Device device, uint32_t size, const descriptorSetLayoutData& bindings
+) {
+	std::vector<vk::DescriptorPoolSize> poolSizes(bindings.count);
 	for (int i = 0; i < bindings.count; i++) {
-
-		vk::DescriptorPoolSize poolSize;
-		poolSize.type = bindings.types[i];
-		poolSize.descriptorCount = size;
-		poolSizes.push_back(poolSize);
+		/**
+		* DescriptorPoolSize(
+		*	vk::DescriptorType type_            = vk::DescriptorType::eSampler,
+        *	uint32_t           descriptorCount_ = {}
+		* ) VULKAN_HPP_NOEXCEPT
+		*/
+		poolSizes[i] = {
+			bindings.types[i],
+			size
+		};
 	}
-
-	vk::DescriptorPoolCreateInfo poolInfo;
-	/*
-		typedef struct VkDescriptorPoolCreateInfo {
-			VkStructureType                sType;
-			const void*                    pNext;
-			VkDescriptorPoolCreateFlags    flags;
-			uint32_t                       maxSets;
-			uint32_t                       poolSizeCount;
-			const VkDescriptorPoolSize*    pPoolSizes;
-		} VkDescriptorPoolCreateInfo;
+	/**
+	* DescriptorPoolCreateInfo(
+	*	vk::DescriptorPoolCreateFlags  flags_         = {},
+    *	uint32_t                       maxSets_       = {},
+    *	uint32_t                       poolSizeCount_ = {},
+    *	const vk::DescriptorPoolSize * pPoolSizes_    = {},
+    *	const void *                   pNext_         = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
 	*/
-
-	poolInfo.flags = vk::DescriptorPoolCreateFlags();
-	poolInfo.maxSets = size;
-	poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-	poolInfo.pPoolSizes = poolSizes.data();
+	vk::DescriptorPoolCreateInfo poolInfo{
+		vk::DescriptorPoolCreateFlags(),
+		size,
+		static_cast<uint32_t>(poolSizes.size()),
+		poolSizes.data(),
+		nullptr
+	};
 
 	try {
 		return device.createDescriptorPool(poolInfo);
 	}
 	catch (vk::SystemError err) {
-		vkLogging::Logger::get_logger()->print("Failed to make descriptor pool");
-		return nullptr;
+		throw std::runtime_error(std::format("Failed to create descriptor pool. Reason:\n\t{}", err.what()).c_str());
 	}
 }
 
 vk::DescriptorSet vkInit::allocateDescriptorSet(
-	vk::Device device, vk::DescriptorPool descriptorPool,
-	vk::DescriptorSetLayout layout) {
-
-	vk::DescriptorSetAllocateInfo allocationInfo;
-	/*
-		typedef struct VkDescriptorSetAllocateInfo {
-			VkStructureType                 sType;
-			const void*                     pNext;
-			VkDescriptorPool                descriptorPool;
-			uint32_t                        descriptorSetCount;
-			const VkDescriptorSetLayout*    pSetLayouts;
-		} VkDescriptorSetAllocateInfo;
+	vk::Device device, vk::DescriptorPool descriptorPool, vk::DescriptorSetLayout layout
+) {
+	/**
+	* DescriptorSetAllocateInfo(
+	*	vk::DescriptorPool              descriptorPool_     = {},
+    *	uint32_t                        descriptorSetCount_ = {},
+    *	const vk::DescriptorSetLayout * pSetLayouts_        = {},
+    *	const void *                    pNext_              = nullptr
+	* ) VULKAN_HPP_NOEXCEPT
 	*/
-
-	allocationInfo.descriptorPool = descriptorPool;
-	allocationInfo.descriptorSetCount = 1;
-	allocationInfo.pSetLayouts = &layout;
+	vk::DescriptorSetAllocateInfo allocationInfo{
+		descriptorPool,
+		1,
+		&layout,
+		nullptr
+	};
 
 	try {
 		return device.allocateDescriptorSets(allocationInfo)[0];
 	}
 	catch (vk::SystemError err) {
-		vkLogging::Logger::get_logger()->print("Failed to allocate descriptor set from pool");
-		return nullptr;
+		throw std::runtime_error(std::format("Failed to allocate descriptor set. Reason:\n\t{}", err.what()).c_str());
 	}
 }

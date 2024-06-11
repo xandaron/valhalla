@@ -5,7 +5,6 @@ vkMesh::VertexMenagerie::VertexMenagerie() {
 }
 
 void vkMesh::VertexMenagerie::consume(std::string type, std::vector<Vertex>& vertexData, std::vector<uint32_t>& indexData) {
-
 	int indexCount = static_cast<uint32_t>(indexData.size());
 	int vertexCount = static_cast<uint32_t>(vertexData.size() / 11);
 	int lastIndex = static_cast<uint32_t>(indexLump.size());
@@ -42,7 +41,6 @@ void vkMesh::VertexMenagerie::consume(std::string type, std::vector<Vertex>& ver
 }
 
 void vkMesh::VertexMenagerie::finalize(vertexBufferFinalizationChunk finalizationChunk) {
-
 	logicalDevice = finalizationChunk.logicalDevice;
 
 	//make a staging buffer for vertices

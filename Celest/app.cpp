@@ -2,28 +2,20 @@
 #include "Graphics/control/logging.h"
 
 /**
-* @param width	the width of the window
-* @param height the height of the window
-* @param debug	whether to run the app with vulkan validation layers and extra print statements
+* @param width	The width of the window.
+* @param height The height of the window.
 */
-App::App(int width, int height, bool debug) {
-
+App::App(int width, int height) {
 	playerController = new Controller::PlayerController();
 
 	fpsTimer = glfwGetTime();
-
 	mousePos = glm::vec2(0);
 	mouseSensitivity = 0.5f;
 	movementSpeed = 0.05f;
 	mouseLock = false;
 	
-	vkLogging::Logger::get_logger()->set_debug_mode(debug);
+	Build_GLFW_Window(width, height);
 
-	if (!Build_GLFW_Window(width, height, debug)) {
-		throw "Failed to build GLFW window.";
-	}
-
-	//std::vector<Game::SceneObject> sceneObjects = prepareScene();
 	scene = new Game::Scene("assets/scenes/monke.scene");
 	Game::Camera* camera = scene->getCamera();
 
@@ -36,14 +28,8 @@ App::App(int width, int height, bool debug) {
 
 	physicsEngine = new Physics::Engine();
 
-	try {
-		graphicsEngine = new Graphics::Engine(width, height, window, camera);
-		graphicsEngine->loadAssets(scene->getAssetPack());
-		graphicsEngine->render(scene);
-	}
-	catch (std::runtime_error err) {
-		throw err;
-	}
+	graphicsEngine = new Graphics::Engine(width, height, window, camera);
+	graphicsEngine->loadAssets(scene->getAssetPack());
 }
 
 /**
@@ -53,29 +39,26 @@ App::App(int width, int height, bool debug) {
 * @param height		the height of the window
 * @param debugMode	whether to make extra print statements
 */
-bool App::Build_GLFW_Window(int width, int height, bool debug) {
+bool App::Build_GLFW_Window(int width, int height) {
 
 	std::stringstream message;
 
-	if (debug) {
-		glfwSetErrorCallback(error_callback);
-	}
+	glfwSetErrorCallback(error_callback);
 
 	if (!glfwInit()) {
-		vkLogging::Logger::get_logger()->print("GLFW window init failed");
-		return false;
+		throw std::runtime_error("GLFW window init failed!");
 	}
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
 	if (window = glfwCreateWindow(width, height, "Celest", nullptr, nullptr)) {
-		message << "Successfully made a glfw window called \"Celest\", width: " << width << ", height: " << height;
-		vkLogging::Logger::get_logger()->print(message.str());
+		Debug::Logger::log(Debug::MESSAGE, 
+			std::format("Successfully made a glfw window called \"Celest\", width: {}, height: {}", width, height)
+		);
 	}
 	else {
-		vkLogging::Logger::get_logger()->print("GLFW window creation failed");
-		return false;
+		throw std::runtime_error("Failed to create GLFW window!");
 	}
 
 	glfwSetKeyCallback(window, key_callback);
@@ -86,12 +69,10 @@ bool App::Build_GLFW_Window(int width, int height, bool debug) {
 }
 
 void App::UpdateTitle(std::string title) {
-
 	glfwSetWindowTitle(window, title.c_str());
 }
 
 double App::CalculateDeltaTime() {
-
 	currentTime = glfwGetTime();
 	double delta = currentTime - lastTime;
 	lastTime = currentTime;
@@ -100,6 +81,8 @@ double App::CalculateDeltaTime() {
 
 /**
 * Calculates the App's framerate and updates the window title
+* 
+* @param delta Time since last frame.
 */
 void App::CalculateFrameRate(double delta) {
 	double framerate = 1.0 / delta;
@@ -134,9 +117,8 @@ App::~App() {
 	glfwDestroyWindow(window);
 	glfwTerminate();
 
-	delete graphicsEngine;
-	delete physicsEngine;
-	delete scene;
-
 	delete playerController;
+	delete physicsEngine;
+	delete graphicsEngine;
+	delete scene;
 }

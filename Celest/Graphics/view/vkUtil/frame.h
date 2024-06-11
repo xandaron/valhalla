@@ -7,10 +7,8 @@ namespace vkUtil {
 	/**
 		Holds the data structures associated with a "Frame"
 	*/
-	class SwapchainFrame {
-
+	class SwapchainImageView {
 	public:
-
 		//For doing work
 		vk::Device logicalDevice;
 		vk::PhysicalDevice physicalDevice;
@@ -51,13 +49,13 @@ namespace vkUtil {
 		//Write Operations
 		std::vector<vk::WriteDescriptorSet> writeOps;
 
-		void make_descriptor_resources();
+		void makeDescriptorResources();
 
-		void record_write_operations();
+		void recordWriteOperations();
 
-		void make_depth_resources();
+		void makeDepthResources();
 
-		void write_descriptor_set();
+		void writeDescriptorSet();
 
 		void destroy();
 	};

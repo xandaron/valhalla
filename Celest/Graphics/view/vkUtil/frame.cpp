@@ -3,7 +3,7 @@
 #include "../vkImage/image.h"
 #include "../vkInit/image_views.h"
 
-void vkUtil::SwapchainFrame::make_descriptor_resources() {
+void vkUtil::SwapchainImageView::makeDescriptorResources() {
 
 	BufferInputChunk input;
 	input.logicalDevice = logicalDevice;
@@ -51,7 +51,7 @@ void vkUtil::SwapchainFrame::make_descriptor_resources() {
 	ssboDescriptor.range = 1024 * sizeof(glm::mat4);
 }
 
-void vkUtil::SwapchainFrame::make_depth_resources() {
+void vkUtil::SwapchainImageView::makeDepthResources() {
 
 	depthFormat = vkImage::findSupportedFormat(
 		physicalDevice,
@@ -77,8 +77,7 @@ void vkUtil::SwapchainFrame::make_depth_resources() {
 	));
 }
 
-void vkUtil::SwapchainFrame::record_write_operations() {
-
+void vkUtil::SwapchainImageView::recordWriteOperations() {
 	/*
 	typedef struct VkWriteDescriptorSet {
 		VkStructureType                  sType;
@@ -117,16 +116,13 @@ void vkUtil::SwapchainFrame::record_write_operations() {
 	ssboWriteOp.pBufferInfo = &ssboDescriptor;
 
 	writeOps = { cameraVectorWriteOp,cameraMatrixWriteOp,ssboWriteOp };
-
 }
 
-void vkUtil::SwapchainFrame::write_descriptor_set() {
-
+void vkUtil::SwapchainImageView::writeDescriptorSet() {
 	logicalDevice.updateDescriptorSets(writeOps, nullptr);
 }
 
-void vkUtil::SwapchainFrame::destroy() {
-
+void vkUtil::SwapchainImageView::destroy() {
 	logicalDevice.destroyImageView(imageView);
 	logicalDevice.destroyFramebuffer(framebuffer[pipelineType::SKY]);
 	logicalDevice.destroyFramebuffer(framebuffer[pipelineType::STANDARD]);
