@@ -14,5 +14,5 @@ const vec4 sunColor = vec4(1.0, 1.0, 1.0, 1.0);
 const vec3 sunDirection = normalize(vec3(1.0, 1.0, -1.0));
 
 void main() {
-	outColor = vec4(fragNormal, 1.0);
+	outColor = vec4(normalize((fragNormal + 1) / 2), 1.0);
 }

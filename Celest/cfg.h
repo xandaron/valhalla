@@ -1,7 +1,4 @@
 #pragma once
-#include <vulkan/vulkan.hpp>
-#include <GLFW/glfw3.h>
-
 #define GLM_FORCE_SWIZZLE
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -18,37 +15,7 @@
 #include <sstream>
 #include <format>
 
-#include <thread>
-#include <mutex>
-
-#include "Game/debug/logger.h"
-
-/**
-*	Data structures used for creating buffers
-*	and allocating memory
-*/
-struct BufferInputChunk {
-	size_t size;
-	vk::BufferUsageFlags usage;
-	vk::Device logicalDevice;
-	vk::PhysicalDevice physicalDevice;
-	vk::MemoryPropertyFlags memoryProperties;
-};
-
-/**
-*	holds a vulkan buffer and memory allocation
-*/
-struct Buffer {
-	vk::Buffer buffer;
-	vk::DeviceMemory bufferMemory;
-};
-
-enum class pipelineType {
-	SKY,
-	STANDARD
-};
-
-// String Processing functions
+#include "debug/logger.h"
 
 // split string on specified character
 static std::vector<std::string> split(std::string line, std::string delimiter) {

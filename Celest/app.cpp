@@ -1,5 +1,4 @@
 #include "app.h"
-#include "Graphics/control/logging.h"
 
 /**
 * @param width	The width of the window.
@@ -39,7 +38,7 @@ App::App(int width, int height) {
 * @param height		the height of the window
 * @param debugMode	whether to make extra print statements
 */
-bool App::Build_GLFW_Window(int width, int height) {
+inline void App::Build_GLFW_Window(int width, int height) {
 
 	std::stringstream message;
 
@@ -65,7 +64,6 @@ bool App::Build_GLFW_Window(int width, int height) {
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 	glfwSetScrollCallback(window, scroll_callback);
 	glfwSetCursorPosCallback(window, cursor_position_callback);
-	return true;
 }
 
 void App::UpdateTitle(std::string title) {

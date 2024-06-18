@@ -5,6 +5,7 @@
 
 # Assets
 Celest/assets/*
+Celest/logs/*
 
 # User-specific files
 *.rsuser

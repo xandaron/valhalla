@@ -1,6 +1,6 @@
 #pragma once
-#include "cfg.h"
-#include "Graphics/view/graphics_engine.h"
+#include "Graphics/vkCfg.h"
+#include "Graphics/graphics_engine.h"
 #include "Physics/physics_engine.h"
 #include "Game/camera.h"
 #include "Game/scene.h"
@@ -28,7 +28,7 @@ public:
 
 	App(int width, int height);
 
-	bool Build_GLFW_Window(int width, int height);
+	inline void Build_GLFW_Window(int width, int height);
 
 	void UpdateTitle(std::string title);
 
