@@ -6,8 +6,6 @@ import "vendor:glfw"
 APP_VERSION : u32 : (0<<22) | (0<<12) | (1)
 
 main :: proc() {
-    initDebuger()    
-
     glfw.SetErrorCallback(glfwErrorCallback)
 
     if(!glfw.Init()) {

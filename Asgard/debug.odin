@@ -9,17 +9,19 @@ import dt "core:time/datetime"
 @(private="file")
 logPath : string = getDateTimeToString()
 
+@(init)
 initDebuger :: proc() {
     debugMemory()
 
+    fmt.println("Hello World!")
     logPath = getDateTimeToString()
-    debugMessage(.MESSAGE, "Created log file!")
+    debugMessage(.MESSAGE, "Created log file! Dir: {}", logPath)
 }
 
 @(private="file")
 getDateTimeToString :: proc() -> string {
     dateTime : dt.DateTime
-    str : string = fmt.aprint(dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute, dateTime.second, sep="")
+    str : string = fmt.aprint("./logs/", dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute, dateTime.second, ".log", sep="")
     return str
 }
 
@@ -31,16 +33,16 @@ MessageFlag :: enum {
 }
 
 debugMessage :: proc(flag : MessageFlag, message : string, args : ..any) {
-    str : string = fmt.aprintfln(strings.concatenate({"[{}] ", message}), messageFlagToString(flag), args)
+    str : string = fmt.aprintfln(strings.concatenate({"[{}] ", message}), args={messageFlagToString(flag)})
     defer delete(str)
-    fmt.println(str)
+    fmt.print(str)
 
-    fileHandle, err := os.open(logPath)
+    fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_CREATE))
+    defer os.close(fileHandle)
     if (err != 0) {
         fmt.print("Log file could not be created/opened!!!")
     }
     os.write_string(fileHandle, str)
-    os.close(fileHandle)
 }
 
 @(private="file")

@@ -4,6 +4,15 @@
     "args": [],
     "tasks": [
         {
+            "label": "del",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/C",
+                "if exist .\\logs\\000000.log del .\\logs\\000000.log"
+            ]
+        },
+        {
             "label": "mkdir",
             "type": "shell",
             "command": "cmd",
@@ -21,6 +30,7 @@
         {
             "label": "Build",
             "dependsOn": [
+                "del",
                 "mkdir",
                 "build"
             ]
