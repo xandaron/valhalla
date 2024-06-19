@@ -1,2 +1,0 @@
-debug.exe
-pause

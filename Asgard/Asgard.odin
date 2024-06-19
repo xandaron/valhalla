@@ -1,6 +1,5 @@
 package Asgard
 
-import "base:runtime"
 import "vendor:glfw"
 
 APP_VERSION : u32 : (0<<22) | (0<<12) | (1)
@@ -9,7 +8,7 @@ main :: proc() {
     glfw.SetErrorCallback(glfwErrorCallback)
 
     if(!glfw.Init()) {
-        debugMessage(.ERROR, "Failed to initalize glfw, quitting application.")
+        log(.ERROR, "Failed to initalize glfw, quitting application.")
         panic("Failed to initalize glfw, quitting application.")
     }
     defer glfw.Terminate()
@@ -23,7 +22,7 @@ main :: proc() {
     monitor : glfw.MonitorHandle = nil
     window : glfw.WindowHandle = glfw.CreateWindow(width, height, name, monitor, nil)
     if (window == nil) {
-        debugMessage(.ERROR, "Failed to create window, quitting application.")
+        log(.ERROR, "Failed to create window, quitting application.")
         panic("Failed to create window, quitting application.")
     }
     defer glfw.DestroyWindow(window)
@@ -39,11 +38,6 @@ main :: proc() {
     for (!glfw.WindowShouldClose(window)) {
         glfw.PollEvents()
     }
-}
-
-glfwErrorCallback :: proc "c" (code : i32, desc : cstring) {
-    context = runtime.default_context()
-	debugMessage(.ERROR, string(desc))
 }
 
 glfwKeyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
