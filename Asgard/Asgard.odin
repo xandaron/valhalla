@@ -4,6 +4,10 @@ import "vendor:glfw"
 
 APP_VERSION : u32 : (0<<22) | (0<<12) | (1)
 
+Vector2 :: distinct [2]f32
+Vector3 :: distinct [3]f32
+Vector4 :: distinct [4]f32
+
 main :: proc() {
     glfw.SetErrorCallback(glfwErrorCallback)
 
@@ -32,6 +36,7 @@ main :: proc() {
     // glfw.SetScrollCallback(window, glfwScrollCallback)
 
     graphicsContext : GraphicsContext
+    graphicsContext.window = window
     initVkGraphics(&graphicsContext)
     defer clanupVkGraphics(&graphicsContext)
 

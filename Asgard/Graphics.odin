@@ -14,33 +14,38 @@ requestedLayers : [1]cstring = { "VK_LAYER_KHRONOS_validation" }
 // Data structs
 QueueFamilyIndices :: struct {
     graphicsFamily : u32,
-    logicalFamily  : u32
+    presentFamily  : u32
 }
 
 GraphicsContext :: struct {
+    window         : glfw.WindowHandle,
     instance       : vk.Instance,
     debugMessenger : vk.DebugUtilsMessengerEXT,
+    surface        : vk.SurfaceKHR,
     physicalDevice : vk.PhysicalDevice,
     device         : vk.Device,
-    queueFamily    : QueueFamilyIndices
+    queueFamilies  : QueueFamilyIndices,
+    graphicsQueue  : vk.Queue,
+    presentQueue   : vk.Queue
 }
 
 // Methods
-initVkGraphics :: proc(engineContext : ^GraphicsContext) {
+initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     // Calls:
     // load_proc_addresses_global :: proc(vk_get_instance_proc_addr: rawptr)
     vk.load_proc_addresses((rawptr)(glfw.GetInstanceProcAddress));
 
-    createInstance(engineContext)
+    createInstance(graphicsContext)
     when ODIN_DEBUG {
-        vkSetupDebugMessenger(engineContext)
+        vkSetupDebugMessenger(graphicsContext)
     }
-    pickPhysicalDevice(engineContext)
-    createLogicalDevice(engineContext)
+    createSurface(graphicsContext)
+    pickPhysicalDevice(graphicsContext)
+    createLogicalDevice(graphicsContext)
 }
 
 @(private="file") 
-createInstance :: proc(engineContext : ^GraphicsContext) {
+createInstance :: proc(graphicsContext : ^GraphicsContext) {
     appInfo : vk.ApplicationInfo = {
         sType              = .APPLICATION_INFO,
         pNext              = nil,
@@ -48,7 +53,7 @@ createInstance :: proc(engineContext : ^GraphicsContext) {
         applicationVersion = APP_VERSION,
         pEngineName        = "Asgard Graphics",
         engineVersion      = ENGINE_VERSION,
-        apiVersion         = vk.API_VERSION_1_0
+        apiVersion         = vk.API_VERSION_1_3
     }
 
     glfwExtensions := glfw.GetRequiredInstanceExtensions()
@@ -116,27 +121,48 @@ createInstance :: proc(engineContext : ^GraphicsContext) {
         instanceInfo.pNext = &debugMessengerCreateInfo
     }
 
-    if (vk.CreateInstance(&instanceInfo, nil, &engineContext^.instance) != .SUCCESS) {
+    if (vk.CreateInstance(&instanceInfo, nil, &graphicsContext^.instance) != .SUCCESS) {
         log(.ERROR, "Failed to create vulkan instance.")
         panic("Failed to create vulkan instance.")
     }
 
     // Calls:
     // load_proc_addresses_instance :: proc(instance: Instance)
-    vk.load_proc_addresses(engineContext^.instance)
+    vk.load_proc_addresses(graphicsContext^.instance)
 }
 
 @(private="file")
-findQueueFamilies :: proc(physicalDevice : vk.PhysicalDevice) -> (indices : QueueFamilyIndices, err : b32 = false) {
+createSurface :: proc(graphicsContext : ^GraphicsContext) {
+    if glfw.CreateWindowSurface(graphicsContext^.instance, graphicsContext^.window, nil, &graphicsContext^.surface) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to create surface!")
+        panic("Failed to create surface!")
+    }
+}
+
+@(private="file")
+findQueueFamilies :: proc(physicalDevice : vk.PhysicalDevice, graphicsContext : ^GraphicsContext) -> (indices : QueueFamilyIndices, err : b32 = false) {
     queueFamilyCount : u32;
-    
     vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nil);
     queueFamilies := make([]vk.QueueFamilyProperties, queueFamilyCount);
     vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, raw_data(queueFamilies));
 
+    foundPresentFamily := false
+    foundGraphicsFamily := false
+
     for queueFamily, index in queueFamilies {
         if (vk.QueueFlag.GRAPHICS in queueFamily.queueFlags) {
             indices.graphicsFamily = (u32)(index)
+            foundGraphicsFamily = true
+        }
+
+        presentSupport : b32 = false;
+        vk.GetPhysicalDeviceSurfaceSupportKHR(physicalDevice, (u32)(index), graphicsContext^.surface, &presentSupport);
+        if presentSupport {
+            indices.presentFamily = (u32)(index);
+            foundPresentFamily = true
+        }
+
+        if foundGraphicsFamily && foundPresentFamily {
             return
         }
     }
@@ -144,15 +170,15 @@ findQueueFamilies :: proc(physicalDevice : vk.PhysicalDevice) -> (indices : Queu
 }
 
 @(private="file")
-pickPhysicalDevice :: proc(engineContext : ^GraphicsContext) {
-    scorePhysicalDevice :: proc(physicalDevice : vk.PhysicalDevice) -> (score : u32 = 0) {
+pickPhysicalDevice :: proc(graphicsContext : ^GraphicsContext) {
+    scorePhysicalDevice :: proc(physicalDevice : vk.PhysicalDevice, graphicsContext : ^GraphicsContext) -> (score : u32 = 0) {
         physicalDeviceProperties : vk.PhysicalDeviceProperties
         physicalDeviceFeatures : vk.PhysicalDeviceFeatures
         
         vk.GetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties)
         vk.GetPhysicalDeviceFeatures(physicalDevice, &physicalDeviceFeatures)
 
-        indices, err := findQueueFamilies(physicalDevice)
+        indices, err := findQueueFamilies(physicalDevice, graphicsContext)
         if (!physicalDeviceFeatures.geometryShader || err) {
             return
         }
@@ -161,7 +187,7 @@ pickPhysicalDevice :: proc(engineContext : ^GraphicsContext) {
             score += 1000
         }
 
-        if (indices.graphicsFamily == indices.logicalFamily) {
+        if (indices.graphicsFamily == indices.presentFamily) {
             score += 100
         }
 
@@ -170,7 +196,7 @@ pickPhysicalDevice :: proc(engineContext : ^GraphicsContext) {
     }
 
     deviceCount : u32
-    vk.EnumeratePhysicalDevices(engineContext^.instance, &deviceCount, nil)
+    vk.EnumeratePhysicalDevices(graphicsContext^.instance, &deviceCount, nil)
 
     if deviceCount == 0 {
         log(.ERROR, "No devices with Vulkan support!")
@@ -178,41 +204,56 @@ pickPhysicalDevice :: proc(engineContext : ^GraphicsContext) {
     }
 
     physicalDevices := make([]vk.PhysicalDevice, deviceCount)
-    vk.EnumeratePhysicalDevices(engineContext^.instance, &deviceCount, raw_data(physicalDevices))
+    vk.EnumeratePhysicalDevices(graphicsContext^.instance, &deviceCount, raw_data(physicalDevices))
 
     {
         physicalDeviceMap : map[^vk.PhysicalDevice]u32
         defer delete(physicalDeviceMap)
         for &physicalDevice in physicalDevices {
-            physicalDeviceMap[&physicalDevice] = scorePhysicalDevice(physicalDevice)
+            physicalDeviceMap[&physicalDevice] = scorePhysicalDevice(physicalDevice, graphicsContext)
         }
 
         bestScore : u32
         for physicalDevice, score in physicalDeviceMap {
             if (score > bestScore) {
-                engineContext^.physicalDevice = (^vk.PhysicalDevice)(physicalDevice)^
+                graphicsContext^.physicalDevice = (^vk.PhysicalDevice)(physicalDevice)^
                 bestScore = score
             }
         }
     }
 
-    if (engineContext^.physicalDevice == nil) {
+    if (graphicsContext^.physicalDevice == nil) {
         log(.ERROR, "No suitable physical device found!")
         panic("No suitable physical device found!")
     }
 }
 
 @(private="file")
-createLogicalDevice :: proc(engineContext : ^GraphicsContext) {
-    indices, _ := findQueueFamilies(engineContext^.physicalDevice)
+createLogicalDevice :: proc(graphicsContext : ^GraphicsContext) {
+    graphicsContext^.queueFamilies, _ = findQueueFamilies(graphicsContext^.physicalDevice, graphicsContext)
+
     queuePriority : f32 = 1.0
+    queueCreateInfos : [dynamic]vk.DeviceQueueCreateInfo
     queueCreateInfo : vk.DeviceQueueCreateInfo = {
         sType            = .DEVICE_QUEUE_CREATE_INFO,
         pNext            = nil,
         flags            = { vk.DeviceQueueCreateFlag.PROTECTED },
-        queueFamilyIndex = indices.graphicsFamily,
+        queueFamilyIndex = graphicsContext^.queueFamilies.graphicsFamily,
         queueCount       = 1,
         pQueuePriorities = &queuePriority
+    }
+    append(&queueCreateInfos, queueCreateInfo)
+
+    if (graphicsContext^.queueFamilies.graphicsFamily != graphicsContext^.queueFamilies.presentFamily) {
+        queueCreateInfo = {
+            sType            = .DEVICE_QUEUE_CREATE_INFO,
+            pNext            = nil,
+            flags            = { vk.DeviceQueueCreateFlag.PROTECTED },
+            queueFamilyIndex = graphicsContext^.queueFamilies.presentFamily,
+            queueCount       = 1,
+            pQueuePriorities = &queuePriority
+        }
+        append(&queueCreateInfos, queueCreateInfo)
     }
 
     deviceFeatures : vk.PhysicalDeviceFeatures
@@ -221,8 +262,8 @@ createLogicalDevice :: proc(engineContext : ^GraphicsContext) {
         sType                   = .DEVICE_CREATE_INFO,
         pNext                   = nil,
         flags                   = {},
-        queueCreateInfoCount    = 1,
-        pQueueCreateInfos       = &queueCreateInfo,
+        queueCreateInfoCount    = (u32)(len(queueCreateInfos)),
+        pQueueCreateInfos       = raw_data(queueCreateInfos[:]),
         enabledLayerCount       = 0,
         ppEnabledLayerNames     = nil,
         enabledExtensionCount   = 0,
@@ -235,20 +276,24 @@ createLogicalDevice :: proc(engineContext : ^GraphicsContext) {
         createInfo.ppEnabledLayerNames = raw_data(requestedLayers[:])
     }
 
-    if vk.CreateDevice(engineContext^.physicalDevice, &createInfo, nil, &engineContext^.device) != vk.Result.SUCCESS {
+    if vk.CreateDevice(graphicsContext^.physicalDevice, &createInfo, nil, &graphicsContext^.device) != vk.Result.SUCCESS {
         log(.ERROR, "Failed to create logical device!")
         panic("Failed to create logical device!")
     }
 
     // Calls:
     // load_proc_addresses_device :: proc(device: Device)
-    vk.load_proc_addresses(engineContext^.device)
+    vk.load_proc_addresses(graphicsContext^.device)
+
+    vk.GetDeviceQueue(graphicsContext^.device, graphicsContext^.queueFamilies.graphicsFamily, 0, &graphicsContext^.graphicsQueue)
+    vk.GetDeviceQueue(graphicsContext^.device, graphicsContext^.queueFamilies.presentFamily, 0, &graphicsContext^.presentQueue)
 }
 
-clanupVkGraphics :: proc(engineContext : ^GraphicsContext) {
-    vk.DestroyDevice(engineContext^.device, nil)
+clanupVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
+    vk.DestroyDevice(graphicsContext^.device, nil)
     when ODIN_DEBUG {
-        vk.DestroyDebugUtilsMessengerEXT(engineContext^.instance, engineContext^.debugMessenger, nil)
+        vk.DestroyDebugUtilsMessengerEXT(graphicsContext^.instance, graphicsContext^.debugMessenger, nil)
     }
-    vk.DestroyInstance(engineContext^.instance, nil)
+    vk.DestroySurfaceKHR(graphicsContext^.instance, graphicsContext^.surface, nil)
+    vk.DestroyInstance(graphicsContext^.instance, nil)
 }
