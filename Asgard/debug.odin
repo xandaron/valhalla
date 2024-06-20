@@ -20,7 +20,8 @@ initDebuger :: proc() {
 
     fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_CREATE))
     if (err != 0) {
-        fmt.print("Log file could not be created/opened!!!")
+        fmt.print("Log file could not be created!!!")
+        return
     }
     os.close(fileHandle)
     
@@ -50,7 +51,8 @@ log :: proc(flag : MessageFlag, message : string, args : ..any) {
     fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_APPEND))
     defer os.close(fileHandle)
     if (err != 0) {
-        fmt.print("Log file could not be created/opened!!!")
+        fmt.print("Log file could not be opened!!!")
+        return
     }
     os.write_string(fileHandle, str)
 }

@@ -35,8 +35,9 @@ main :: proc() {
     // glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
     // glfw.SetScrollCallback(window, glfwScrollCallback)
 
-    graphicsContext : GraphicsContext
-    graphicsContext.window = window
+    graphicsContext : GraphicsContext = {
+        window = window
+    }
     initVkGraphics(&graphicsContext)
     defer clanupVkGraphics(&graphicsContext)
 
