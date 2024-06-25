@@ -43,6 +43,7 @@ main :: proc() {
 
     for (!glfw.WindowShouldClose(window)) {
         glfw.PollEvents()
+        drawFrame(&graphicsContext)
     }
 }
 

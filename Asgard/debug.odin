@@ -8,6 +8,14 @@ import "core:os"
 import dt "core:time/datetime"
 import vk "vendor:vulkan"
 
+MessageFlag :: enum {
+    MESSAGE,
+    DEBUG,
+    WARNING,
+    ERROR,
+    UNKNOWN
+}
+
 @(private="file")
 logPath : string = getDateTimeToString()
 
@@ -35,19 +43,10 @@ getDateTimeToString :: proc() -> string {
     return str
 }
 
-MessageFlag :: enum {
-    MESSAGE,
-    DEBUG,
-    WARNING,
-    ERROR,
-    UNKNOWN
-}
-
 log :: proc(flag : MessageFlag, message : string, args : ..any) {
     str : string = fmt.aprintfln(strings.concatenate({"[{}] ", message}), args={messageFlagToString(flag), args[:]})
     defer delete(str)
     fmt.print(str)
-
     fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_APPEND))
     defer os.close(fileHandle)
     if (err != 0) {
