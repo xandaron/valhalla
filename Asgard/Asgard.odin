@@ -18,7 +18,6 @@ main :: proc() {
     defer glfw.Terminate()
 
     glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
-    glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE);
 
     width : i32 = 800
     height : i32 = 600
@@ -31,13 +30,15 @@ main :: proc() {
     }
     defer glfw.DestroyWindow(window)
 
-    glfw.SetKeyCallback(window, glfwKeyCallback)
+    glfw.SetKeyCallback(window, keyCallback)
     // glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
     // glfw.SetScrollCallback(window, glfwScrollCallback)
+    glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
 
     graphicsContext : GraphicsContext = {
         window = window
     }
+    glfw.SetWindowUserPointer(window, &graphicsContext)
     initVkGraphics(&graphicsContext)
     defer clanupVkGraphics(&graphicsContext)
 
@@ -47,8 +48,13 @@ main :: proc() {
     }
 }
 
-glfwKeyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
+keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
     if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, glfw.TRUE)
 	}
+}
+
+framebufferResizeCallback :: proc "c" (window : glfw.WindowHandle, width : i32, height : i32) {
+    graphicsContext := (^GraphicsContext)(glfw.GetWindowUserPointer(window))
+    graphicsContext^.framebufferResized = true
 }

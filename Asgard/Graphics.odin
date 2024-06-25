@@ -21,6 +21,8 @@ shaderStages : []vk.ShaderStageFlag = { vk.ShaderStageFlag.VERTEX, vk.ShaderStag
 @(private="file")
 shaderFiles : []string = { "./assets/shaders/test_vert.spv", "./assets/shaders/test_frag.spv", /*"./assets/shaders/comp.spv",*/ }
 
+MAX_FRAMES_IN_FLIGHT : u32 : 2
+
 @(private="file")
 triangleVertices : [3]Vector2 : {
     { 0.0, -0.5 },
@@ -69,10 +71,12 @@ GraphicsContext :: struct {
     pipelineLayouts       : []vk.PipelineLayout,
     renderPasses          : []vk.RenderPass,
     commandPool           : vk.CommandPool,
-    commandBuffer         : vk.CommandBuffer,
-    imageAvailable        : vk.Semaphore,
-    renderFinished        : vk.Semaphore,
-    inFlightFrame         : vk.Fence, 
+    commandBuffers        : []vk.CommandBuffer,
+    imagesAvailable       : []vk.Semaphore,
+    rendersFinished       : []vk.Semaphore,
+    inFlightFrames        : []vk.Fence,
+    currentFrame          : u32,
+    framebufferResized    : b8,
 }
 
 // Methods
@@ -92,9 +96,11 @@ initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     createRenderPass(graphicsContext)
     createPipeline(graphicsContext)
     createFramebuffers(graphicsContext)
+    graphicsContext^.framebufferResized = false
     createCommandPool(graphicsContext)
-    createCommandBuffer(graphicsContext)
+    createCommandBuffers(graphicsContext)
     createSyncObjects(graphicsContext)
+    graphicsContext^.currentFrame = 0
 }
 
 @(private="file") 
@@ -768,15 +774,16 @@ createCommandPool :: proc(graphicsContext : ^GraphicsContext) {
 }
 
 @(private="file")
-createCommandBuffer :: proc(graphicsContext : ^GraphicsContext) {
+createCommandBuffers :: proc(graphicsContext : ^GraphicsContext) {
+    graphicsContext^.commandBuffers = make([]vk.CommandBuffer, MAX_FRAMES_IN_FLIGHT)
     allocInfo : vk.CommandBufferAllocateInfo = {
         sType              = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
         pNext              = nil,
         commandPool        = graphicsContext^.commandPool,
         level              = vk.CommandBufferLevel.PRIMARY,
-        commandBufferCount = 1,
+        commandBufferCount = MAX_FRAMES_IN_FLIGHT,
     }
-    if vk.AllocateCommandBuffers(graphicsContext^.device, &allocInfo, &graphicsContext^.commandBuffer) != vk.Result.SUCCESS {
+    if vk.AllocateCommandBuffers(graphicsContext^.device, &allocInfo, raw_data(graphicsContext^.commandBuffers)) != vk.Result.SUCCESS {
         log(.ERROR, "Failed to allocate command buffer!")
         panic("Failed to allocate command buffer!")
     }
@@ -784,6 +791,9 @@ createCommandBuffer :: proc(graphicsContext : ^GraphicsContext) {
 
 @(private="file")
 createSyncObjects :: proc(graphicsContext : ^GraphicsContext) {
+    graphicsContext^.imagesAvailable = make([]vk.Semaphore, MAX_FRAMES_IN_FLIGHT)
+    graphicsContext^.rendersFinished = make([]vk.Semaphore, MAX_FRAMES_IN_FLIGHT)
+    graphicsContext^.inFlightFrames = make([]vk.Fence, MAX_FRAMES_IN_FLIGHT)
     semaphoreInfo : vk.SemaphoreCreateInfo = {
         sType = vk.StructureType.SEMAPHORE_CREATE_INFO,
         pNext = nil,
@@ -795,37 +805,47 @@ createSyncObjects :: proc(graphicsContext : ^GraphicsContext) {
         flags = { vk.FenceCreateFlag.SIGNALED },
     }
 
-    if ((vk.CreateSemaphore(graphicsContext^.device, &semaphoreInfo, nil, &graphicsContext^.imageAvailable) 
-    | vk.CreateSemaphore(graphicsContext^.device, &semaphoreInfo, nil, &graphicsContext^.renderFinished) 
-    | vk.CreateFence(graphicsContext^.device, &fenceInfo, nil, &graphicsContext^.inFlightFrame)) != vk.Result.SUCCESS)  {
-        log(.ERROR, "Failed to create sync objects!")
-        panic("Failed to create sync objects!")
+    for index in 0..<MAX_FRAMES_IN_FLIGHT {
+        if ((vk.CreateSemaphore(graphicsContext^.device, &semaphoreInfo, nil, &graphicsContext^.imagesAvailable[index]) |
+            vk.CreateSemaphore(graphicsContext^.device, &semaphoreInfo, nil, &graphicsContext^.rendersFinished[index]) |
+            vk.CreateFence(graphicsContext^.device, &fenceInfo, nil, &graphicsContext^.inFlightFrames[index])) != vk.Result.SUCCESS)  {
+            log(.ERROR, "Failed to create sync objects!")
+            panic("Failed to create sync objects!")
+        }
     }
 }
 
 drawFrame :: proc(graphicsContext : ^GraphicsContext) {
-    vk.WaitForFences(graphicsContext^.device, 1, &graphicsContext^.inFlightFrame, true, max(u64))
-    vk.ResetFences(graphicsContext^.device, 1, &graphicsContext^.inFlightFrame)
-
+    vk.WaitForFences(graphicsContext^.device, 1, &graphicsContext^.inFlightFrames[graphicsContext^.currentFrame], true, max(u64))
+    
     imageIndex : u32
-    vk.AcquireNextImageKHR(graphicsContext^.device, graphicsContext^.swapchain, max(u64), graphicsContext^.imageAvailable, {}, &imageIndex)
+    if result := vk.AcquireNextImageKHR(graphicsContext^.device, graphicsContext^.swapchain, max(u64), graphicsContext^.imagesAvailable[graphicsContext^.currentFrame], {}, &imageIndex); 
+        result == vk.Result.ERROR_OUT_OF_DATE_KHR {
+        recreateSwapchain(graphicsContext)
+        return
+    }
+    else if (result != vk.Result.SUCCESS && result != vk.Result.SUBOPTIMAL_KHR) {
+        log(.ERROR, "Failed to aquire swapchain image!")
+        panic("Failed to aquire swapchain image!")
+    }
+    vk.ResetFences(graphicsContext^.device, 1, &graphicsContext^.inFlightFrames[graphicsContext^.currentFrame])
 
-    vk.ResetCommandBuffer(graphicsContext^.commandBuffer, {})
-    recordCommandBuffer(graphicsContext, &graphicsContext^.commandBuffer, imageIndex)
+    vk.ResetCommandBuffer(graphicsContext^.commandBuffers[graphicsContext^.currentFrame], {})
+    recordCommandBuffer(graphicsContext, &graphicsContext^.commandBuffers[graphicsContext^.currentFrame], imageIndex)
 
     submitInfo : vk.SubmitInfo = {
         sType                = vk.StructureType.SUBMIT_INFO,
         pNext                = nil,
         waitSemaphoreCount   = 1,
-        pWaitSemaphores      = raw_data([]vk.Semaphore{ graphicsContext^.imageAvailable }),
+        pWaitSemaphores      = raw_data([]vk.Semaphore{ graphicsContext^.imagesAvailable[graphicsContext^.currentFrame] }),
         pWaitDstStageMask    = raw_data([]vk.PipelineStageFlags{ { vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT } }),
         commandBufferCount   = 1,
-        pCommandBuffers      = &graphicsContext^.commandBuffer,
+        pCommandBuffers      = &graphicsContext^.commandBuffers[graphicsContext^.currentFrame],
         signalSemaphoreCount = 1,
-        pSignalSemaphores    = raw_data([]vk.Semaphore{ graphicsContext^.renderFinished }),
+        pSignalSemaphores    = raw_data([]vk.Semaphore{ graphicsContext^.rendersFinished[graphicsContext^.currentFrame] }),
     }
 
-    if vk.QueueSubmit(graphicsContext^.graphicsQueue, 1, &submitInfo, graphicsContext^.inFlightFrame) != vk.Result.SUCCESS {
+    if vk.QueueSubmit(graphicsContext^.graphicsQueue, 1, &submitInfo, graphicsContext^.inFlightFrames[graphicsContext^.currentFrame]) != vk.Result.SUCCESS {
         log(.ERROR, "Failed to submit draw command buffer!")
         panic("Failed to submit draw command buffer!")
     }
@@ -834,14 +854,25 @@ drawFrame :: proc(graphicsContext : ^GraphicsContext) {
         sType              = vk.StructureType.PRESENT_INFO_KHR,
         pNext              = nil,
         waitSemaphoreCount = 1,
-        pWaitSemaphores    = raw_data([]vk.Semaphore{ graphicsContext^.renderFinished }),
+        pWaitSemaphores    = raw_data([]vk.Semaphore{ graphicsContext^.rendersFinished[graphicsContext^.currentFrame] }),
         swapchainCount     = 1,
         pSwapchains        = raw_data([]vk.SwapchainKHR{ graphicsContext^.swapchain }),
         pImageIndices      = &imageIndex,
         pResults           = nil,
     }
 
-    vk.QueuePresentKHR(graphicsContext^.presentQueue, &presentInfo)
+    if result := vk.QueuePresentKHR(graphicsContext^.presentQueue, &presentInfo); 
+        result == vk.Result.ERROR_OUT_OF_DATE_KHR || result == vk.Result.SUBOPTIMAL_KHR || graphicsContext^.framebufferResized
+    {
+        graphicsContext^.framebufferResized = false
+        recreateSwapchain(graphicsContext)
+    }
+    else if (result != vk.Result.SUCCESS) {
+        log(.ERROR, "Failed to present swapchain image!")
+        panic("Failed to present swapchain image!")
+    }
+
+    graphicsContext^.currentFrame += (graphicsContext^.currentFrame + 1) % 2
 }
 
 @(private="file")
@@ -901,28 +932,51 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
     }
 }
 
+@(private="file")
+recreateSwapchain :: proc(graphicsContext : ^GraphicsContext) {
+    width, height := glfw.GetFramebufferSize(graphicsContext^.window)
+    for width == 0 && height == 0 {
+        width, height = glfw.GetFramebufferSize(graphicsContext^.window)
+        glfw.WaitEvents()
+    }
+
+    vk.DeviceWaitIdle(graphicsContext^.device)
+    cleanupSwapchain(graphicsContext)
+
+    createSwapchain(graphicsContext)
+    createImageViews(graphicsContext)
+    createFramebuffers(graphicsContext)
+}
+
 clanupVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     vk.DeviceWaitIdle(graphicsContext^.device)
-    vk.DestroySemaphore(graphicsContext^.device, graphicsContext^.imageAvailable, nil)
-    vk.DestroySemaphore(graphicsContext^.device, graphicsContext^.renderFinished, nil)
-    vk.DestroyFence(graphicsContext^.device, graphicsContext^.inFlightFrame, nil)
-    vk.DestroyCommandPool(graphicsContext^.device, graphicsContext^.commandPool, nil)
-    for frameBuffer in graphicsContext^.swapchainFrameBuffers {
-        vk.DestroyFramebuffer(graphicsContext^.device, frameBuffer, nil)
-    }
+    cleanupSwapchain(graphicsContext)
     for index in 0..<len(graphicsContext^.pipelines) {
         vk.DestroyPipeline(graphicsContext^.device, graphicsContext^.pipelines[index], nil)
         vk.DestroyPipelineLayout(graphicsContext^.device, graphicsContext^.pipelineLayouts[index], nil)
         vk.DestroyRenderPass(graphicsContext^.device, graphicsContext^.renderPasses[0], nil)
     }
-    for index in 0..<len(graphicsContext^.swapchainImageViews) {
-        vk.DestroyImageView(graphicsContext^.device, graphicsContext^.swapchainImageViews[index], nil)
+    for index in 0..<MAX_FRAMES_IN_FLIGHT {
+        vk.DestroySemaphore(graphicsContext^.device, graphicsContext^.imagesAvailable[index], nil)
+        vk.DestroySemaphore(graphicsContext^.device, graphicsContext^.rendersFinished[index], nil)
+        vk.DestroyFence(graphicsContext^.device, graphicsContext^.inFlightFrames[index], nil)
     }
-    vk.DestroySwapchainKHR(graphicsContext^.device, graphicsContext^.swapchain, nil);
+    vk.DestroyCommandPool(graphicsContext^.device, graphicsContext^.commandPool, nil)
     vk.DestroyDevice(graphicsContext^.device, nil)
     when ODIN_DEBUG {
         vk.DestroyDebugUtilsMessengerEXT(graphicsContext^.instance, graphicsContext^.debugMessenger, nil)
     }
     vk.DestroySurfaceKHR(graphicsContext^.instance, graphicsContext^.surface, nil)
     vk.DestroyInstance(graphicsContext^.instance, nil)
+}
+
+@(private="file")
+cleanupSwapchain :: proc(graphicsContext : ^GraphicsContext) {
+    for frameBuffer in graphicsContext^.swapchainFrameBuffers {
+        vk.DestroyFramebuffer(graphicsContext^.device, frameBuffer, nil)
+    }
+    for index in 0..<len(graphicsContext^.swapchainImageViews) {
+        vk.DestroyImageView(graphicsContext^.device, graphicsContext^.swapchainImageViews[index], nil)
+    }
+    vk.DestroySwapchainKHR(graphicsContext^.device, graphicsContext^.swapchain, nil)
 }
