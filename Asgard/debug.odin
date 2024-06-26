@@ -5,6 +5,8 @@ import "core:fmt"
 import "core:strings"
 import "core:mem"
 import "core:os"
+import "core:math"
+import t "core:time"
 import dt "core:time/datetime"
 import vk "vendor:vulkan"
 
@@ -38,8 +40,24 @@ initDebuger :: proc() {
 
 @(private="file")
 getDateTimeToString :: proc() -> string {
-    dateTime : dt.DateTime
-    str : string = fmt.aprint("./logs/", dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute, dateTime.second, ".log", sep="")
+    now := t.now()
+    year, month, day := t.date(now)
+    dateTime : dt.DateTime = {
+        date = dt.Date{
+            year = (i64)(year),
+            month = (i8)(month),
+            day = (i8)(day),
+        }
+    }
+    midnight, _ := t.datetime_to_time(dateTime)
+    seconds := math.floor(t.duration_seconds(t.diff(midnight, now)))
+
+    hours := math.floor(seconds / t.SECONDS_PER_HOUR)
+    seconds -= hours * t.SECONDS_PER_HOUR
+    minutes := math.floor(seconds / t.SECONDS_PER_MINUTE)
+    seconds -= minutes * t.SECONDS_PER_MINUTE
+
+    str : string = fmt.aprint("./logs/", dateTime.year, dateTime.month, dateTime.day, hours, minutes, seconds, ".log", sep="")
     return str
 }
 

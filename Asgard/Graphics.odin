@@ -55,10 +55,16 @@ vertexInputAttributeDescriptions : []vk.VertexInputAttributeDescription = {
 }
 
 @(private="file")
-triangleVertices : []Vertex = {
-    { { 0.0, -0.5 }, { 1, 0, 0 } },
-    { { 0.5, 0.5 }, { 0, 1, 0 } },
-    { { -0.5, 0.5 }, { 0, 0, 1 } },
+vertices : []Vertex = {
+    {{-0.5, -0.5}, {1.0, 0.0, 0.0}},
+    {{0.5, -0.5}, {0.0, 1.0, 0.0}},
+    {{0.5, 0.5}, {0.0, 0.0, 1.0}},
+    {{-0.5, 0.5}, {1.0, 1.0, 1.0}},
+}
+
+@(private="file")
+indices : []u16 = {
+    0, 1, 2, 2, 3, 0
 }
 
 @(private="file")
@@ -108,8 +114,11 @@ GraphicsContext :: struct {
     inFlightFrames        : []vk.Fence,
     currentFrame          : u32,
     framebufferResized    : b8,
+    //To-Do: Vertex buffer and index buffer should be combined into a singular buffer using offsets
     vertexBuffer          : vk.Buffer,
     vertexBufferMemory    : vk.DeviceMemory,
+    indexBuffer           : vk.Buffer,
+    indexBufferMemory     : vk.DeviceMemory,
 }
 
 // Methods
@@ -132,6 +141,7 @@ initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     graphicsContext^.framebufferResized = false
     createCommandPool(graphicsContext)
     createVertexBuffer(graphicsContext)
+    createIndexBuffer(graphicsContext)
     createCommandBuffers(graphicsContext)
     createSyncObjects(graphicsContext)
     graphicsContext^.currentFrame = 0
@@ -809,6 +819,25 @@ createCommandPool :: proc(graphicsContext : ^GraphicsContext) {
 
 @(private="file")
 createVertexBuffer :: proc(graphicsContext : ^GraphicsContext) {
+    loadToGPUBuffer(
+        graphicsContext, size_of(vertices[0]) * len(vertices), raw_data(vertices),
+        &graphicsContext^.vertexBuffer, &graphicsContext^.vertexBufferMemory, vk.BufferUsageFlag.VERTEX_BUFFER
+    )
+}
+
+@(private="file")
+createIndexBuffer :: proc(graphicsContext : ^GraphicsContext) {
+    loadToGPUBuffer(
+        graphicsContext, size_of(indices[0]) * len(indices), raw_data(indices),
+        &graphicsContext^.indexBuffer, &graphicsContext^.indexBufferMemory, vk.BufferUsageFlag.INDEX_BUFFER
+    )
+}
+
+//To-Do: Buffer allocation for both indexes and vertices should be done in one call (can be achieved by fussing buffers into one)
+@(private="file")
+loadToGPUBuffer :: proc(
+    graphicsContext : ^GraphicsContext, bufferSize : int, srcData : rawptr, dstBuffer : ^vk.Buffer, dstBufferMemory : ^vk.DeviceMemory, bufferType : vk.BufferUsageFlag
+) {
     copyBuffer :: proc(graphicsContext : ^GraphicsContext, srcBuffer, dstBuffer : vk.Buffer, size : int) {
         allocInfo : vk.CommandBufferAllocateInfo = {
             sType              = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
@@ -853,25 +882,24 @@ createVertexBuffer :: proc(graphicsContext : ^GraphicsContext) {
         vk.FreeCommandBuffers(graphicsContext^.device, graphicsContext^.commandPool, 1, &commandBuffer)
     }
 
-    bufferSize : int = size_of(Vertex) * len(triangleVertices)
-
     stagingBuffer : vk.Buffer
     stagingBufferMemory : vk.DeviceMemory
     createBuffer(
-        graphicsContext, bufferSize, { vk.BufferUsageFlag.TRANSFER_SRC }, 
-        { vk.MemoryPropertyFlag.HOST_VISIBLE | vk.MemoryPropertyFlag.HOST_COHERENT }, &stagingBuffer, &stagingBufferMemory
+        graphicsContext, bufferSize, { vk.BufferUsageFlag.TRANSFER_SRC },
+        { vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT }, &stagingBuffer, &stagingBufferMemory
     )
+    
     data : rawptr
     vk.MapMemory(graphicsContext^.device, stagingBufferMemory, 0, (vk.DeviceSize)(bufferSize), {}, &data)
-    mem.copy(data, raw_data(triangleVertices), bufferSize)
+    mem.copy(data, srcData, bufferSize)
     vk.UnmapMemory(graphicsContext^.device, stagingBufferMemory)
 
     createBuffer(
-        graphicsContext, bufferSize, { vk.BufferUsageFlag.TRANSFER_DST, vk.BufferUsageFlag.VERTEX_BUFFER },
-        { vk.MemoryPropertyFlag.DEVICE_LOCAL }, &graphicsContext^.vertexBuffer, &graphicsContext^.vertexBufferMemory
+        graphicsContext, bufferSize, { vk.BufferUsageFlag.TRANSFER_DST, bufferType },
+        { vk.MemoryPropertyFlag.DEVICE_LOCAL }, dstBuffer, dstBufferMemory
     )
 
-    copyBuffer(graphicsContext, stagingBuffer, graphicsContext^.vertexBuffer, bufferSize)
+    copyBuffer(graphicsContext, stagingBuffer, dstBuffer^, bufferSize)
     vk.DestroyBuffer(graphicsContext^.device, stagingBuffer, nil)
     vk.FreeMemory(graphicsContext^.device, stagingBufferMemory, nil)
 }
@@ -1057,6 +1085,7 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
     vk.CmdBindPipeline(commandBuffer^, vk.PipelineBindPoint.GRAPHICS, graphicsContext.pipelines[0])
 
     vk.CmdBindVertexBuffers(commandBuffer^, 0, 1, raw_data([]vk.Buffer{ graphicsContext^.vertexBuffer }), raw_data([]vk.DeviceSize{ 0 }))
+    vk.CmdBindIndexBuffer(commandBuffer^, graphicsContext^.indexBuffer, 0, vk.IndexType.UINT16)
 
     viewport : vk.Viewport = {
         x        = 0,
@@ -1074,7 +1103,7 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
     }
     vk.CmdSetScissor(commandBuffer^, 0, 1, &scissor)
 
-    vk.CmdDraw(commandBuffer^, (u32)(len(triangleVertices)), 1, 0, 0)
+    vk.CmdDrawIndexed(commandBuffer^, (u32)(len(indices)), 1, 0, 0, 0)
 
     vk.CmdEndRenderPass(commandBuffer^)
     if vk.EndCommandBuffer(commandBuffer^) != vk.Result.SUCCESS {
@@ -1101,6 +1130,8 @@ recreateSwapchain :: proc(graphicsContext : ^GraphicsContext) {
 
 clanupVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     vk.DeviceWaitIdle(graphicsContext^.device)
+    vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.indexBuffer, nil)
+    vk.FreeMemory(graphicsContext^.device, graphicsContext^.indexBufferMemory, nil)
     vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.vertexBuffer, nil)
     vk.FreeMemory(graphicsContext^.device, graphicsContext^.vertexBufferMemory, nil)
     cleanupSwapchain(graphicsContext)
