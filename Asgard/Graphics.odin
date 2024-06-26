@@ -2,6 +2,7 @@ package Asgard
 
 import "core:c"
 import "core:os"
+import "core:mem"
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
@@ -21,14 +22,44 @@ shaderStages : []vk.ShaderStageFlag = { vk.ShaderStageFlag.VERTEX, vk.ShaderStag
 @(private="file")
 shaderFiles : []string = { "./assets/shaders/test_vert.spv", "./assets/shaders/test_frag.spv", /*"./assets/shaders/comp.spv",*/ }
 
+@(private="file")
 MAX_FRAMES_IN_FLIGHT : u32 : 2
 
 @(private="file")
-triangleVertices : [3]Vector2 : {
-    { 0.0, -0.5 },
-    { 0.5, 0.5 },
-    { -0.5, 0.5 },
-} 
+Vertex :: struct {
+    position : Vector2,
+    colour   : Vector3,
+}
+
+@(private="file")
+vertexBindingDescription : vk.VertexInputBindingDescription = {
+	binding   = 0,
+	stride    = size_of(Vertex),
+	inputRate = vk.VertexInputRate.VERTEX,
+}
+
+@(private="file")
+vertexInputAttributeDescriptions : []vk.VertexInputAttributeDescription = {
+    {
+        location = 0,
+        binding  = 0,
+        format   = vk.Format.R32G32_SFLOAT,
+        offset   = (u32)(offset_of(Vertex, position)),
+    },
+    {
+        location = 1,
+        binding  = 0,
+        format   = vk.Format.R32G32B32_SFLOAT,
+        offset   = (u32)(offset_of(Vertex, colour)),
+    },
+}
+
+@(private="file")
+triangleVertices : []Vertex = {
+    { { 0.0, -0.5 }, { 1, 0, 0 } },
+    { { 0.5, 0.5 }, { 0, 1, 0 } },
+    { { -0.5, 0.5 }, { 0, 0, 1 } },
+}
 
 @(private="file")
 PipelineType :: enum {
@@ -77,6 +108,8 @@ GraphicsContext :: struct {
     inFlightFrames        : []vk.Fence,
     currentFrame          : u32,
     framebufferResized    : b8,
+    vertexBuffer          : vk.Buffer,
+    vertexBufferMemory    : vk.DeviceMemory,
 }
 
 // Methods
@@ -98,6 +131,7 @@ initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     createFramebuffers(graphicsContext)
     graphicsContext^.framebufferResized = false
     createCommandPool(graphicsContext)
+    createVertexBuffer(graphicsContext)
     createCommandBuffers(graphicsContext)
     createSyncObjects(graphicsContext)
     graphicsContext^.currentFrame = 0
@@ -615,10 +649,10 @@ createPipeline :: proc(graphicsContext : ^GraphicsContext) {
         sType                           = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         pNext                           = nil,
         flags                           = {},
-        vertexBindingDescriptionCount   = 0,
-        pVertexBindingDescriptions      = nil,
-        vertexAttributeDescriptionCount = 0,
-        pVertexAttributeDescriptions    = nil,
+        vertexBindingDescriptionCount   = 1,
+        pVertexBindingDescriptions      = &vertexBindingDescription,
+        vertexAttributeDescriptionCount = (u32)(len(vertexInputAttributeDescriptions)),
+        pVertexAttributeDescriptions    = raw_data(vertexInputAttributeDescriptions),
     }
 
     inputAssembly : vk.PipelineInputAssemblyStateCreateInfo = {
@@ -774,6 +808,121 @@ createCommandPool :: proc(graphicsContext : ^GraphicsContext) {
 }
 
 @(private="file")
+createVertexBuffer :: proc(graphicsContext : ^GraphicsContext) {
+    copyBuffer :: proc(graphicsContext : ^GraphicsContext, srcBuffer, dstBuffer : vk.Buffer, size : int) {
+        allocInfo : vk.CommandBufferAllocateInfo = {
+            sType              = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
+            pNext              = nil,
+            commandPool        = graphicsContext^.commandPool,
+            level              = vk.CommandBufferLevel.PRIMARY,
+            commandBufferCount = 1,
+        }
+
+        commandBuffer : vk.CommandBuffer
+        vk.AllocateCommandBuffers(graphicsContext^.device, &allocInfo, &commandBuffer)
+        beginInfo : vk.CommandBufferBeginInfo = {
+            sType            = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
+            pNext            = nil,
+            flags            = { vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT },
+            pInheritanceInfo = nil,
+        }
+        vk.BeginCommandBuffer(commandBuffer, &beginInfo)
+
+        copyRegion : vk.BufferCopy = {
+            srcOffset = 0,
+            dstOffset = 0,
+            size      = (vk.DeviceSize)(size),
+        }
+        vk.CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion)
+
+        vk.EndCommandBuffer(commandBuffer)
+
+        submitInfo : vk.SubmitInfo = {
+            sType                = vk.StructureType.SUBMIT_INFO,
+            pNext                = nil,
+            waitSemaphoreCount   = 0,
+            pWaitSemaphores      = nil,
+            pWaitDstStageMask    = nil,
+            commandBufferCount   = 1,
+            pCommandBuffers      = &commandBuffer,
+            signalSemaphoreCount = 0,
+            pSignalSemaphores    = nil,
+        }
+        vk.QueueSubmit(graphicsContext^.graphicsQueue, 1, &submitInfo, 0)
+        vk.QueueWaitIdle(graphicsContext^.graphicsQueue)
+        vk.FreeCommandBuffers(graphicsContext^.device, graphicsContext^.commandPool, 1, &commandBuffer)
+    }
+
+    bufferSize : int = size_of(Vertex) * len(triangleVertices)
+
+    stagingBuffer : vk.Buffer
+    stagingBufferMemory : vk.DeviceMemory
+    createBuffer(
+        graphicsContext, bufferSize, { vk.BufferUsageFlag.TRANSFER_SRC }, 
+        { vk.MemoryPropertyFlag.HOST_VISIBLE | vk.MemoryPropertyFlag.HOST_COHERENT }, &stagingBuffer, &stagingBufferMemory
+    )
+    data : rawptr
+    vk.MapMemory(graphicsContext^.device, stagingBufferMemory, 0, (vk.DeviceSize)(bufferSize), {}, &data)
+    mem.copy(data, raw_data(triangleVertices), bufferSize)
+    vk.UnmapMemory(graphicsContext^.device, stagingBufferMemory)
+
+    createBuffer(
+        graphicsContext, bufferSize, { vk.BufferUsageFlag.TRANSFER_DST, vk.BufferUsageFlag.VERTEX_BUFFER },
+        { vk.MemoryPropertyFlag.DEVICE_LOCAL }, &graphicsContext^.vertexBuffer, &graphicsContext^.vertexBufferMemory
+    )
+
+    copyBuffer(graphicsContext, stagingBuffer, graphicsContext^.vertexBuffer, bufferSize)
+    vk.DestroyBuffer(graphicsContext^.device, stagingBuffer, nil)
+    vk.FreeMemory(graphicsContext^.device, stagingBufferMemory, nil)
+}
+
+@(private="file")
+createBuffer :: proc(
+    graphicsContext : ^GraphicsContext, size : int, usage : vk.BufferUsageFlags, properties : vk.MemoryPropertyFlags, buffer : ^vk.Buffer, bufferMemory : ^vk.DeviceMemory
+) {
+    findMemoryType :: proc(graphicsContext : ^GraphicsContext, typeFilter : u32, properties : vk.MemoryPropertyFlags) -> u32 {
+        memProperties : vk.PhysicalDeviceMemoryProperties
+        vk.GetPhysicalDeviceMemoryProperties(graphicsContext^.physicalDevice, &memProperties)
+        for i in 0..<memProperties.memoryTypeCount {
+            if typeFilter & (1 << i) != 0 && (memProperties.memoryTypes[i].propertyFlags & properties) == properties {
+                return i
+            }
+        }
+        log(.ERROR, "Failed to find suitable memory type!")
+        panic("Failed to find suitable memory type!")
+    }
+
+    bufferInfo : vk.BufferCreateInfo = {
+        sType                 = vk.StructureType.BUFFER_CREATE_INFO,
+        pNext                 = nil,
+        flags                 = {},
+        size                  = (vk.DeviceSize)(size),
+        usage                 = usage,
+        sharingMode           = vk.SharingMode.EXCLUSIVE,
+        queueFamilyIndexCount = 0,
+        pQueueFamilyIndices   = nil,
+    }
+    if vk.CreateBuffer(graphicsContext^.device, &bufferInfo, nil, buffer) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to create vertex buffer!")
+        panic("Failed to create vertex buffer!")
+    }
+
+    memRequirements : vk.MemoryRequirements
+    vk.GetBufferMemoryRequirements(graphicsContext^.device, buffer^, &memRequirements)
+    allocInfo : vk.MemoryAllocateInfo = {
+        sType           = vk.StructureType.MEMORY_ALLOCATE_INFO,
+        pNext           = nil,
+        allocationSize  = memRequirements.size,
+        memoryTypeIndex = findMemoryType(graphicsContext, memRequirements.memoryTypeBits, properties),
+    }
+    if vk.AllocateMemory(graphicsContext^.device, &allocInfo, nil, bufferMemory) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to allocate vertex buffer memory!")
+        panic("Failed to allocate vertex buffer memory!")
+    }
+    vk.BindBufferMemory(graphicsContext^.device, buffer^, bufferMemory^, 0)
+}
+
+@(private="file")
 createCommandBuffers :: proc(graphicsContext : ^GraphicsContext) {
     graphicsContext^.commandBuffers = make([]vk.CommandBuffer, MAX_FRAMES_IN_FLIGHT)
     allocInfo : vk.CommandBufferAllocateInfo = {
@@ -907,6 +1056,8 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
     vk.CmdBeginRenderPass(commandBuffer^, &renderPassInfo, vk.SubpassContents.INLINE)
     vk.CmdBindPipeline(commandBuffer^, vk.PipelineBindPoint.GRAPHICS, graphicsContext.pipelines[0])
 
+    vk.CmdBindVertexBuffers(commandBuffer^, 0, 1, raw_data([]vk.Buffer{ graphicsContext^.vertexBuffer }), raw_data([]vk.DeviceSize{ 0 }))
+
     viewport : vk.Viewport = {
         x        = 0,
         y        = 0,
@@ -923,7 +1074,7 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
     }
     vk.CmdSetScissor(commandBuffer^, 0, 1, &scissor)
 
-    vk.CmdDraw(commandBuffer^, 3, 1, 0, 0)
+    vk.CmdDraw(commandBuffer^, (u32)(len(triangleVertices)), 1, 0, 0)
 
     vk.CmdEndRenderPass(commandBuffer^)
     if vk.EndCommandBuffer(commandBuffer^) != vk.Result.SUCCESS {
@@ -950,6 +1101,8 @@ recreateSwapchain :: proc(graphicsContext : ^GraphicsContext) {
 
 clanupVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     vk.DeviceWaitIdle(graphicsContext^.device)
+    vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.vertexBuffer, nil)
+    vk.FreeMemory(graphicsContext^.device, graphicsContext^.vertexBufferMemory, nil)
     cleanupSwapchain(graphicsContext)
     for index in 0..<len(graphicsContext^.pipelines) {
         vk.DestroyPipeline(graphicsContext^.device, graphicsContext^.pipelines[index], nil)
