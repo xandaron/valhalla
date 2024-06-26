@@ -3,6 +3,7 @@ package Asgard
 import "core:c"
 import "core:os"
 import "core:mem"
+import "core:fmt"
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
@@ -173,7 +174,7 @@ createInstance :: proc(graphicsContext : ^GraphicsContext) {
                 continue instance_extension_outer_loop
             }
         }
-        log(.ERROR, "Failed to find required extension: {}", name)
+        log(.ERROR, fmt.aprintf("Failed to find required extension: {}", name))
         panic("Failed to find required extension")
     }
     
@@ -186,7 +187,7 @@ createInstance :: proc(graphicsContext : ^GraphicsContext) {
                     continue instance_extension2_outer_loop
                 }
             }
-            log(.WARNING, "Failed to find requested extension: {}", name)
+            log(.WARNING, fmt.aprintf("Failed to find requested extension: {}", name))
         }
     }
 
@@ -215,7 +216,7 @@ createInstance :: proc(graphicsContext : ^GraphicsContext) {
                     continue instance_layers_outer_loop
                 }
             }
-            log(.WARNING, "Failed to find requested layer: {}", name)
+            log(.WARNING, fmt.aprintf("Failed to find requested layer: {}", name))
         }
         instanceInfo.enabledLayerCount = (u32)(len(supportedLayers))
         instanceInfo.ppEnabledLayerNames = raw_data(supportedLayers)
@@ -526,7 +527,7 @@ createImageViews :: proc(graphicsContext : ^GraphicsContext) {
             },
         }
         if vk.CreateImageView(graphicsContext^.device, &createInfo, nil, &graphicsContext^.swapchainImageViews[index]) != vk.Result.SUCCESS {
-            log(.ERROR, "Failed to create image view {}", index)
+            log(.ERROR, fmt.aprintf("Failed to create image view {}", index))
             panic("Failed to create image view")
         }
     }

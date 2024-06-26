@@ -35,11 +35,12 @@ initDebuger :: proc() {
     }
     os.close(fileHandle)
     
-    log(.MESSAGE, "Created log file! Dir: {}", logPath)
+    log(.MESSAGE, fmt.aprintf("Created log file! Dir: {}", logPath))
 }
 
 @(private="file")
 getDateTimeToString :: proc() -> string {
+    //To-Do: There has to be a better way of doing this.
     now := t.now()
     year, month, day := t.date(now)
     dateTime : dt.DateTime = {
@@ -61,8 +62,8 @@ getDateTimeToString :: proc() -> string {
     return str
 }
 
-log :: proc(flag : MessageFlag, message : string, args : ..any) {
-    str : string = fmt.aprintfln(strings.concatenate({"[{}] ", message}), args={messageFlagToString(flag), args[:]})
+log :: proc(flag : MessageFlag, message : string) {
+    str : string = fmt.aprintfln(strings.concatenate({"[{}] ", message}), messageFlagToString(flag))
     defer delete(str)
     fmt.print(str)
     fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_APPEND))
@@ -136,7 +137,7 @@ vkDebugCallback :: proc "std" (
     pUserData       : rawptr
 ) -> b32 {
     context = runtime.default_context()
-    log(vkDecodeSeverity(messageSeverity), "Vulkan validation layer ({}):\n\t{}", vkDecodeMessageTypeFlag(messageType), pCallbackData.pMessage);
+    log(vkDecodeSeverity(messageSeverity), fmt.aprintf("Vulkan validation layer ({}):\n{}\n", vkDecodeMessageTypeFlag(messageType), pCallbackData.pMessage));
     return false
 }
 
