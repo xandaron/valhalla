@@ -19,23 +19,29 @@ MessageFlag :: enum {
 }
 
 @(private="file")
+fileLogging : bool = true
+
+@(private="file")
 logPath : string = getDateTimeToString()
 
 @(init)
 initDebuger :: proc() {
     debugMemory()
 
-    fmt.println("Hello World!")
-    logPath = getDateTimeToString()
+    fmt.println("Debugging:")
 
-    fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_CREATE))
-    if (err != 0) {
-        fmt.printfln("Log file could not be created! Filename: {}", logPath)
-        return
+    if fileLogging {
+        logPath = getDateTimeToString()
+
+        fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_CREATE))
+        if (err != 0) {
+            fmt.printfln("Log file could not be created! Filename: {}", logPath)
+            return
+        }
+        os.close(fileHandle)
+        
+        log(.MESSAGE, fmt.aprintf("Created log file! Dir: {}", logPath))
     }
-    os.close(fileHandle)
-    
-    log(.MESSAGE, fmt.aprintf("Created log file! Dir: {}", logPath))
 }
 
 @(private="file")
@@ -66,13 +72,15 @@ log :: proc(flag : MessageFlag, message : string) {
     str : string = fmt.aprintfln(strings.concatenate({"[{}] ", message}), messageFlagToString(flag))
     defer delete(str)
     fmt.print(str)
-    fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_APPEND))
-    defer os.close(fileHandle)
-    if (err != 0) {
-        fmt.println("Log file could not be opened!!!")
-        return
+    if fileLogging {
+        fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_APPEND))
+        defer os.close(fileHandle)
+        if (err != 0) {
+            fmt.println("Log file could not be opened!!!")
+            return
+        }
+        os.write_string(fileHandle, str)
     }
-    os.write_string(fileHandle, str)
 }
 
 @(private="file")

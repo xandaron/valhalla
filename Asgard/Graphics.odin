@@ -8,6 +8,99 @@ import "core:math"
 import t "core:time"
 import "vendor:glfw"
 import vk "vendor:vulkan"
+import im "vendor:stb/image"
+
+// Data structs
+@(private="file")
+Vertex :: struct {
+    position : Vector2,
+    colour   : Vector3,
+    texCoord : Vector2,
+}
+
+@(private="file")
+PipelineType :: enum {
+    STANDARD,
+    COUNT,
+}
+
+@(private="file")
+UniformBufferObject :: struct #align(16) {
+    model      : Matrix4,
+    view       : Matrix4,
+    projection : Matrix4,
+}
+
+@(private="file")
+QueueFamilyIndices :: struct {
+    graphicsFamily : u32,
+    presentFamily  : u32,
+}
+
+@(private="file")
+SwapchainSupportDetails :: struct {
+    capabilities : vk.SurfaceCapabilitiesKHR,
+    formats      : []vk.SurfaceFormatKHR,
+    modes        : []vk.PresentModeKHR,
+}
+
+GraphicsContext :: struct {
+    window                : glfw.WindowHandle,
+    instance              : vk.Instance,
+    debugMessenger        : vk.DebugUtilsMessengerEXT,
+    surface               : vk.SurfaceKHR,
+
+    physicalDevice        : vk.PhysicalDevice,
+    device                : vk.Device,
+
+    queueFamilies         : QueueFamilyIndices,
+    graphicsQueue         : vk.Queue,
+    presentQueue          : vk.Queue,
+
+    swapchain             : vk.SwapchainKHR,
+    swapchainFormat       : vk.SurfaceFormatKHR,
+    swapchainMode         : vk.PresentModeKHR,
+    swapchainExtent       : vk.Extent2D,
+    swapchainImages       : []vk.Image,
+    swapchainImageViews   : []vk.ImageView,
+    swapchainFrameBuffers : []vk.Framebuffer,
+
+    pipelines             : []vk.Pipeline,
+    descriptorSetLayout   : vk.DescriptorSetLayout,
+    pipelineLayouts       : []vk.PipelineLayout,
+    renderPasses          : []vk.RenderPass,
+
+    commandPool           : vk.CommandPool,
+    commandBuffers        : []vk.CommandBuffer,
+
+    imagesAvailable       : []vk.Semaphore,
+    rendersFinished       : []vk.Semaphore,
+    inFlightFrames        : []vk.Fence,
+
+    currentFrame          : u32,
+    framebufferResized    : b8,
+
+    //To-Do: All buffers should be combined into a singular buffer using offsets
+    vertexBuffer          : vk.Buffer,
+    vertexBufferMemory    : vk.DeviceMemory,
+    indexBuffer           : vk.Buffer,
+    indexBufferMemory     : vk.DeviceMemory,
+
+    //Not including these ones
+    uniformBuffers        : [MAX_FRAMES_IN_FLIGHT]vk.Buffer,
+    uniformBuffersMemory  : [MAX_FRAMES_IN_FLIGHT]vk.DeviceMemory,
+    uniformBuffersMapped  : [MAX_FRAMES_IN_FLIGHT]rawptr,
+    descriptorPool        : vk.DescriptorPool,
+    descriptorSets        : []vk.DescriptorSet,
+
+    texture               : vk.Image,
+    textureMemory         : vk.DeviceMemory,
+    textureView           : vk.ImageView,
+    textureSampler        : vk.Sampler,
+
+    //Utility. Will be removed
+    startTime             : t.Time,
+}
 
 // Consts
 @(private="file")
@@ -27,12 +120,6 @@ shaderFiles : []string = { "./assets/shaders/test_vert.spv", "./assets/shaders/t
 
 @(private="file")
 MAX_FRAMES_IN_FLIGHT : u32 : 2
-
-@(private="file")
-Vertex :: struct {
-    position : Vector2,
-    colour   : Vector3,
-}
 
 @(private="file")
 vertexBindingDescription : vk.VertexInputBindingDescription = {
@@ -55,92 +142,26 @@ vertexInputAttributeDescriptions : []vk.VertexInputAttributeDescription = {
         format   = vk.Format.R32G32B32_SFLOAT,
         offset   = (u32)(offset_of(Vertex, colour)),
     },
+    {
+        location = 2,
+        binding  = 0,
+        format   = vk.Format.R32G32_SFLOAT,
+        offset   = (u32)(offset_of(Vertex, texCoord)),
+    },
 }
 
 @(private="file")
 vertices : []Vertex = {
-    {{-0.5, -0.5}, {1.0, 0.0, 0.0}},
-    {{0.5, -0.5}, {0.0, 1.0, 0.0}},
-    {{0.5, 0.5}, {0.0, 0.0, 1.0}},
-    {{-0.5, 0.5}, {1.0, 1.0, 1.0}},
+    {{-0.5, -0.5}, {1.0, 0.0, 0.0}, {1.0, 0.0}},
+    {{ 0.5, -0.5}, {0.0, 1.0, 0.0}, {0.0, 0.0}},
+    {{ 0.5,  0.5}, {0.0, 0.0, 1.0}, {0.0, 1.0}},
+    {{-0.5,  0.5}, {1.0, 1.0, 1.0}, {1.0, 1.0}},
 }
 
 @(private="file")
 indices : []u16 = {
     0, 1, 2, 2, 3, 0
 }
-
-@(private="file")
-UniformBufferObject :: struct #align(16) {
-    model      : Matrix4,
-    view       : Matrix4,
-    projection : Matrix4,
-}
-
-@(private="file")
-PipelineType :: enum {
-    STANDARD,
-    COUNT,
-}
-
-// Data structs
-@(private="file")
-QueueFamilyIndices :: struct {
-    graphicsFamily : u32,
-    presentFamily  : u32,
-}
-
-@(private="file")
-SwapchainSupportDetails :: struct {
-    capabilities : vk.SurfaceCapabilitiesKHR,
-    formats      : []vk.SurfaceFormatKHR,
-    modes        : []vk.PresentModeKHR,
-}
-
-GraphicsContext :: struct {
-    window                : glfw.WindowHandle,
-    instance              : vk.Instance,
-    debugMessenger        : vk.DebugUtilsMessengerEXT,
-    surface               : vk.SurfaceKHR,
-    physicalDevice        : vk.PhysicalDevice,
-    device                : vk.Device,
-    queueFamilies         : QueueFamilyIndices,
-    graphicsQueue         : vk.Queue,
-    presentQueue          : vk.Queue,
-    swapchain             : vk.SwapchainKHR,
-    swapchainFormat       : vk.SurfaceFormatKHR,
-    swapchainMode         : vk.PresentModeKHR,
-    swapchainExtent       : vk.Extent2D,
-    swapchainImages       : []vk.Image,
-    swapchainImageViews   : []vk.ImageView,
-    swapchainFrameBuffers : []vk.Framebuffer,
-    pipelines             : []vk.Pipeline,
-    descriptorSetLayout   : vk.DescriptorSetLayout,
-    pipelineLayouts       : []vk.PipelineLayout,
-    renderPasses          : []vk.RenderPass,
-    commandPool           : vk.CommandPool,
-    commandBuffers        : []vk.CommandBuffer,
-    imagesAvailable       : []vk.Semaphore,
-    rendersFinished       : []vk.Semaphore,
-    inFlightFrames        : []vk.Fence,
-    currentFrame          : u32,
-    framebufferResized    : b8,
-    //To-Do: All buffers should be combined into a singular buffer using offsets
-    vertexBuffer          : vk.Buffer,
-    vertexBufferMemory    : vk.DeviceMemory,
-    indexBuffer           : vk.Buffer,
-    indexBufferMemory     : vk.DeviceMemory,
-    //Not including these ones
-    uniformBuffers        : [MAX_FRAMES_IN_FLIGHT]vk.Buffer,
-    uniformBuffersMemory  : [MAX_FRAMES_IN_FLIGHT]vk.DeviceMemory,
-    uniformBuffersMapped  : [MAX_FRAMES_IN_FLIGHT]rawptr,
-    descriptorPool        : vk.DescriptorPool,
-    descriptorSets        : []vk.DescriptorSet,
-
-    //Utility. Will be removed
-    startTime             : t.Time,
-}
-
 
 
 // Methods
@@ -155,19 +176,29 @@ initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     createSurface(graphicsContext)
     pickPhysicalDevice(graphicsContext)
     createLogicalDevice(graphicsContext)
+
     createSwapchain(graphicsContext)
     createImageViews(graphicsContext)
     createRenderPass(graphicsContext)
+
     createDescriptionSetLayout(graphicsContext)
     createPipeline(graphicsContext)
     createFramebuffers(graphicsContext)
     graphicsContext^.framebufferResized = false
+
     createCommandPool(graphicsContext)
+
+    createTexture(graphicsContext)
+    createTextureView(graphicsContext)
+    createTextureSampler(graphicsContext)
+
     createVertexBuffer(graphicsContext)
     createIndexBuffer(graphicsContext)
+
     createUniformBuffer(graphicsContext)
     createDescriptorPool(graphicsContext)
     createDescriptorSets(graphicsContext)
+
     createCommandBuffers(graphicsContext)
     createSyncObjects(graphicsContext)
     graphicsContext^.currentFrame = 0
@@ -290,10 +321,10 @@ querySwapchainSupport :: proc(physicalDevice : vk.PhysicalDevice, graphicsContex
 
 @(private="file")
 findQueueFamilies :: proc(physicalDevice : vk.PhysicalDevice, graphicsContext : ^GraphicsContext) -> (indices : QueueFamilyIndices, err : b32 = false) {
-    queueFamilyCount : u32;
-    vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nil);
-    queueFamilies := make([]vk.QueueFamilyProperties, queueFamilyCount);
-    vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, raw_data(queueFamilies));
+    queueFamilyCount : u32
+    vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nil)
+    queueFamilies := make([]vk.QueueFamilyProperties, queueFamilyCount)
+    vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, raw_data(queueFamilies))
 
     foundPresentFamily := false
     foundGraphicsFamily := false
@@ -304,10 +335,9 @@ findQueueFamilies :: proc(physicalDevice : vk.PhysicalDevice, graphicsContext : 
             foundGraphicsFamily = true
         }
 
-        presentSupport : b32 = false;
-        vk.GetPhysicalDeviceSurfaceSupportKHR(physicalDevice, (u32)(index), graphicsContext^.surface, &presentSupport);
-        if presentSupport {
-            indices.presentFamily = (u32)(index);
+        presentSupport : b32
+        if vk.GetPhysicalDeviceSurfaceSupportKHR(physicalDevice, (u32)(index), graphicsContext^.surface, &presentSupport); presentSupport {
+            indices.presentFamily = (u32)(index)
             foundPresentFamily = true
         }
 
@@ -320,6 +350,32 @@ findQueueFamilies :: proc(physicalDevice : vk.PhysicalDevice, graphicsContext : 
 
 @(private="file")
 pickPhysicalDevice :: proc(graphicsContext : ^GraphicsContext) {
+    scorePhysicalDevice :: proc(physicalDevice : vk.PhysicalDevice, graphicsContext : ^GraphicsContext) -> (score : u32 = 0) {
+        physicalDeviceProperties : vk.PhysicalDeviceProperties
+        physicalDeviceFeatures : vk.PhysicalDeviceFeatures
+        
+        vk.GetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties)
+        vk.GetPhysicalDeviceFeatures(physicalDevice, &physicalDeviceFeatures)
+
+        indices, err := findQueueFamilies(physicalDevice, graphicsContext)
+        if (err || !physicalDeviceFeatures.geometryShader || !physicalDeviceFeatures.samplerAnisotropy ||
+            !checkDeviceExtensionSupport(physicalDevice) || !swapchainAdequate(physicalDevice, graphicsContext))
+        {
+            return
+        }
+
+        if physicalDeviceProperties.deviceType == vk.PhysicalDeviceType.DISCRETE_GPU {
+            score += 1000
+        }
+
+        if (indices.graphicsFamily == indices.presentFamily) {
+            score += 100
+        }
+
+        score += physicalDeviceProperties.limits.maxImageDimension2D
+        return
+    }
+
     checkDeviceExtensionSupport :: proc(physicalDevice : vk.PhysicalDevice) -> b32 {
         extensionCount : u32
         vk.EnumerateDeviceExtensionProperties(physicalDevice, nil, &extensionCount, nil)
@@ -336,32 +392,10 @@ pickPhysicalDevice :: proc(graphicsContext : ^GraphicsContext) {
         }
         return true
     }
+
     swapchainAdequate :: proc(physicalDevice : vk.PhysicalDevice, graphicsContext : ^GraphicsContext) -> b32 {
         support : SwapchainSupportDetails = querySwapchainSupport(physicalDevice, graphicsContext)
         return len(support.formats) != 0 && len(support.modes) != 0
-    }
-    scorePhysicalDevice :: proc(physicalDevice : vk.PhysicalDevice, graphicsContext : ^GraphicsContext) -> (score : u32 = 0) {
-        physicalDeviceProperties : vk.PhysicalDeviceProperties
-        physicalDeviceFeatures : vk.PhysicalDeviceFeatures
-        
-        vk.GetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties)
-        vk.GetPhysicalDeviceFeatures(physicalDevice, &physicalDeviceFeatures)
-
-        indices, err := findQueueFamilies(physicalDevice, graphicsContext)
-        if (!physicalDeviceFeatures.geometryShader || err || !checkDeviceExtensionSupport(physicalDevice) || !swapchainAdequate(physicalDevice, graphicsContext)) {
-            return
-        }
-
-        if physicalDeviceProperties.deviceType == vk.PhysicalDeviceType.DISCRETE_GPU {
-            score += 1000
-        }
-
-        if (indices.graphicsFamily == indices.presentFamily) {
-            score += 100
-        }
-
-        score += physicalDeviceProperties.limits.maxImageDimension2D
-        return
     }
 
     deviceCount : u32
@@ -425,7 +459,63 @@ createLogicalDevice :: proc(graphicsContext : ^GraphicsContext) {
         append(&queueCreateInfos, queueCreateInfo)
     }
 
-    deviceFeatures : vk.PhysicalDeviceFeatures
+    deviceFeatures : vk.PhysicalDeviceFeatures = {
+        robustBufferAccess                      = false,
+        fullDrawIndexUint32                     = false,
+        imageCubeArray                          = false,
+        independentBlend                        = false,
+        geometryShader                          = false,
+        tessellationShader                      = false,
+        sampleRateShading                       = false,
+        dualSrcBlend                            = false,
+        logicOp                                 = false,
+        multiDrawIndirect                       = false,
+        drawIndirectFirstInstance               = false,
+        depthClamp                              = false,
+        depthBiasClamp                          = false,
+        fillModeNonSolid                        = false,
+        depthBounds                             = false,
+        wideLines                               = false,
+        largePoints                             = false,
+        alphaToOne                              = false,
+        multiViewport                           = false,
+        samplerAnisotropy                       = true,
+        textureCompressionETC2                  = false,
+        textureCompressionASTC_LDR              = false,
+        textureCompressionBC                    = false,
+        occlusionQueryPrecise                   = false,
+        pipelineStatisticsQuery                 = false,
+        vertexPipelineStoresAndAtomics          = false,
+        fragmentStoresAndAtomics                = false,
+        shaderTessellationAndGeometryPointSize  = false,
+        shaderImageGatherExtended               = false,
+        shaderStorageImageExtendedFormats       = false,
+        shaderStorageImageMultisample           = false,
+        shaderStorageImageReadWithoutFormat     = false,
+        shaderStorageImageWriteWithoutFormat    = false,
+        shaderUniformBufferArrayDynamicIndexing = false,
+        shaderSampledImageArrayDynamicIndexing  = false,
+        shaderStorageBufferArrayDynamicIndexing = false,
+        shaderStorageImageArrayDynamicIndexing  = false,
+        shaderClipDistance                      = false,
+        shaderCullDistance                      = false,
+        shaderFloat64                           = false,
+        shaderInt64                             = false,
+        shaderInt16                             = false,
+        shaderResourceResidency                 = false,
+        shaderResourceMinLod                    = false,
+        sparseBinding                           = false,
+        sparseResidencyBuffer                   = false,
+        sparseResidencyImage2D                  = false,
+        sparseResidencyImage3D                  = false,
+        sparseResidency2Samples                 = false,
+        sparseResidency4Samples                 = false,
+        sparseResidency8Samples                 = false,
+        sparseResidency16Samples                = false,
+        sparseResidencyAliased                  = false,
+        variableMultisampleRate                 = false,
+        inheritedQueries                        = false,
+    }
 
     createInfo : vk.DeviceCreateInfo = {
         sType                   = .DEVICE_CREATE_INFO,
@@ -530,31 +620,7 @@ createSwapchain :: proc(graphicsContext : ^GraphicsContext) {
 createImageViews :: proc(graphicsContext : ^GraphicsContext) {
     graphicsContext^.swapchainImageViews = make([]vk.ImageView, len(graphicsContext^.swapchainImages))
     for index in 0..<len(graphicsContext^.swapchainImages) {
-        createInfo : vk.ImageViewCreateInfo = {
-            sType            = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
-            pNext            = nil,
-            flags            = {},
-            image            = graphicsContext^.swapchainImages[index],
-            viewType         = vk.ImageViewType.D2,
-            format           = graphicsContext^.swapchainFormat.format,
-            components       = { 
-                r = vk.ComponentSwizzle.IDENTITY,
-                g = vk.ComponentSwizzle.IDENTITY,
-                b = vk.ComponentSwizzle.IDENTITY, 
-                a = vk.ComponentSwizzle.IDENTITY 
-            },
-            subresourceRange = {
-                aspectMask     = { vk.ImageAspectFlag.COLOR },
-                baseMipLevel   = 0,
-                levelCount     = 1,
-                baseArrayLayer = 0,
-                layerCount     = 1,
-            },
-        }
-        if vk.CreateImageView(graphicsContext^.device, &createInfo, nil, &graphicsContext^.swapchainImageViews[index]) != vk.Result.SUCCESS {
-            log(.ERROR, fmt.aprintf("Failed to create image view {}", index))
-            panic("Failed to create image view")
-        }
+        graphicsContext^.swapchainImageViews[index] = createImageView(graphicsContext, graphicsContext^.swapchainImages[index], graphicsContext^.swapchainFormat.format)
     }
 }
 
@@ -626,12 +692,19 @@ createDescriptionSetLayout :: proc(graphicsContext : ^GraphicsContext) {
         stageFlags         = { vk.ShaderStageFlag.VERTEX },
         pImmutableSamplers = nil,
     }
+    samplerLayoutBinding : vk.DescriptorSetLayoutBinding = {
+        binding            = 1,
+        descriptorType     = vk.DescriptorType.COMBINED_IMAGE_SAMPLER,
+        descriptorCount    = 1,
+        stageFlags         = { vk.ShaderStageFlag.FRAGMENT },
+        pImmutableSamplers = nil,
+    }
     layoutInfo : vk.DescriptorSetLayoutCreateInfo = {
         sType        = vk.StructureType.DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         pNext        = nil,
         flags        = {},
-        bindingCount = 1,
-        pBindings    = &uboLayoutBinding,
+        bindingCount = 2,
+        pBindings    = raw_data([]vk.DescriptorSetLayoutBinding{ uboLayoutBinding, samplerLayoutBinding }),
     }
     if vk.CreateDescriptorSetLayout(graphicsContext^.device, &layoutInfo, nil, &graphicsContext^.descriptorSetLayout) != vk.Result.SUCCESS {
         log(.ERROR, "Failed to create descriptor set layout!")
@@ -866,6 +939,213 @@ createCommandPool :: proc(graphicsContext : ^GraphicsContext) {
 }
 
 @(private="file")
+createTexture :: proc(graphicsContext : ^GraphicsContext) {
+    createImage :: proc(
+        graphicsContext : ^GraphicsContext, width, height : u32, format : vk.Format, tiling : vk.ImageTiling, usage : vk.ImageUsageFlags,
+        properties : vk.MemoryPropertyFlags, image : ^vk.Image, imageMemory : ^vk.DeviceMemory
+    ) {
+        imageInfo : vk.ImageCreateInfo = {
+            sType                 = vk.StructureType.IMAGE_CREATE_INFO,
+            pNext                 = nil,
+            flags                 = {},
+            imageType             = vk.ImageType.D2,
+            format                = format,
+            extent                = { width, height, 1 },
+            mipLevels             = 1,
+            arrayLayers           = 1,
+            samples               = { vk.SampleCountFlag._1 },
+            tiling                = tiling,
+            usage                 = usage,
+            sharingMode           = vk.SharingMode.EXCLUSIVE,
+            queueFamilyIndexCount = 0,
+            pQueueFamilyIndices   = nil,
+            initialLayout         = vk.ImageLayout.UNDEFINED,
+        }
+        if vk.CreateImage(graphicsContext^.device, &imageInfo, nil, &graphicsContext^.texture) != vk.Result.SUCCESS {
+            log(.ERROR, "Failed to create texture!")
+            panic("Failed to create texture!")
+        }
+
+        memRequirements : vk.MemoryRequirements
+        vk.GetImageMemoryRequirements(graphicsContext^.device, image^, &memRequirements)
+        allocInfo : vk.MemoryAllocateInfo = {
+            sType           = vk.StructureType.MEMORY_ALLOCATE_INFO,
+            pNext           = nil,
+            allocationSize  = memRequirements.size,
+            memoryTypeIndex = findMemoryType(graphicsContext, memRequirements.memoryTypeBits, properties),
+        }
+        if vk.AllocateMemory(graphicsContext^.device, &allocInfo, nil, imageMemory) != vk.Result.SUCCESS {
+            log(.ERROR, "Failed to allocate image memory!")
+            panic("Failed to allocate image memory!")
+        }
+        vk.BindImageMemory(graphicsContext^.device, image^, imageMemory^, 0)
+    }
+
+    transitionImageLayout :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format, oldLayout, newLayout : vk.ImageLayout) {
+        commandBuffer := beginSingleTimeCommands(graphicsContext)
+        barrier : vk.ImageMemoryBarrier = {
+            sType               = vk.StructureType.IMAGE_MEMORY_BARRIER,
+            pNext               = nil,
+            srcAccessMask       = {},
+            dstAccessMask       = {},
+            oldLayout           = oldLayout,
+            newLayout           = newLayout,
+            srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+            dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+            image               = image,
+            subresourceRange    = vk.ImageSubresourceRange{
+                aspectMask     = { vk.ImageAspectFlag.COLOR },
+                baseMipLevel   = 0,
+                levelCount     = 1,
+                baseArrayLayer = 0,
+                layerCount     = 1,
+            },
+        }
+        sourceStage, destinationStage : vk.PipelineStageFlags
+        if oldLayout == vk.ImageLayout.UNDEFINED && newLayout == vk.ImageLayout.TRANSFER_DST_OPTIMAL {
+            barrier.srcAccessMask = {}
+            barrier.dstAccessMask = { vk.AccessFlag.TRANSFER_WRITE }
+            sourceStage = { vk.PipelineStageFlag.TOP_OF_PIPE }
+            destinationStage = { vk.PipelineStageFlag.TRANSFER }
+        } else if (oldLayout == vk.ImageLayout.TRANSFER_DST_OPTIMAL && newLayout == vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL) {
+            barrier.srcAccessMask = { vk.AccessFlag.TRANSFER_WRITE }
+            barrier.dstAccessMask = { vk.AccessFlag.SHADER_READ }
+            sourceStage = { vk.PipelineStageFlag.TRANSFER }
+            destinationStage = { vk.PipelineStageFlag.FRAGMENT_SHADER }
+        } else {
+            log(.ERROR, "Unsupported layout transition!")
+            panic("Unsupported layout transition!")
+        }
+        vk.CmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, {}, 0, nil, 0, nil, 1, &barrier)
+        endSingleTimeCommands(graphicsContext, commandBuffer)
+    }
+
+    copyBufferToImage :: proc(graphicsContext : ^GraphicsContext, buffer : vk.Buffer, image : vk.Image, width, height : i32) {
+        commandBuffer := beginSingleTimeCommands(graphicsContext)
+        region : vk.BufferImageCopy = {
+            bufferOffset      = 0,
+            bufferRowLength   = 0,
+            bufferImageHeight = 0,
+            imageSubresource  = vk.ImageSubresourceLayers{
+                aspectMask     = { vk.ImageAspectFlag.COLOR },
+                mipLevel       = 0,
+                baseArrayLayer = 0,
+                layerCount     = 1,
+            },
+            imageOffset       = vk.Offset3D{
+                x = 0,
+                y = 0,
+                z = 0,
+            },
+            imageExtent       = vk.Extent3D{
+                width  = (u32)(width),
+                height = (u32)(height),
+                depth  = 1,
+            },
+        }
+        vk.CmdCopyBufferToImage(commandBuffer, buffer, image, vk.ImageLayout.TRANSFER_DST_OPTIMAL, 1, &region)
+        endSingleTimeCommands(graphicsContext, commandBuffer)
+    }
+
+    texWidth, texHeight, texChannels : i32
+    pixels := im.load("./assets/textures/statue.jpg", &texWidth, &texHeight, &texChannels, 4)
+    defer im.image_free(pixels)
+    imageSize : int = (int)(texWidth * texHeight * 4)
+    if pixels == nil {
+        log(.ERROR, "Failed to load texture!")
+        panic("Failed to load texture!")
+    }
+
+    stagingBuffer : vk.Buffer
+    stagingBufferMemory : vk.DeviceMemory
+    createBuffer(
+        graphicsContext, imageSize, { vk.BufferUsageFlag.TRANSFER_SRC }, { vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT },
+        &stagingBuffer, &stagingBufferMemory
+    )
+
+    data : rawptr
+    vk.MapMemory(graphicsContext^.device, stagingBufferMemory, 0, (vk.DeviceSize)(imageSize), {}, &data)
+    mem.copy(data, pixels, imageSize)
+    vk.UnmapMemory(graphicsContext^.device, stagingBufferMemory)
+
+    createImage(
+        graphicsContext, (u32)(texWidth), (u32)(texHeight), vk.Format.R8G8B8A8_SRGB, vk.ImageTiling.OPTIMAL, { vk.ImageUsageFlag.TRANSFER_DST, vk.ImageUsageFlag.SAMPLED },
+        { vk.MemoryPropertyFlag.DEVICE_LOCAL }, &graphicsContext^.texture, &graphicsContext^.textureMemory
+    )
+    transitionImageLayout(graphicsContext, graphicsContext^.texture, vk.Format.R8G8B8A8_SRGB, vk.ImageLayout.UNDEFINED, vk.ImageLayout.TRANSFER_DST_OPTIMAL)
+    copyBufferToImage(graphicsContext, stagingBuffer, graphicsContext^.texture, texWidth, texHeight)
+    transitionImageLayout(graphicsContext, graphicsContext^.texture, vk.Format.R8G8B8A8_SRGB, vk.ImageLayout.TRANSFER_DST_OPTIMAL, vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL)
+
+    vk.DestroyBuffer(graphicsContext^.device, stagingBuffer, nil)
+    vk.FreeMemory(graphicsContext^.device, stagingBufferMemory, nil)
+}
+
+@(private="file")
+createTextureView :: proc(graphicsContext : ^GraphicsContext) {
+    graphicsContext^.textureView = createImageView(graphicsContext, graphicsContext^.texture, vk.Format.R8G8B8A8_SRGB)
+}
+
+@(private="file")
+createImageView :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format) -> (imageView : vk.ImageView) {
+    viewInfo : vk.ImageViewCreateInfo = {
+        sType            = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+        pNext            = nil,
+        flags            = {},
+        image            = image,
+        viewType         = vk.ImageViewType.D2,
+        format           = format,
+        components       = {
+            r = vk.ComponentSwizzle.IDENTITY,
+            g = vk.ComponentSwizzle.IDENTITY,
+            b = vk.ComponentSwizzle.IDENTITY, 
+            a = vk.ComponentSwizzle.IDENTITY,
+        },
+        subresourceRange = vk.ImageSubresourceRange{
+            aspectMask     = { vk.ImageAspectFlag.COLOR },
+            baseMipLevel   = 0,
+            levelCount     = 1,
+            baseArrayLayer = 0,
+            layerCount     = 1,
+        },
+    }
+    if vk.CreateImageView(graphicsContext^.device, &viewInfo, nil, &imageView) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to create image view!")
+        panic("Failed to create image view!")
+    }
+    return imageView;
+}
+
+@(private="file")
+createTextureSampler :: proc(graphicsContext : ^GraphicsContext) {
+    properties : vk.PhysicalDeviceProperties
+    vk.GetPhysicalDeviceProperties(graphicsContext^.physicalDevice, &properties)
+    samplerInfo : vk.SamplerCreateInfo = {
+        sType                   = vk.StructureType.SAMPLER_CREATE_INFO,
+        pNext                   = nil,
+        flags                   = {},
+        magFilter               = vk.Filter.LINEAR,
+        minFilter               = vk.Filter.LINEAR,
+        mipmapMode              = vk.SamplerMipmapMode.LINEAR,
+        addressModeU            = vk.SamplerAddressMode.REPEAT,
+        addressModeV            = vk.SamplerAddressMode.REPEAT,
+        addressModeW            = vk.SamplerAddressMode.REPEAT,
+        mipLodBias              = 0,
+        anisotropyEnable        = true,
+        maxAnisotropy           = properties.limits.maxSamplerAnisotropy,
+        compareEnable           = false,
+        compareOp               = vk.CompareOp.ALWAYS,
+        minLod                  = 0,
+        maxLod                  = 0,
+        borderColor             = vk.BorderColor.INT_OPAQUE_BLACK,
+        unnormalizedCoordinates = false,
+    }
+    if vk.CreateSampler(graphicsContext^.device, &samplerInfo, nil, &graphicsContext^.textureSampler) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to create texture sampler!")
+        panic("Failed to create texture sampler!")
+    }
+}
+
+@(private="file")
 createVertexBuffer :: proc(graphicsContext : ^GraphicsContext) {
     loadToGPUBuffer(
         graphicsContext, size_of(vertices[0]) * len(vertices), raw_data(vertices),
@@ -887,49 +1167,15 @@ loadToGPUBuffer :: proc(
     graphicsContext : ^GraphicsContext, bufferSize : int, srcData : rawptr, dstBuffer : ^vk.Buffer, dstBufferMemory : ^vk.DeviceMemory, bufferType : vk.BufferUsageFlag
 ) {
     copyBuffer :: proc(graphicsContext : ^GraphicsContext, srcBuffer, dstBuffer : vk.Buffer, size : int) {
-        allocInfo : vk.CommandBufferAllocateInfo = {
-            sType              = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
-            pNext              = nil,
-            commandPool        = graphicsContext^.commandPool,
-            level              = vk.CommandBufferLevel.PRIMARY,
-            commandBufferCount = 1,
-        }
-
-        commandBuffer : vk.CommandBuffer
-        vk.AllocateCommandBuffers(graphicsContext^.device, &allocInfo, &commandBuffer)
-        beginInfo : vk.CommandBufferBeginInfo = {
-            sType            = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
-            pNext            = nil,
-            flags            = { vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT },
-            pInheritanceInfo = nil,
-        }
-        vk.BeginCommandBuffer(commandBuffer, &beginInfo)
-
+        commandBuffer : vk.CommandBuffer = beginSingleTimeCommands(graphicsContext)
         copyRegion : vk.BufferCopy = {
             srcOffset = 0,
             dstOffset = 0,
             size      = (vk.DeviceSize)(size),
         }
-        vk.CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion)
-
-        vk.EndCommandBuffer(commandBuffer)
-
-        submitInfo : vk.SubmitInfo = {
-            sType                = vk.StructureType.SUBMIT_INFO,
-            pNext                = nil,
-            waitSemaphoreCount   = 0,
-            pWaitSemaphores      = nil,
-            pWaitDstStageMask    = nil,
-            commandBufferCount   = 1,
-            pCommandBuffers      = &commandBuffer,
-            signalSemaphoreCount = 0,
-            pSignalSemaphores    = nil,
-        }
-        vk.QueueSubmit(graphicsContext^.graphicsQueue, 1, &submitInfo, 0)
-        vk.QueueWaitIdle(graphicsContext^.graphicsQueue)
-        vk.FreeCommandBuffers(graphicsContext^.device, graphicsContext^.commandPool, 1, &commandBuffer)
+        vk.CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+        endSingleTimeCommands(graphicsContext, commandBuffer);
     }
-
     stagingBuffer : vk.Buffer
     stagingBufferMemory : vk.DeviceMemory
     createBuffer(
@@ -953,6 +1199,46 @@ loadToGPUBuffer :: proc(
 }
 
 @(private="file")
+beginSingleTimeCommands :: proc(graphicsContext : ^GraphicsContext) -> (commandBuffer : vk.CommandBuffer) {
+    allocInfo : vk.CommandBufferAllocateInfo = {
+        sType              = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
+        pNext              = nil,
+        commandPool        = graphicsContext^.commandPool,
+        level              = vk.CommandBufferLevel.PRIMARY,
+        commandBufferCount = 1,
+    }
+    vk.AllocateCommandBuffers(graphicsContext^.device, &allocInfo, &commandBuffer)
+    beginInfo : vk.CommandBufferBeginInfo = {
+        sType            = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
+        pNext            = nil,
+        flags            = { vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT },
+        pInheritanceInfo = nil,
+    }
+    vk.BeginCommandBuffer(commandBuffer, &beginInfo)
+    return
+}
+
+@(private="file")
+endSingleTimeCommands :: proc(graphicsContext : ^GraphicsContext, commandBuffer : vk.CommandBuffer) {
+    commandBuffer := commandBuffer
+    vk.EndCommandBuffer(commandBuffer)
+    submitInfo : vk.SubmitInfo = {
+        sType                = vk.StructureType.SUBMIT_INFO,
+        pNext                = nil,
+        waitSemaphoreCount   = 0,
+        pWaitSemaphores      = nil,
+        pWaitDstStageMask    = nil,
+        commandBufferCount   = 1,
+        pCommandBuffers      = &commandBuffer,
+        signalSemaphoreCount = 0,
+        pSignalSemaphores    = nil,
+    }
+    vk.QueueSubmit(graphicsContext^.graphicsQueue, 1, &submitInfo, 0)
+    vk.QueueWaitIdle(graphicsContext^.graphicsQueue)
+    vk.FreeCommandBuffers(graphicsContext^.device, graphicsContext^.commandPool, 1, &commandBuffer)
+}
+
+@(private="file")
 createUniformBuffer :: proc(graphicsContext : ^GraphicsContext) {
     for i in 0..<MAX_FRAMES_IN_FLIGHT {
         createBuffer(
@@ -967,18 +1253,6 @@ createUniformBuffer :: proc(graphicsContext : ^GraphicsContext) {
 createBuffer :: proc(
     graphicsContext : ^GraphicsContext, size : int, usage : vk.BufferUsageFlags, properties : vk.MemoryPropertyFlags, buffer : ^vk.Buffer, bufferMemory : ^vk.DeviceMemory
 ) {
-    findMemoryType :: proc(graphicsContext : ^GraphicsContext, typeFilter : u32, properties : vk.MemoryPropertyFlags) -> u32 {
-        memProperties : vk.PhysicalDeviceMemoryProperties
-        vk.GetPhysicalDeviceMemoryProperties(graphicsContext^.physicalDevice, &memProperties)
-        for i in 0..<memProperties.memoryTypeCount {
-            if typeFilter & (1 << i) != 0 && (memProperties.memoryTypes[i].propertyFlags & properties) == properties {
-                return i
-            }
-        }
-        log(.ERROR, "Failed to find suitable memory type!")
-        panic("Failed to find suitable memory type!")
-    }
-
     bufferInfo : vk.BufferCreateInfo = {
         sType                 = vk.StructureType.BUFFER_CREATE_INFO,
         pNext                 = nil,
@@ -1010,18 +1284,37 @@ createBuffer :: proc(
 }
 
 @(private="file")
+findMemoryType :: proc(graphicsContext : ^GraphicsContext, typeFilter : u32, properties : vk.MemoryPropertyFlags) -> u32 {
+    memProperties : vk.PhysicalDeviceMemoryProperties
+    vk.GetPhysicalDeviceMemoryProperties(graphicsContext^.physicalDevice, &memProperties)
+    for i in 0..<memProperties.memoryTypeCount {
+        if typeFilter & (1 << i) != 0 && (memProperties.memoryTypes[i].propertyFlags & properties) == properties {
+            return i
+        }
+    }
+    log(.ERROR, "Failed to find suitable memory type!")
+    panic("Failed to find suitable memory type!")
+}
+
+@(private="file")
 createDescriptorPool :: proc(graphicsContext : ^GraphicsContext) {
-    poolSize : vk.DescriptorPoolSize = {
-        type            = vk.DescriptorType.UNIFORM_BUFFER,
-        descriptorCount = MAX_FRAMES_IN_FLIGHT,
+    poolSize : []vk.DescriptorPoolSize = {
+        {
+            type            = vk.DescriptorType.UNIFORM_BUFFER,
+            descriptorCount = MAX_FRAMES_IN_FLIGHT,
+        },
+        {
+            type            = vk.DescriptorType.COMBINED_IMAGE_SAMPLER,
+            descriptorCount = MAX_FRAMES_IN_FLIGHT,
+        },
     }
     poolInfo : vk.DescriptorPoolCreateInfo = {
         sType         = vk.StructureType.DESCRIPTOR_POOL_CREATE_INFO,
         pNext         = nil,
         flags         = {},
         maxSets       = MAX_FRAMES_IN_FLIGHT,
-        poolSizeCount = 1,
-        pPoolSizes    = &poolSize,
+        poolSizeCount = 2,
+        pPoolSizes    = raw_data(poolSize),
     }
     if vk.CreateDescriptorPool(graphicsContext^.device, &poolInfo, nil, &graphicsContext^.descriptorPool) != vk.Result.SUCCESS {
         log(.ERROR, "Failed to create descriptor pool!")
@@ -1054,19 +1347,38 @@ createDescriptorSets :: proc(graphicsContext : ^GraphicsContext) {
             offset = 0,
             range  = size_of(UniformBufferObject),
         }
-        descriptorWrite : vk.WriteDescriptorSet = {
-            sType            = vk.StructureType.WRITE_DESCRIPTOR_SET,
-            pNext            = nil,
-            dstSet           = graphicsContext^.descriptorSets[index],
-            dstBinding       = 0,
-            dstArrayElement  = 0,
-            descriptorCount  = 1,
-            descriptorType   = vk.DescriptorType.UNIFORM_BUFFER,
-            pImageInfo       = nil,
-            pBufferInfo      = &bufferInfo,
-            pTexelBufferView = nil,
+        imageInfo : vk.DescriptorImageInfo = {
+            sampler     = graphicsContext^.textureSampler,
+            imageView   = graphicsContext^.textureView,
+            imageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
         }
-        vk.UpdateDescriptorSets(graphicsContext^.device, 1, &descriptorWrite, 0, nil)
+        descriptorWrite : []vk.WriteDescriptorSet = {
+            {
+                sType            = vk.StructureType.WRITE_DESCRIPTOR_SET,
+                pNext            = nil,
+                dstSet           = graphicsContext^.descriptorSets[index],
+                dstBinding       = 0,
+                dstArrayElement  = 0,
+                descriptorCount  = 1,
+                descriptorType   = vk.DescriptorType.UNIFORM_BUFFER,
+                pImageInfo       = nil,
+                pBufferInfo      = &bufferInfo,
+                pTexelBufferView = nil,
+            },
+            {
+                sType            = vk.StructureType.WRITE_DESCRIPTOR_SET,
+                pNext            = nil,
+                dstSet           = graphicsContext^.descriptorSets[index],
+                dstBinding       = 1,
+                dstArrayElement  = 0,
+                descriptorCount  = 1,
+                descriptorType   = vk.DescriptorType.COMBINED_IMAGE_SAMPLER,
+                pImageInfo       = &imageInfo,
+                pBufferInfo      = nil,
+                pTexelBufferView = nil,
+            },
+        }
+        vk.UpdateDescriptorSets(graphicsContext^.device, 2, raw_data(descriptorWrite), 0, nil)
     }
 }
 
@@ -1241,7 +1553,7 @@ updateUniformBuffer :: proc(graphicsContext : ^GraphicsContext) {
     delta := t.duration_seconds(t.since(graphicsContext^.startTime))
     ubo : UniformBufferObject = {
         model      = rotationZ4((f32)(delta) * math.to_radians((f32)(90.0))),
-        view       = lookAt(Vector3{0, 0, -2}, Vector3{0, 0, 0}, Vector3{0, 1, 0}),
+        view       = lookAt(Vector3{0, -2, -2}, Vector3{0, 0, 0}, Vector3{0, 1, -1}),
         projection = perspective(math.to_radians((f32)(45.0)), (f32)(graphicsContext^.swapchainExtent.width) / (f32)(graphicsContext^.swapchainExtent.height), 0.1, 100),
     }
     mem.copy(graphicsContext^.uniformBuffersMapped[graphicsContext^.currentFrame], &ubo, size_of(UniformBufferObject))
@@ -1269,6 +1581,10 @@ clanupVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     vk.FreeMemory(graphicsContext^.device, graphicsContext^.indexBufferMemory, nil)
     vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.vertexBuffer, nil)
     vk.FreeMemory(graphicsContext^.device, graphicsContext^.vertexBufferMemory, nil)
+    vk.DestroySampler(graphicsContext^.device, graphicsContext^.textureSampler, nil)
+    vk.DestroyImageView(graphicsContext^.device, graphicsContext^.textureView, nil)
+    vk.DestroyImage(graphicsContext^.device, graphicsContext^.texture, nil)
+    vk.FreeMemory(graphicsContext^.device, graphicsContext^.textureMemory, nil)
     for i in 0..<MAX_FRAMES_IN_FLIGHT {
         vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.uniformBuffers[i], nil)
         vk.FreeMemory(graphicsContext^.device, graphicsContext^.uniformBuffersMemory[i], nil)
