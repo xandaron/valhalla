@@ -8,10 +8,6 @@ import "vendor:glfw"
 
 APP_VERSION : u32 : (0<<22) | (0<<12) | (1)
 
-Vector2 :: distinct [2]f32
-Vector3 :: distinct [3]f32
-Vector4 :: distinct [4]f32
-
 frameCount : u16 = 0
 fpsTimer : t.Time = t.now()
 
@@ -49,9 +45,12 @@ main :: proc() {
     initVkGraphics(&graphicsContext)
     defer clanupVkGraphics(&graphicsContext)
 
+    lastFrameTime := t.now()
+    graphicsContext.startTime = t.now()
     for (!glfw.WindowShouldClose(window)) {
         glfw.PollEvents()
         drawFrame(&graphicsContext)
+        lastFrameTime = t.now()
         calcFrameRate(window)
     }
 }
@@ -60,6 +59,7 @@ calcFrameRate :: proc(window : glfw.WindowHandle) {
     frameCount += 1
     if timeDelta := t.duration_seconds(t.since(fpsTimer)); timeDelta >= 1 {
         glfw.SetWindowTitle(window, strings.clone_to_cstring(fmt.aprintf("{:.2f}", (f64)(frameCount) / timeDelta)))
+        frameCount = 0
         fpsTimer = t.now()
     }
 }

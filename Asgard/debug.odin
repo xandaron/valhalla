@@ -30,7 +30,7 @@ initDebuger :: proc() {
 
     fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_CREATE))
     if (err != 0) {
-        fmt.print("Log file could not be created!!!")
+        fmt.printfln("Log file could not be created! Filename: {}", logPath)
         return
     }
     os.close(fileHandle)
@@ -58,7 +58,7 @@ getDateTimeToString :: proc() -> string {
     minutes := math.floor(seconds / t.SECONDS_PER_MINUTE)
     seconds -= minutes * t.SECONDS_PER_MINUTE
 
-    str : string = fmt.aprint("./logs/", dateTime.year, dateTime.month, dateTime.day, hours, minutes, seconds, ".log", sep="")
+    str : string = fmt.aprintf("./logs/{:4i}{:2i}{:2i}{:2.0f}{:2.0f}{:2.0f}{}", dateTime.year, dateTime.month, dateTime.day, hours, minutes, seconds, ".log")
     return str
 }
 
@@ -69,7 +69,7 @@ log :: proc(flag : MessageFlag, message : string) {
     fileHandle, err := os.open(logPath, mode=(os.O_WRONLY|os.O_APPEND))
     defer os.close(fileHandle)
     if (err != 0) {
-        fmt.print("Log file could not be opened!!!")
+        fmt.println("Log file could not be opened!!!")
         return
     }
     os.write_string(fileHandle, str)

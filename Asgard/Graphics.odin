@@ -4,6 +4,8 @@ import "core:c"
 import "core:os"
 import "core:mem"
 import "core:fmt"
+import "core:math"
+import t "core:time"
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
@@ -69,6 +71,13 @@ indices : []u16 = {
 }
 
 @(private="file")
+UniformBufferObject :: struct #align(16) {
+    model      : Matrix4,
+    view       : Matrix4,
+    projection : Matrix4,
+}
+
+@(private="file")
 PipelineType :: enum {
     STANDARD,
     COUNT,
@@ -106,6 +115,7 @@ GraphicsContext :: struct {
     swapchainImageViews   : []vk.ImageView,
     swapchainFrameBuffers : []vk.Framebuffer,
     pipelines             : []vk.Pipeline,
+    descriptorSetLayout   : vk.DescriptorSetLayout,
     pipelineLayouts       : []vk.PipelineLayout,
     renderPasses          : []vk.RenderPass,
     commandPool           : vk.CommandPool,
@@ -115,12 +125,23 @@ GraphicsContext :: struct {
     inFlightFrames        : []vk.Fence,
     currentFrame          : u32,
     framebufferResized    : b8,
-    //To-Do: Vertex buffer and index buffer should be combined into a singular buffer using offsets
+    //To-Do: All buffers should be combined into a singular buffer using offsets
     vertexBuffer          : vk.Buffer,
     vertexBufferMemory    : vk.DeviceMemory,
     indexBuffer           : vk.Buffer,
     indexBufferMemory     : vk.DeviceMemory,
+    //Not including these ones
+    uniformBuffers        : [MAX_FRAMES_IN_FLIGHT]vk.Buffer,
+    uniformBuffersMemory  : [MAX_FRAMES_IN_FLIGHT]vk.DeviceMemory,
+    uniformBuffersMapped  : [MAX_FRAMES_IN_FLIGHT]rawptr,
+    descriptorPool        : vk.DescriptorPool,
+    descriptorSets        : []vk.DescriptorSet,
+
+    //Utility. Will be removed
+    startTime             : t.Time,
 }
+
+
 
 // Methods
 initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
@@ -137,12 +158,16 @@ initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     createSwapchain(graphicsContext)
     createImageViews(graphicsContext)
     createRenderPass(graphicsContext)
+    createDescriptionSetLayout(graphicsContext)
     createPipeline(graphicsContext)
     createFramebuffers(graphicsContext)
     graphicsContext^.framebufferResized = false
     createCommandPool(graphicsContext)
     createVertexBuffer(graphicsContext)
     createIndexBuffer(graphicsContext)
+    createUniformBuffer(graphicsContext)
+    createDescriptorPool(graphicsContext)
+    createDescriptorSets(graphicsContext)
     createCommandBuffers(graphicsContext)
     createSyncObjects(graphicsContext)
     graphicsContext^.currentFrame = 0
@@ -593,6 +618,28 @@ createRenderPass :: proc(graphicsContext : ^GraphicsContext) {
 }
 
 @(private="file")
+createDescriptionSetLayout :: proc(graphicsContext : ^GraphicsContext) {
+    uboLayoutBinding : vk.DescriptorSetLayoutBinding = {
+        binding            = 0,
+        descriptorType     = vk.DescriptorType.UNIFORM_BUFFER,
+        descriptorCount    = 1,
+        stageFlags         = { vk.ShaderStageFlag.VERTEX },
+        pImmutableSamplers = nil,
+    }
+    layoutInfo : vk.DescriptorSetLayoutCreateInfo = {
+        sType        = vk.StructureType.DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        pNext        = nil,
+        flags        = {},
+        bindingCount = 1,
+        pBindings    = &uboLayoutBinding,
+    }
+    if vk.CreateDescriptorSetLayout(graphicsContext^.device, &layoutInfo, nil, &graphicsContext^.descriptorSetLayout) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to create descriptor set layout!")
+        panic("Failed to create descriptor set layout!")
+    }
+}
+
+@(private="file")
 createPipeline :: proc(graphicsContext : ^GraphicsContext) {
     createShaderModules :: proc(graphicsContext : ^GraphicsContext, filenames : []string) -> (shaderModules : []vk.ShaderModule, count : u32 = 0) {
         loadShaderFile :: proc(filepath : string) -> (data : []byte) {
@@ -692,7 +739,7 @@ createPipeline :: proc(graphicsContext : ^GraphicsContext) {
         rasterizerDiscardEnable = false,
         polygonMode             = vk.PolygonMode.FILL,
         cullMode                = { vk.CullModeFlag.BACK },
-        frontFace               = vk.FrontFace.CLOCKWISE,
+        frontFace               = vk.FrontFace.COUNTER_CLOCKWISE,
         depthBiasEnable         = false,
         depthBiasConstantFactor = 0.0,
         depthBiasClamp          = 0.0,
@@ -740,8 +787,8 @@ createPipeline :: proc(graphicsContext : ^GraphicsContext) {
         sType                  = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO,
         pNext                  = nil,
         flags                  = {},
-        setLayoutCount         = 0,
-        pSetLayouts            = nil,
+        setLayoutCount         = 1,
+        pSetLayouts            = &graphicsContext^.descriptorSetLayout,
         pushConstantRangeCount = 0,
         pPushConstantRanges    = nil,
     }
@@ -906,6 +953,17 @@ loadToGPUBuffer :: proc(
 }
 
 @(private="file")
+createUniformBuffer :: proc(graphicsContext : ^GraphicsContext) {
+    for i in 0..<MAX_FRAMES_IN_FLIGHT {
+        createBuffer(
+            graphicsContext, size_of(UniformBufferObject), { vk.BufferUsageFlag.UNIFORM_BUFFER },
+            { vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT }, &graphicsContext^.uniformBuffers[i], &graphicsContext^.uniformBuffersMemory[i]
+        )
+        vk.MapMemory(graphicsContext^.device, graphicsContext^.uniformBuffersMemory[i], 0, size_of(UniformBufferObject), {}, &graphicsContext^.uniformBuffersMapped[i])
+    }
+}
+
+@(private="file")
 createBuffer :: proc(
     graphicsContext : ^GraphicsContext, size : int, usage : vk.BufferUsageFlags, properties : vk.MemoryPropertyFlags, buffer : ^vk.Buffer, bufferMemory : ^vk.DeviceMemory
 ) {
@@ -949,6 +1007,67 @@ createBuffer :: proc(
         panic("Failed to allocate vertex buffer memory!")
     }
     vk.BindBufferMemory(graphicsContext^.device, buffer^, bufferMemory^, 0)
+}
+
+@(private="file")
+createDescriptorPool :: proc(graphicsContext : ^GraphicsContext) {
+    poolSize : vk.DescriptorPoolSize = {
+        type            = vk.DescriptorType.UNIFORM_BUFFER,
+        descriptorCount = MAX_FRAMES_IN_FLIGHT,
+    }
+    poolInfo : vk.DescriptorPoolCreateInfo = {
+        sType         = vk.StructureType.DESCRIPTOR_POOL_CREATE_INFO,
+        pNext         = nil,
+        flags         = {},
+        maxSets       = MAX_FRAMES_IN_FLIGHT,
+        poolSizeCount = 1,
+        pPoolSizes    = &poolSize,
+    }
+    if vk.CreateDescriptorPool(graphicsContext^.device, &poolInfo, nil, &graphicsContext^.descriptorPool) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to create descriptor pool!")
+        panic("Failed to create descriptor pool!")
+    }
+}
+
+@(private="file")
+createDescriptorSets :: proc(graphicsContext : ^GraphicsContext) {
+    layouts := make([]vk.DescriptorSetLayout, MAX_FRAMES_IN_FLIGHT)
+    for &layout in layouts { 
+        layout = graphicsContext^.descriptorSetLayout
+    }
+    allocInfo : vk.DescriptorSetAllocateInfo = {
+        sType              = vk.StructureType.DESCRIPTOR_SET_ALLOCATE_INFO,
+        pNext              = nil,
+        descriptorPool     = graphicsContext^.descriptorPool,
+        descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
+        pSetLayouts        = raw_data(layouts),
+    }
+    graphicsContext^.descriptorSets = make([]vk.DescriptorSet, MAX_FRAMES_IN_FLIGHT)
+    if vk.AllocateDescriptorSets(graphicsContext^.device, &allocInfo, raw_data(graphicsContext^.descriptorSets)) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to allocate descriptor sets!")
+        panic("Failed to allocate descriptor sets!")
+    }
+
+    for index in 0..<MAX_FRAMES_IN_FLIGHT {
+        bufferInfo : vk.DescriptorBufferInfo = {
+            buffer = graphicsContext^.uniformBuffers[index],
+            offset = 0,
+            range  = size_of(UniformBufferObject),
+        }
+        descriptorWrite : vk.WriteDescriptorSet = {
+            sType            = vk.StructureType.WRITE_DESCRIPTOR_SET,
+            pNext            = nil,
+            dstSet           = graphicsContext^.descriptorSets[index],
+            dstBinding       = 0,
+            dstArrayElement  = 0,
+            descriptorCount  = 1,
+            descriptorType   = vk.DescriptorType.UNIFORM_BUFFER,
+            pImageInfo       = nil,
+            pBufferInfo      = &bufferInfo,
+            pTexelBufferView = nil,
+        }
+        vk.UpdateDescriptorSets(graphicsContext^.device, 1, &descriptorWrite, 0, nil)
+    }
 }
 
 @(private="file")
@@ -1009,6 +1128,7 @@ drawFrame :: proc(graphicsContext : ^GraphicsContext) {
     vk.ResetFences(graphicsContext^.device, 1, &graphicsContext^.inFlightFrames[graphicsContext^.currentFrame])
 
     vk.ResetCommandBuffer(graphicsContext^.commandBuffers[graphicsContext^.currentFrame], {})
+    updateUniformBuffer(graphicsContext)
     recordCommandBuffer(graphicsContext, &graphicsContext^.commandBuffers[graphicsContext^.currentFrame], imageIndex)
 
     submitInfo : vk.SubmitInfo = {
@@ -1104,6 +1224,9 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
     }
     vk.CmdSetScissor(commandBuffer^, 0, 1, &scissor)
 
+    vk.CmdBindDescriptorSets(
+        commandBuffer^, vk.PipelineBindPoint.GRAPHICS, graphicsContext^.pipelineLayouts[0], 0, 1, &graphicsContext^.descriptorSets[graphicsContext^.currentFrame], 0, nil
+    )
     vk.CmdDrawIndexed(commandBuffer^, (u32)(len(indices)), 1, 0, 0, 0)
 
     vk.CmdEndRenderPass(commandBuffer^)
@@ -1111,6 +1234,17 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
         log(.ERROR, "Failed to record command buffer!")
         panic("Failed to record command buffer!")
     }
+}
+
+@(private="file")
+updateUniformBuffer :: proc(graphicsContext : ^GraphicsContext) {
+    delta := t.duration_seconds(t.since(graphicsContext^.startTime))
+    ubo : UniformBufferObject = {
+        model      = rotationZ4((f32)(delta) * math.to_radians((f32)(90.0))),
+        view       = lookAt(Vector3{0, 0, -2}, Vector3{0, 0, 0}, Vector3{0, 1, 0}),
+        projection = perspective(math.to_radians((f32)(45.0)), (f32)(graphicsContext^.swapchainExtent.width) / (f32)(graphicsContext^.swapchainExtent.height), 0.1, 100),
+    }
+    mem.copy(graphicsContext^.uniformBuffersMapped[graphicsContext^.currentFrame], &ubo, size_of(UniformBufferObject))
 }
 
 @(private="file")
@@ -1135,17 +1269,23 @@ clanupVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     vk.FreeMemory(graphicsContext^.device, graphicsContext^.indexBufferMemory, nil)
     vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.vertexBuffer, nil)
     vk.FreeMemory(graphicsContext^.device, graphicsContext^.vertexBufferMemory, nil)
-    cleanupSwapchain(graphicsContext)
+    for i in 0..<MAX_FRAMES_IN_FLIGHT {
+        vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.uniformBuffers[i], nil)
+        vk.FreeMemory(graphicsContext^.device, graphicsContext^.uniformBuffersMemory[i], nil)
+    }
+    vk.DestroyDescriptorPool(graphicsContext^.device, graphicsContext^.descriptorPool, nil)
+    vk.DestroyDescriptorSetLayout(graphicsContext^.device, graphicsContext^.descriptorSetLayout, nil)
     for index in 0..<len(graphicsContext^.pipelines) {
         vk.DestroyPipeline(graphicsContext^.device, graphicsContext^.pipelines[index], nil)
         vk.DestroyPipelineLayout(graphicsContext^.device, graphicsContext^.pipelineLayouts[index], nil)
-        vk.DestroyRenderPass(graphicsContext^.device, graphicsContext^.renderPasses[0], nil)
+        vk.DestroyRenderPass(graphicsContext^.device, graphicsContext^.renderPasses[index], nil)
     }
     for index in 0..<MAX_FRAMES_IN_FLIGHT {
         vk.DestroySemaphore(graphicsContext^.device, graphicsContext^.imagesAvailable[index], nil)
         vk.DestroySemaphore(graphicsContext^.device, graphicsContext^.rendersFinished[index], nil)
         vk.DestroyFence(graphicsContext^.device, graphicsContext^.inFlightFrames[index], nil)
     }
+    cleanupSwapchain(graphicsContext)
     vk.DestroyCommandPool(graphicsContext^.device, graphicsContext^.commandPool, nil)
     vk.DestroyDevice(graphicsContext^.device, nil)
     when ODIN_DEBUG {
