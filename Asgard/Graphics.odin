@@ -4,7 +4,6 @@ import "core:c"
 import "core:os"
 import "core:mem"
 import "core:fmt"
-import "core:math"
 import t "core:time"
 import "vendor:glfw"
 import vk "vendor:vulkan"
@@ -13,9 +12,9 @@ import im "vendor:stb/image"
 // Data structs
 @(private="file")
 Vertex :: struct {
-    position : Vector2,
-    colour   : Vector3,
-    texCoord : Vector2,
+    position : Vec3,
+    colour   : Vec3,
+    texCoord : Vec2,
 }
 
 @(private="file")
@@ -26,9 +25,9 @@ PipelineType :: enum {
 
 @(private="file")
 UniformBufferObject :: struct #align(16) {
-    model      : Matrix4,
-    view       : Matrix4,
-    projection : Matrix4,
+    model      : Mat4,
+    view       : Mat4,
+    projection : Mat4,
 }
 
 @(private="file")
@@ -98,6 +97,11 @@ GraphicsContext :: struct {
     textureView           : vk.ImageView,
     textureSampler        : vk.Sampler,
 
+    depthImage            : vk.Image,
+    depthImageMemory      : vk.DeviceMemory,
+    depthImageView        : vk.ImageView,
+    depthFormat           : vk.Format,
+
     //Utility. Will be removed
     startTime             : t.Time,
 }
@@ -133,7 +137,7 @@ vertexInputAttributeDescriptions : []vk.VertexInputAttributeDescription = {
     {
         location = 0,
         binding  = 0,
-        format   = vk.Format.R32G32_SFLOAT,
+        format   = vk.Format.R32G32B32_SFLOAT,
         offset   = (u32)(offset_of(Vertex, position)),
     },
     {
@@ -152,15 +156,21 @@ vertexInputAttributeDescriptions : []vk.VertexInputAttributeDescription = {
 
 @(private="file")
 vertices : []Vertex = {
-    {{-0.5, -0.5}, {1.0, 0.0, 0.0}, {1.0, 0.0}},
-    {{ 0.5, -0.5}, {0.0, 1.0, 0.0}, {0.0, 0.0}},
-    {{ 0.5,  0.5}, {0.0, 0.0, 1.0}, {0.0, 1.0}},
-    {{-0.5,  0.5}, {1.0, 1.0, 1.0}, {1.0, 1.0}},
+    {{-0.5, -0.5, 0.0}, {1.0, 0.0, 0.0}, {1.0, 0.0}},
+    {{ 0.5, -0.5, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0}},
+    {{ 0.5,  0.5, 0.0}, {0.0, 0.0, 1.0}, {0.0, 1.0}},
+    {{-0.5,  0.5, 0.0}, {1.0, 1.0, 1.0}, {1.0, 1.0}},
+
+    {{-0.5, -0.5, -0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0}},
+    {{ 0.5, -0.5, -0.5}, {0.0, 1.0, 0.0}, {1.0, 0.0}},
+    {{ 0.5,  0.5, -0.5}, {0.0, 0.0, 1.0}, {1.0, 1.0}},
+    {{-0.5,  0.5, -0.5}, {1.0, 1.0, 1.0}, {0.0, 1.0}}
 }
 
 @(private="file")
 indices : []u16 = {
-    0, 1, 2, 2, 3, 0
+    4, 5, 6, 6, 7, 4,
+    0, 1, 2, 2, 3, 0,
 }
 
 
@@ -179,14 +189,10 @@ initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
 
     createSwapchain(graphicsContext)
     createImageViews(graphicsContext)
-    createRenderPass(graphicsContext)
-
-    createDescriptionSetLayout(graphicsContext)
-    createPipeline(graphicsContext)
-    createFramebuffers(graphicsContext)
-    graphicsContext^.framebufferResized = false
 
     createCommandPool(graphicsContext)
+
+    createDepthResources(graphicsContext)
 
     createTexture(graphicsContext)
     createTextureView(graphicsContext)
@@ -197,7 +203,14 @@ initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
 
     createUniformBuffer(graphicsContext)
     createDescriptorPool(graphicsContext)
+    createDescriptionSetLayout(graphicsContext)
     createDescriptorSets(graphicsContext)
+
+    createRenderPass(graphicsContext)
+    createFramebuffers(graphicsContext)
+
+    createPipeline(graphicsContext)
+    graphicsContext^.framebufferResized = false
 
     createCommandBuffers(graphicsContext)
     createSyncObjects(graphicsContext)
@@ -620,7 +633,9 @@ createSwapchain :: proc(graphicsContext : ^GraphicsContext) {
 createImageViews :: proc(graphicsContext : ^GraphicsContext) {
     graphicsContext^.swapchainImageViews = make([]vk.ImageView, len(graphicsContext^.swapchainImages))
     for index in 0..<len(graphicsContext^.swapchainImages) {
-        graphicsContext^.swapchainImageViews[index] = createImageView(graphicsContext, graphicsContext^.swapchainImages[index], graphicsContext^.swapchainFormat.format)
+        graphicsContext^.swapchainImageViews[index] = createImageView(
+            graphicsContext, graphicsContext^.swapchainImages[index], graphicsContext^.swapchainFormat.format, {vk.ImageAspectFlag.COLOR }
+        )
     }
 }
 
@@ -643,6 +658,23 @@ createRenderPass :: proc(graphicsContext : ^GraphicsContext) {
         layout     = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL,
     }
 
+    depthAttachment : vk.AttachmentDescription = {
+        flags          = {},
+        format         = graphicsContext^.depthFormat,
+        samples        = { vk.SampleCountFlag._1 },
+        loadOp         = vk.AttachmentLoadOp.CLEAR,
+        storeOp        = vk.AttachmentStoreOp.DONT_CARE,
+        stencilLoadOp  = vk.AttachmentLoadOp.DONT_CARE,
+        stencilStoreOp = vk.AttachmentStoreOp.DONT_CARE,
+        initialLayout  = vk.ImageLayout.UNDEFINED,
+        finalLayout    = vk.ImageLayout.DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    }
+
+    depthAttachmentRef : vk.AttachmentReference  = {
+        attachment = 1,
+        layout     = vk.ImageLayout.DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    }
+
     subpass : vk.SubpassDescription = {
         flags                   = {},
         pipelineBindPoint       = vk.PipelineBindPoint.GRAPHICS,
@@ -651,7 +683,7 @@ createRenderPass :: proc(graphicsContext : ^GraphicsContext) {
         colorAttachmentCount    = 1,
         pColorAttachments       = &colourAttachmentRef,
         pResolveAttachments     = nil,
-        pDepthStencilAttachment = nil,
+        pDepthStencilAttachment = &depthAttachmentRef,
         preserveAttachmentCount = 0,
         pPreserveAttachments    = nil,
     }
@@ -660,20 +692,22 @@ createRenderPass :: proc(graphicsContext : ^GraphicsContext) {
         sType           = vk.StructureType.RENDER_PASS_CREATE_INFO,
         pNext           = nil,
         flags           = {},
-        attachmentCount = 1,
-        pAttachments    = &colourAttachment,
+        attachmentCount = 2,
+        pAttachments    = raw_data([]vk.AttachmentDescription{ colourAttachment, depthAttachment }),
         subpassCount    = 1,
         pSubpasses      = &subpass,
         dependencyCount = 1,
-        pDependencies   = raw_data([]vk.SubpassDependency{ {
+        pDependencies   = raw_data([]vk.SubpassDependency{ 
+            {
                 srcSubpass      = vk.SUBPASS_EXTERNAL,
                 dstSubpass      = 0,
-                srcStageMask    = { vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT },
-                dstStageMask    = { vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT },
-                srcAccessMask   = {},
-                dstAccessMask   = { vk.AccessFlag.COLOR_ATTACHMENT_WRITE },
+                srcStageMask    = { vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT, vk.PipelineStageFlag.LATE_FRAGMENT_TESTS },
+                dstStageMask    = { vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT, vk.PipelineStageFlag.EARLY_FRAGMENT_TESTS },
+                srcAccessMask   = { vk.AccessFlag.DEPTH_STENCIL_ATTACHMENT_WRITE },
+                dstAccessMask   = { vk.AccessFlag.COLOR_ATTACHMENT_WRITE, vk.AccessFlag.DEPTH_STENCIL_ATTACHMENT_WRITE },
                 dependencyFlags = {},
-        }, } ),
+            }, 
+        }),
     }
 
     graphicsContext^.renderPasses = make([]vk.RenderPass, PipelineType.COUNT)
@@ -832,7 +866,20 @@ createPipeline :: proc(graphicsContext : ^GraphicsContext) {
         alphaToOneEnable      = false,
     }
 
-    depthStencil : vk.PipelineDepthStencilStateCreateInfo
+    depthStencil : vk.PipelineDepthStencilStateCreateInfo = {
+        sType                 = vk.StructureType.PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        pNext                 = nil,
+        flags                 = {},
+        depthTestEnable       = true,
+        depthWriteEnable      = true,
+        depthCompareOp        = vk.CompareOp.LESS,
+        depthBoundsTestEnable = false,
+        stencilTestEnable     = false,
+        front                 = {},
+        back                  = {},
+        minDepthBounds        = 0,
+        maxDepthBounds        = 1,
+    }
 
     colourBlendAttachment : vk.PipelineColorBlendAttachmentState = {
         blendEnable         = false,
@@ -884,7 +931,7 @@ createPipeline :: proc(graphicsContext : ^GraphicsContext) {
         pViewportState      = &viewportState,
         pRasterizationState = &rasterizer,
         pMultisampleState   = &multisampling,
-        pDepthStencilState  = nil,
+        pDepthStencilState  = &depthStencil,
         pColorBlendState    = &colourBlending,
         pDynamicState       = &dynamicStateInfo,
         layout              = graphicsContext^.pipelineLayouts[0],
@@ -911,8 +958,8 @@ createFramebuffers :: proc(graphicsContext : ^GraphicsContext) {
             pNext           = nil,
             flags           = {},
             renderPass      = graphicsContext^.renderPasses[0],
-            attachmentCount = 1,
-            pAttachments    = raw_data([]vk.ImageView{ graphicsContext^.swapchainImageViews[index] }),
+            attachmentCount = 2,
+            pAttachments    = raw_data([]vk.ImageView{ graphicsContext^.swapchainImageViews[index], graphicsContext^.depthImageView }),
             width           = graphicsContext^.swapchainExtent.width,
             height          = graphicsContext^.swapchainExtent.height,
             layers          = 1,
@@ -939,48 +986,38 @@ createCommandPool :: proc(graphicsContext : ^GraphicsContext) {
 }
 
 @(private="file")
-createTexture :: proc(graphicsContext : ^GraphicsContext) {
-    createImage :: proc(
-        graphicsContext : ^GraphicsContext, width, height : u32, format : vk.Format, tiling : vk.ImageTiling, usage : vk.ImageUsageFlags,
-        properties : vk.MemoryPropertyFlags, image : ^vk.Image, imageMemory : ^vk.DeviceMemory
-    ) {
-        imageInfo : vk.ImageCreateInfo = {
-            sType                 = vk.StructureType.IMAGE_CREATE_INFO,
-            pNext                 = nil,
-            flags                 = {},
-            imageType             = vk.ImageType.D2,
-            format                = format,
-            extent                = { width, height, 1 },
-            mipLevels             = 1,
-            arrayLayers           = 1,
-            samples               = { vk.SampleCountFlag._1 },
-            tiling                = tiling,
-            usage                 = usage,
-            sharingMode           = vk.SharingMode.EXCLUSIVE,
-            queueFamilyIndexCount = 0,
-            pQueueFamilyIndices   = nil,
-            initialLayout         = vk.ImageLayout.UNDEFINED,
+createDepthResources :: proc(graphicsContext : ^GraphicsContext) {
+    findSupportedFormat :: proc(graphicsContext : ^GraphicsContext, candidates : []vk.Format, tiling : vk.ImageTiling, features : vk.FormatFeatureFlags) -> vk.Format {
+        for format in candidates {
+            props : vk.FormatProperties
+            vk.GetPhysicalDeviceFormatProperties(graphicsContext^.physicalDevice, format, &props)
+            if tiling == vk.ImageTiling.LINEAR && (props.linearTilingFeatures & features) == features {
+                return format;
+            } 
+            else if tiling == vk.ImageTiling.OPTIMAL && (props.optimalTilingFeatures & features) == features {
+                return format;
+            }
         }
-        if vk.CreateImage(graphicsContext^.device, &imageInfo, nil, &graphicsContext^.texture) != vk.Result.SUCCESS {
-            log(.ERROR, "Failed to create texture!")
-            panic("Failed to create texture!")
-        }
-
-        memRequirements : vk.MemoryRequirements
-        vk.GetImageMemoryRequirements(graphicsContext^.device, image^, &memRequirements)
-        allocInfo : vk.MemoryAllocateInfo = {
-            sType           = vk.StructureType.MEMORY_ALLOCATE_INFO,
-            pNext           = nil,
-            allocationSize  = memRequirements.size,
-            memoryTypeIndex = findMemoryType(graphicsContext, memRequirements.memoryTypeBits, properties),
-        }
-        if vk.AllocateMemory(graphicsContext^.device, &allocInfo, nil, imageMemory) != vk.Result.SUCCESS {
-            log(.ERROR, "Failed to allocate image memory!")
-            panic("Failed to allocate image memory!")
-        }
-        vk.BindImageMemory(graphicsContext^.device, image^, imageMemory^, 0)
+        log(.ERROR, "Failed to find supported format!")
+        panic("Failed to find supported format!")
     }
 
+    hasStencilComponent :: proc(format : vk.Format) -> bool {
+        return format == vk.Format.D32_SFLOAT_S8_UINT || format == vk.Format.D24_UNORM_S8_UINT
+    }
+
+    graphicsContext^.depthFormat = findSupportedFormat(
+        graphicsContext, {vk.Format.D32_SFLOAT, vk.Format.D32_SFLOAT_S8_UINT, vk.Format.D24_UNORM_S8_UINT}, vk.ImageTiling.OPTIMAL, { vk.FormatFeatureFlag.DEPTH_STENCIL_ATTACHMENT }
+    )
+    createImage(
+        graphicsContext, graphicsContext^.swapchainExtent.width, graphicsContext^.swapchainExtent.height, graphicsContext^.depthFormat, vk.ImageTiling.OPTIMAL,
+        { vk.ImageUsageFlag.DEPTH_STENCIL_ATTACHMENT }, { vk.MemoryPropertyFlag.DEVICE_LOCAL }, &graphicsContext^.depthImage, &graphicsContext^.depthImageMemory
+    )
+    graphicsContext^.depthImageView = createImageView(graphicsContext, graphicsContext^.depthImage, graphicsContext^.depthFormat, { vk.ImageAspectFlag.DEPTH })
+}
+
+@(private="file")
+createTexture :: proc(graphicsContext : ^GraphicsContext) {
     transitionImageLayout :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format, oldLayout, newLayout : vk.ImageLayout) {
         commandBuffer := beginSingleTimeCommands(graphicsContext)
         barrier : vk.ImageMemoryBarrier = {
@@ -1081,12 +1118,54 @@ createTexture :: proc(graphicsContext : ^GraphicsContext) {
 }
 
 @(private="file")
-createTextureView :: proc(graphicsContext : ^GraphicsContext) {
-    graphicsContext^.textureView = createImageView(graphicsContext, graphicsContext^.texture, vk.Format.R8G8B8A8_SRGB)
+createImage :: proc(
+    graphicsContext : ^GraphicsContext, width, height : u32, format : vk.Format, tiling : vk.ImageTiling, usage : vk.ImageUsageFlags,
+    properties : vk.MemoryPropertyFlags, image : ^vk.Image, imageMemory : ^vk.DeviceMemory
+) {
+    imageInfo : vk.ImageCreateInfo = {
+        sType                 = vk.StructureType.IMAGE_CREATE_INFO,
+        pNext                 = nil,
+        flags                 = {},
+        imageType             = vk.ImageType.D2,
+        format                = format,
+        extent                = { width, height, 1 },
+        mipLevels             = 1,
+        arrayLayers           = 1,
+        samples               = { vk.SampleCountFlag._1 },
+        tiling                = tiling,
+        usage                 = usage,
+        sharingMode           = vk.SharingMode.EXCLUSIVE,
+        queueFamilyIndexCount = 0,
+        pQueueFamilyIndices   = nil,
+        initialLayout         = vk.ImageLayout.UNDEFINED,
+    }
+    if vk.CreateImage(graphicsContext^.device, &imageInfo, nil, image) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to create texture!")
+        panic("Failed to create texture!")
+    }
+
+    memRequirements : vk.MemoryRequirements
+    vk.GetImageMemoryRequirements(graphicsContext^.device, image^, &memRequirements)
+    allocInfo : vk.MemoryAllocateInfo = {
+        sType           = vk.StructureType.MEMORY_ALLOCATE_INFO,
+        pNext           = nil,
+        allocationSize  = memRequirements.size,
+        memoryTypeIndex = findMemoryType(graphicsContext, memRequirements.memoryTypeBits, properties),
+    }
+    if vk.AllocateMemory(graphicsContext^.device, &allocInfo, nil, imageMemory) != vk.Result.SUCCESS {
+        log(.ERROR, "Failed to allocate image memory!")
+        panic("Failed to allocate image memory!")
+    }
+    vk.BindImageMemory(graphicsContext^.device, image^, imageMemory^, 0)
 }
 
 @(private="file")
-createImageView :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format) -> (imageView : vk.ImageView) {
+createTextureView :: proc(graphicsContext : ^GraphicsContext) {
+    graphicsContext^.textureView = createImageView(graphicsContext, graphicsContext^.texture, vk.Format.R8G8B8A8_SRGB, { vk.ImageAspectFlag.COLOR })
+}
+
+@(private="file")
+createImageView :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format, aspectFlags : vk.ImageAspectFlags) -> (imageView : vk.ImageView) {
     viewInfo : vk.ImageViewCreateInfo = {
         sType            = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
         pNext            = nil,
@@ -1101,7 +1180,7 @@ createImageView :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, fo
             a = vk.ComponentSwizzle.IDENTITY,
         },
         subresourceRange = vk.ImageSubresourceRange{
-            aspectMask     = { vk.ImageAspectFlag.COLOR },
+            aspectMask     = aspectFlags,
             baseMipLevel   = 0,
             levelCount     = 1,
             baseArrayLayer = 0,
@@ -1507,12 +1586,20 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
             offset = {0, 0},
 	        extent = graphicsContext^.swapchainExtent,
         },
-        clearValueCount = 1,
-        pClearValues    = &vk.ClearValue{
-            color        = vk.ClearColorValue{
-                float32 = { 0, 0, 0, 1 },
+        clearValueCount = 2,
+        pClearValues    = raw_data([]vk.ClearValue{
+            {
+                color = vk.ClearColorValue{
+                    float32 = { 0, 0, 0, 1 },
+                },
             },
-        },
+            {
+                depthStencil = vk.ClearDepthStencilValue{
+                    depth   = 1,
+                    stencil = 0,
+                },
+            },
+        }),
     }
     vk.CmdBeginRenderPass(commandBuffer^, &renderPassInfo, vk.SubpassContents.INLINE)
     vk.CmdBindPipeline(commandBuffer^, vk.PipelineBindPoint.GRAPHICS, graphicsContext.pipelines[0])
@@ -1552,9 +1639,9 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
 updateUniformBuffer :: proc(graphicsContext : ^GraphicsContext) {
     delta := t.duration_seconds(t.since(graphicsContext^.startTime))
     ubo : UniformBufferObject = {
-        model      = rotationZ4((f32)(delta) * math.to_radians((f32)(90.0))),
-        view       = lookAt(Vector3{0, -2, -2}, Vector3{0, 0, 0}, Vector3{0, 1, -1}),
-        projection = perspective(math.to_radians((f32)(45.0)), (f32)(graphicsContext^.swapchainExtent.width) / (f32)(graphicsContext^.swapchainExtent.height), 0.1, 100),
+        model      = rotation4((f32)(delta) * radians((f32)(90.0)), Vec3{0, 0, 1}),
+        view       = lookAt(Vec3{0, -2, -2}, Vec3{0, 0, 0}, Vec3{0, 1, -1}),
+        projection = perspective(radians((f32)(45.0)), (f32)(graphicsContext^.swapchainExtent.width) / (f32)(graphicsContext^.swapchainExtent.height), 0.1, 100),
     }
     mem.copy(graphicsContext^.uniformBuffersMapped[graphicsContext^.currentFrame], &ubo, size_of(UniformBufferObject))
 }
@@ -1572,6 +1659,7 @@ recreateSwapchain :: proc(graphicsContext : ^GraphicsContext) {
 
     createSwapchain(graphicsContext)
     createImageViews(graphicsContext)
+    createDepthResources(graphicsContext)
     createFramebuffers(graphicsContext)
 }
 
@@ -1613,6 +1701,9 @@ clanupVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
 
 @(private="file")
 cleanupSwapchain :: proc(graphicsContext : ^GraphicsContext) {
+    vk.DestroyImageView(graphicsContext^.device, graphicsContext^.depthImageView, nil)
+    vk.DestroyImage(graphicsContext^.device, graphicsContext^.depthImage, nil)
+    vk.FreeMemory(graphicsContext^.device, graphicsContext^.depthImageMemory, nil)
     for frameBuffer in graphicsContext^.swapchainFrameBuffers {
         vk.DestroyFramebuffer(graphicsContext^.device, frameBuffer, nil)
     }
