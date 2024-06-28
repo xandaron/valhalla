@@ -9,6 +9,8 @@ import "vendor:glfw"
 import vk "vendor:vulkan"
 import im "vendor:stb/image"
 
+import fbx "ufbx"
+
 // Data structs
 @(private="file")
 Vertex :: struct {
@@ -80,8 +82,10 @@ GraphicsContext :: struct {
     framebufferResized    : b8,
 
     //To-Do: All buffers should be combined into a singular buffer using offsets
+    vertices              : []Vertex,
     vertexBuffer          : vk.Buffer,
     vertexBufferMemory    : vk.DeviceMemory,
+    indices               : []u32,
     indexBuffer           : vk.Buffer,
     indexBufferMemory     : vk.DeviceMemory,
 
@@ -92,6 +96,7 @@ GraphicsContext :: struct {
     descriptorPool        : vk.DescriptorPool,
     descriptorSets        : []vk.DescriptorSet,
 
+    mipLevels             : u32,
     texture               : vk.Image,
     textureMemory         : vk.DeviceMemory,
     textureView           : vk.ImageView,
@@ -155,23 +160,10 @@ vertexInputAttributeDescriptions : []vk.VertexInputAttributeDescription = {
 }
 
 @(private="file")
-vertices : []Vertex = {
-    {{-0.5, -0.5, 0.0}, {1.0, 0.0, 0.0}, {1.0, 0.0}},
-    {{ 0.5, -0.5, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0}},
-    {{ 0.5,  0.5, 0.0}, {0.0, 0.0, 1.0}, {0.0, 1.0}},
-    {{-0.5,  0.5, 0.0}, {1.0, 1.0, 1.0}, {1.0, 1.0}},
-
-    {{-0.5, -0.5, -0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0}},
-    {{ 0.5, -0.5, -0.5}, {0.0, 1.0, 0.0}, {1.0, 0.0}},
-    {{ 0.5,  0.5, -0.5}, {0.0, 0.0, 1.0}, {1.0, 1.0}},
-    {{-0.5,  0.5, -0.5}, {1.0, 1.0, 1.0}, {0.0, 1.0}}
-}
+MODEL_PATH : cstring : "./assets/models/viking_room.obj"
 
 @(private="file")
-indices : []u16 = {
-    4, 5, 6, 6, 7, 4,
-    0, 1, 2, 2, 3, 0,
-}
+TEXTURE_PATH : cstring : "./assets/textures/viking_room.png"
 
 
 // Methods
@@ -197,6 +189,8 @@ initVkGraphics :: proc(graphicsContext : ^GraphicsContext) {
     createTexture(graphicsContext)
     createTextureView(graphicsContext)
     createTextureSampler(graphicsContext)
+
+    loadModel(graphicsContext)
 
     createVertexBuffer(graphicsContext)
     createIndexBuffer(graphicsContext)
@@ -1085,7 +1079,7 @@ createTexture :: proc(graphicsContext : ^GraphicsContext) {
     }
 
     texWidth, texHeight, texChannels : i32
-    pixels := im.load("./assets/textures/statue.jpg", &texWidth, &texHeight, &texChannels, 4)
+    pixels := im.load(TEXTURE_PATH, &texWidth, &texHeight, &texChannels, 4)
     defer im.image_free(pixels)
     imageSize : int = (int)(texWidth * texHeight * 4)
     if pixels == nil {
@@ -1225,9 +1219,72 @@ createTextureSampler :: proc(graphicsContext : ^GraphicsContext) {
 }
 
 @(private="file")
+loadModel :: proc(graphicsContext : ^GraphicsContext) {
+    loadFBX :: proc(filename : cstring) -> ([]u32, []Vertex) {
+        // Load the .fbx file
+        opts := fbx.Load_Opts{}
+        err := fbx.Error{}
+        scene := fbx.load_file(filename, &opts, &err)
+        defer fbx.free_scene(scene)
+        if scene == nil {
+            log(.ERROR, fmt.aprintf("failed to load FBX file! Reason\n{}", err.description.data))
+            panic("Failed to load FBX file!")
+        }
+
+        // Retrieve the first mesh
+        mesh: ^fbx.Mesh
+        for i in 0 ..< scene.nodes.count {
+            node := scene.nodes.data[i]
+            if node.is_root || node.mesh == nil { continue }
+            mesh = node.mesh
+            break
+        }
+
+        {
+            // Unpack / triangulate the index data
+            index_count := 3 * mesh.num_triangles
+            indices := make([]u32, index_count)
+            off : u32 = 0
+            for i in 0 ..< mesh.faces.count {
+                face := mesh.faces.data[i]
+                tris := fbx.catch_triangulate_face(nil, &indices[off], uint(index_count), mesh, face)
+                off += 3 * tris
+            }
+        }
+
+        // Unpack the vertex data
+        indices : [dynamic]u32
+        vertices : [dynamic]Vertex
+
+        vertexMap := make(map[Vertex]u32)
+        defer delete(vertexMap)
+
+        for i in 0..< mesh.num_indices {
+            pos := mesh.vertex_position.values.data[mesh.vertex_position.indices.data[i]]
+            uv := mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[i]]
+            //norm := mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[i]]
+
+            vertex : Vertex = {
+                position = { f32(pos.x), f32(pos.y), f32(pos.z) },
+                colour   = { 1, 1, 1 },
+                texCoord = { f32(uv.x), 1 - f32(uv.y) },
+            }
+            if !(vertex in vertexMap) {
+                vertexMap[vertex] = u32(len(vertices))
+                append(&vertices, vertex)
+            }
+            append(&indices, vertexMap[vertex])
+        }
+        return indices[:], vertices[:]
+    }
+
+    graphicsContext^.indices, graphicsContext^.vertices = loadFBX(MODEL_PATH)
+}
+
+@(private="file")
 createVertexBuffer :: proc(graphicsContext : ^GraphicsContext) {
     loadToGPUBuffer(
-        graphicsContext, size_of(vertices[0]) * len(vertices), raw_data(vertices),
+        graphicsContext, size_of(Vertex) * len(graphicsContext^.vertices), raw_data(graphicsContext^.vertices),
         &graphicsContext^.vertexBuffer, &graphicsContext^.vertexBufferMemory, vk.BufferUsageFlag.VERTEX_BUFFER
     )
 }
@@ -1235,7 +1292,7 @@ createVertexBuffer :: proc(graphicsContext : ^GraphicsContext) {
 @(private="file")
 createIndexBuffer :: proc(graphicsContext : ^GraphicsContext) {
     loadToGPUBuffer(
-        graphicsContext, size_of(indices[0]) * len(indices), raw_data(indices),
+        graphicsContext, size_of(u32) * len(graphicsContext^.indices), raw_data(graphicsContext^.indices),
         &graphicsContext^.indexBuffer, &graphicsContext^.indexBufferMemory, vk.BufferUsageFlag.INDEX_BUFFER
     )
 }
@@ -1605,7 +1662,7 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
     vk.CmdBindPipeline(commandBuffer^, vk.PipelineBindPoint.GRAPHICS, graphicsContext.pipelines[0])
 
     vk.CmdBindVertexBuffers(commandBuffer^, 0, 1, raw_data([]vk.Buffer{ graphicsContext^.vertexBuffer }), raw_data([]vk.DeviceSize{ 0 }))
-    vk.CmdBindIndexBuffer(commandBuffer^, graphicsContext^.indexBuffer, 0, vk.IndexType.UINT16)
+    vk.CmdBindIndexBuffer(commandBuffer^, graphicsContext^.indexBuffer, 0, vk.IndexType.UINT32)
 
     viewport : vk.Viewport = {
         x        = 0,
@@ -1626,7 +1683,7 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
     vk.CmdBindDescriptorSets(
         commandBuffer^, vk.PipelineBindPoint.GRAPHICS, graphicsContext^.pipelineLayouts[0], 0, 1, &graphicsContext^.descriptorSets[graphicsContext^.currentFrame], 0, nil
     )
-    vk.CmdDrawIndexed(commandBuffer^, (u32)(len(indices)), 1, 0, 0, 0)
+    vk.CmdDrawIndexed(commandBuffer^, (u32)(len(graphicsContext^.indices)), 1, 0, 0, 0)
 
     vk.CmdEndRenderPass(commandBuffer^)
     if vk.EndCommandBuffer(commandBuffer^) != vk.Result.SUCCESS {
@@ -1639,9 +1696,9 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
 updateUniformBuffer :: proc(graphicsContext : ^GraphicsContext) {
     delta := t.duration_seconds(t.since(graphicsContext^.startTime))
     ubo : UniformBufferObject = {
-        model      = rotation4((f32)(delta) * radians((f32)(90.0)), Vec3{0, 0, 1}),
-        view       = lookAt(Vec3{0, -2, -2}, Vec3{0, 0, 0}, Vec3{0, 1, -1}),
-        projection = perspective(radians((f32)(45.0)), (f32)(graphicsContext^.swapchainExtent.width) / (f32)(graphicsContext^.swapchainExtent.height), 0.1, 100),
+        model      = rotation4(f32(delta) * radians(f32(45.0)), Vec3{0, 0, 1}),
+        view       = lookAt(Vec3{0, 2, 2}, Vec3{0, 0, 0}, Vec3{0, 1, -1}),
+        projection = perspective(radians(f32(45.0)), f32(graphicsContext^.swapchainExtent.width) / f32(graphicsContext^.swapchainExtent.height), 0.1, 100),
     }
     mem.copy(graphicsContext^.uniformBuffersMapped[graphicsContext^.currentFrame], &ubo, size_of(UniformBufferObject))
 }

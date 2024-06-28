@@ -6,9 +6,9 @@
 # Assets
 Celest/assets/*
 Celest/logs/*
-Asguard/assets/textures/*
-Asguard/assets/models/*
-Asguard/logs/*
+Asgard/assets/textures/*
+Asgard/assets/models/*
+Asgard/logs/*
 
 # User-specific files
 *.rsuser
@@ -436,4 +436,3 @@ FodyWeavers.xsd
 *.exe
 *.out
 *.app
-Asgard/assets/textures/statue.jpg
