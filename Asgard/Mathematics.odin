@@ -7,6 +7,9 @@ sin :: math.sin
 cos :: math.cos
 tan :: math.tan
 
+floor :: math.floor
+log2 :: math.log2
+
 Vec2 :: linalg.Vector2f32
 Vec3 :: linalg.Vector3f32
 Vec4 :: linalg.Vector4f32

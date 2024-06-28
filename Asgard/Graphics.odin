@@ -628,7 +628,7 @@ createImageViews :: proc(graphicsContext : ^GraphicsContext) {
     graphicsContext^.swapchainImageViews = make([]vk.ImageView, len(graphicsContext^.swapchainImages))
     for index in 0..<len(graphicsContext^.swapchainImages) {
         graphicsContext^.swapchainImageViews[index] = createImageView(
-            graphicsContext, graphicsContext^.swapchainImages[index], graphicsContext^.swapchainFormat.format, {vk.ImageAspectFlag.COLOR }
+            graphicsContext, graphicsContext^.swapchainImages[index], graphicsContext^.swapchainFormat.format, {vk.ImageAspectFlag.COLOR }, 1
         )
     }
 }
@@ -1004,15 +1004,15 @@ createDepthResources :: proc(graphicsContext : ^GraphicsContext) {
         graphicsContext, {vk.Format.D32_SFLOAT, vk.Format.D32_SFLOAT_S8_UINT, vk.Format.D24_UNORM_S8_UINT}, vk.ImageTiling.OPTIMAL, { vk.FormatFeatureFlag.DEPTH_STENCIL_ATTACHMENT }
     )
     createImage(
-        graphicsContext, graphicsContext^.swapchainExtent.width, graphicsContext^.swapchainExtent.height, graphicsContext^.depthFormat, vk.ImageTiling.OPTIMAL,
+        graphicsContext, graphicsContext^.swapchainExtent.width, graphicsContext^.swapchainExtent.height, 1, graphicsContext^.depthFormat, vk.ImageTiling.OPTIMAL,
         { vk.ImageUsageFlag.DEPTH_STENCIL_ATTACHMENT }, { vk.MemoryPropertyFlag.DEVICE_LOCAL }, &graphicsContext^.depthImage, &graphicsContext^.depthImageMemory
     )
-    graphicsContext^.depthImageView = createImageView(graphicsContext, graphicsContext^.depthImage, graphicsContext^.depthFormat, { vk.ImageAspectFlag.DEPTH })
+    graphicsContext^.depthImageView = createImageView(graphicsContext, graphicsContext^.depthImage, graphicsContext^.depthFormat, { vk.ImageAspectFlag.DEPTH }, 1)
 }
 
 @(private="file")
 createTexture :: proc(graphicsContext : ^GraphicsContext) {
-    transitionImageLayout :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format, oldLayout, newLayout : vk.ImageLayout) {
+    transitionImageLayout :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format, oldLayout, newLayout : vk.ImageLayout, mipLevel : u32) {
         commandBuffer := beginSingleTimeCommands(graphicsContext)
         barrier : vk.ImageMemoryBarrier = {
             sType               = vk.StructureType.IMAGE_MEMORY_BARRIER,
@@ -1027,7 +1027,7 @@ createTexture :: proc(graphicsContext : ^GraphicsContext) {
             subresourceRange    = vk.ImageSubresourceRange{
                 aspectMask     = { vk.ImageAspectFlag.COLOR },
                 baseMipLevel   = 0,
-                levelCount     = 1,
+                levelCount     = mipLevel,
                 baseArrayLayer = 0,
                 layerCount     = 1,
             },
@@ -1078,6 +1078,105 @@ createTexture :: proc(graphicsContext : ^GraphicsContext) {
         endSingleTimeCommands(graphicsContext, commandBuffer)
     }
 
+    generateMipmaps :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format, width, height, mipLevels : u32) {
+        formatProperties : vk.FormatProperties
+        vk.GetPhysicalDeviceFormatProperties(graphicsContext^.physicalDevice, format, &formatProperties);
+
+        if !(vk.FormatFeatureFlag.SAMPLED_IMAGE_FILTER_LINEAR in formatProperties.optimalTilingFeatures) {
+            log(.ERROR, "Texture image format does not support linear blitting!")
+            panic("Texture image format does not support linear blitting!");
+        }
+        
+        commandBuffer := beginSingleTimeCommands(graphicsContext)
+        barrier : vk.ImageMemoryBarrier = {
+            sType               = .IMAGE_MEMORY_BARRIER,
+            pNext               = nil,
+            srcAccessMask       = {},
+            dstAccessMask       = {},
+            oldLayout           = .UNDEFINED,
+            newLayout           = .UNDEFINED,
+            srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+            dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+            image               = image,
+            subresourceRange    = {
+                aspectMask     = { .COLOR },
+                baseMipLevel   = 0,
+                levelCount     = 1,
+                baseArrayLayer = 0,
+                layerCount     = 1,
+            },
+        }
+        mipWidth := i32(width)
+        mipHeight := i32(height)
+        for i in 1..<mipLevels {
+            barrier.subresourceRange.baseMipLevel = i - 1
+            barrier.oldLayout = .TRANSFER_DST_OPTIMAL
+            barrier.newLayout = .TRANSFER_SRC_OPTIMAL
+            barrier.srcAccessMask = { .TRANSFER_WRITE }
+            barrier.dstAccessMask = { .TRANSFER_READ }
+    
+            vk.CmdPipelineBarrier(commandBuffer, { .TRANSFER }, { .TRANSFER }, {}, 0, nil, 0, nil, 1, &barrier)
+            blit : vk.ImageBlit = {
+                srcSubresource = vk.ImageSubresourceLayers{
+                    aspectMask     = { .COLOR },
+                    mipLevel       = i - 1,
+                    baseArrayLayer = 0,
+                    layerCount     = 1,
+                },
+                srcOffsets     = [2]vk.Offset3D{
+                    {
+                        x = 0,
+                        y = 0,
+                        z = 0,
+                    },
+                    {
+                        x = mipWidth,
+                        y = mipHeight,
+                        z = 1,
+                    },
+                },
+                dstSubresource = vk.ImageSubresourceLayers{
+                    aspectMask     = { .COLOR },
+                    mipLevel       = i,
+                    baseArrayLayer = 0,
+                    layerCount     = 1,
+                },
+                dstOffsets     = [2]vk.Offset3D{
+                    {
+                        x = 0,
+                        y = 0,
+                        z = 0,
+                    },
+                    {
+                        x = mipWidth > 1 ? mipWidth / 2 : 1,
+                        y = mipHeight > 1 ? mipHeight / 2 : 1,
+                        z = 1
+                    },
+                },
+            }
+            vk.CmdBlitImage(commandBuffer, image, .TRANSFER_SRC_OPTIMAL, image, .TRANSFER_DST_OPTIMAL, 1, &blit, .LINEAR)
+            
+            barrier.oldLayout = .TRANSFER_SRC_OPTIMAL
+            barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
+            barrier.srcAccessMask = { .TRANSFER_READ }
+            barrier.dstAccessMask = { .SHADER_READ }
+    
+            vk.CmdPipelineBarrier(commandBuffer, { .TRANSFER }, { .FRAGMENT_SHADER }, {}, 0, nil, 0, nil, 1, &barrier)
+    
+            if mipWidth > 1 do mipWidth /= 2
+            if mipHeight > 1 do mipHeight /= 2
+        }
+    
+        barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+        barrier.oldLayout = .TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = { .TRANSFER_WRITE };
+        barrier.dstAccessMask = { .SHADER_READ };
+    
+        vk.CmdPipelineBarrier(commandBuffer, { .TRANSFER }, { .FRAGMENT_SHADER }, {}, 0, nil, 0, nil, 1, &barrier)
+        endSingleTimeCommands(graphicsContext, commandBuffer);
+    }
+
     texWidth, texHeight, texChannels : i32
     pixels := im.load(TEXTURE_PATH, &texWidth, &texHeight, &texChannels, 4)
     defer im.image_free(pixels)
@@ -1087,12 +1186,11 @@ createTexture :: proc(graphicsContext : ^GraphicsContext) {
         panic("Failed to load texture!")
     }
 
+    graphicsContext^.mipLevels = u32(floor(log2(f32(max(texWidth, texHeight))))) + 1
+
     stagingBuffer : vk.Buffer
     stagingBufferMemory : vk.DeviceMemory
-    createBuffer(
-        graphicsContext, imageSize, { vk.BufferUsageFlag.TRANSFER_SRC }, { vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT },
-        &stagingBuffer, &stagingBufferMemory
-    )
+    createBuffer(graphicsContext, imageSize, { .TRANSFER_SRC }, { .HOST_VISIBLE, .HOST_COHERENT }, &stagingBuffer, &stagingBufferMemory)
 
     data : rawptr
     vk.MapMemory(graphicsContext^.device, stagingBufferMemory, 0, (vk.DeviceSize)(imageSize), {}, &data)
@@ -1100,20 +1198,30 @@ createTexture :: proc(graphicsContext : ^GraphicsContext) {
     vk.UnmapMemory(graphicsContext^.device, stagingBufferMemory)
 
     createImage(
-        graphicsContext, (u32)(texWidth), (u32)(texHeight), vk.Format.R8G8B8A8_SRGB, vk.ImageTiling.OPTIMAL, { vk.ImageUsageFlag.TRANSFER_DST, vk.ImageUsageFlag.SAMPLED },
-        { vk.MemoryPropertyFlag.DEVICE_LOCAL }, &graphicsContext^.texture, &graphicsContext^.textureMemory
+        graphicsContext,
+        (u32)(texWidth),
+        (u32)(texHeight),
+        graphicsContext^.mipLevels,
+        .R8G8B8A8_SRGB,
+        .OPTIMAL, 
+        { .TRANSFER_DST, .TRANSFER_SRC, .SAMPLED },
+        { .DEVICE_LOCAL },
+        &graphicsContext^.texture,
+        &graphicsContext^.textureMemory
     )
-    transitionImageLayout(graphicsContext, graphicsContext^.texture, vk.Format.R8G8B8A8_SRGB, vk.ImageLayout.UNDEFINED, vk.ImageLayout.TRANSFER_DST_OPTIMAL)
+    transitionImageLayout(graphicsContext, graphicsContext^.texture, .R8G8B8A8_SRGB, .UNDEFINED, .TRANSFER_DST_OPTIMAL, graphicsContext^.mipLevels)
     copyBufferToImage(graphicsContext, stagingBuffer, graphicsContext^.texture, texWidth, texHeight)
-    transitionImageLayout(graphicsContext, graphicsContext^.texture, vk.Format.R8G8B8A8_SRGB, vk.ImageLayout.TRANSFER_DST_OPTIMAL, vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL)
+    // transitionImageLayout(graphicsContext, graphicsContext^.texture, .R8G8B8A8_SRGB, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL, graphicsContext^.mipLevels)
 
     vk.DestroyBuffer(graphicsContext^.device, stagingBuffer, nil)
     vk.FreeMemory(graphicsContext^.device, stagingBufferMemory, nil)
+
+    generateMipmaps(graphicsContext, graphicsContext^.texture, .R8G8B8A8_SRGB, u32(texWidth), u32(texHeight), graphicsContext^.mipLevels)
 }
 
 @(private="file")
 createImage :: proc(
-    graphicsContext : ^GraphicsContext, width, height : u32, format : vk.Format, tiling : vk.ImageTiling, usage : vk.ImageUsageFlags,
+    graphicsContext : ^GraphicsContext, width, height, mipLevels : u32, format : vk.Format, tiling : vk.ImageTiling, usage : vk.ImageUsageFlags,
     properties : vk.MemoryPropertyFlags, image : ^vk.Image, imageMemory : ^vk.DeviceMemory
 ) {
     imageInfo : vk.ImageCreateInfo = {
@@ -1123,7 +1231,7 @@ createImage :: proc(
         imageType             = vk.ImageType.D2,
         format                = format,
         extent                = { width, height, 1 },
-        mipLevels             = 1,
+        mipLevels             = mipLevels,
         arrayLayers           = 1,
         samples               = { vk.SampleCountFlag._1 },
         tiling                = tiling,
@@ -1155,11 +1263,13 @@ createImage :: proc(
 
 @(private="file")
 createTextureView :: proc(graphicsContext : ^GraphicsContext) {
-    graphicsContext^.textureView = createImageView(graphicsContext, graphicsContext^.texture, vk.Format.R8G8B8A8_SRGB, { vk.ImageAspectFlag.COLOR })
+    graphicsContext^.textureView = createImageView(graphicsContext, graphicsContext^.texture, vk.Format.R8G8B8A8_SRGB, { vk.ImageAspectFlag.COLOR }, graphicsContext^.mipLevels)
 }
 
 @(private="file")
-createImageView :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format, aspectFlags : vk.ImageAspectFlags) -> (imageView : vk.ImageView) {
+createImageView :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, format : vk.Format, aspectFlags : vk.ImageAspectFlags, mipLevels : u32) ->
+    (imageView : vk.ImageView) 
+{
     viewInfo : vk.ImageViewCreateInfo = {
         sType            = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
         pNext            = nil,
@@ -1176,7 +1286,7 @@ createImageView :: proc(graphicsContext : ^GraphicsContext, image : vk.Image, fo
         subresourceRange = vk.ImageSubresourceRange{
             aspectMask     = aspectFlags,
             baseMipLevel   = 0,
-            levelCount     = 1,
+            levelCount     = mipLevels,
             baseArrayLayer = 0,
             layerCount     = 1,
         },
@@ -1208,7 +1318,7 @@ createTextureSampler :: proc(graphicsContext : ^GraphicsContext) {
         compareEnable           = false,
         compareOp               = vk.CompareOp.ALWAYS,
         minLod                  = 0,
-        maxLod                  = 0,
+        maxLod                  = vk.LOD_CLAMP_NONE,
         borderColor             = vk.BorderColor.INT_OPAQUE_BLACK,
         unnormalizedCoordinates = false,
     }
