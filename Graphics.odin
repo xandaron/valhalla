@@ -232,9 +232,9 @@ createInstance :: proc(graphicsContext : ^GraphicsContext) {
     appInfo : vk.ApplicationInfo = {
         sType              = .APPLICATION_INFO,
         pNext              = nil,
-        pApplicationName   = "Asgard",
+        pApplicationName   = "Valhalla",
         applicationVersion = APP_VERSION,
-        pEngineName        = "Asgard Graphics",
+        pEngineName        = "Asgardina Graphics",
         engineVersion      = ENGINE_VERSION,
         apiVersion         = vk.API_VERSION_1_3
     }

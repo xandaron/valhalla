@@ -1,3 +1,4 @@
-Asgard/assets/textures/*
-Asgard/assets/models/*
-Asgard/logs/*
+assets/textures/*
+assets/models/*
+logs/*
+build/*
