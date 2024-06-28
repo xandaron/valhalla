@@ -1,0 +1,233 @@
+[MESSAGE] Created log file! Dir: ./logs/20240628163921.log
+[DEBUG] Vulkan validation layer (General):
+Checking for Layer Manifest files in Registry at HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ImplicitLayers
+
+[DEBUG] Vulkan validation layer (General):
+windows_add_json_entry: Located json file "C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\nv-vk64.json" from PnP registry: E
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "D:\Software\Steam\SteamOverlayVulkanLayer64.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ImplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "D:\Software\Steam\SteamFossilizeVulkanLayer64.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ImplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\nv-vk64.json (file version 1.0.0)
+
+[WARNING] Vulkan validation layer (General):
+loader_add_layer_properties: 'layers' tag not supported until file version 1.0.1, but C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\nv-vk64.json is reporting version 1
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file D:\Software\Steam\SteamOverlayVulkanLayer64.json (file version 1.0.0)
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file D:\Software\Steam\SteamFossilizeVulkanLayer64.json (file version 1.0.0)
+
+[DEBUG] Vulkan validation layer (General):
+Checking for Layer Manifest files in Registry at HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ExplicitLayers
+
+[DEBUG] Vulkan validation layer (General):
+windows_get_device_registry_files: opening device PCI\VEN_10DE&DEV_2805&SUBSYS_51741462&REV_A1\4&1f822d9d&0&0008
+
+[DEBUG] Vulkan validation layer (General):
+windows_get_device_registry_entry: Device ID(2) Does not contain a value for "VulkanExplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+windows_get_device_registry_files: Opening child device 3 - DISPLAY\ACR0428\5&335D06E7&0&UID4356
+
+[DEBUG] Vulkan validation layer (General):
+windows_get_device_registry_files: Opening child device 4 - DISPLAY\ACR0750\5&335D06E7&0&UID4357
+
+[DEBUG] Vulkan validation layer (General):
+windows_get_device_registry_files: found no registry files
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_api_dump.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ExplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_gfxreconstruct.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ExplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_synchronization2.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ExplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_validation.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ExplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_monitor.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ExplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_screenshot.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ExplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_profiles.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ExplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Located json file "E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_shader_object.json" from registry "HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\ExplicitLayers"
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_api_dump.json (file version 1.2.0)
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_gfxreconstruct.json (file version 1.2.0)
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_synchronization2.json (file version 1.2.0)
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_validation.json (file version 1.2.0)
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_monitor.json (file version 1.0.0)
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_screenshot.json (file version 1.2.0)
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_profiles.json (file version 1.2.1)
+
+[DEBUG] Vulkan validation layer (General):
+Found manifest file E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_shader_object.json (file version 1.2.0)
+
+[DEBUG] Vulkan validation layer (General):
+windows_get_app_package_manifest_path: Failed to find mapping layers packages by family name
+
+[DEBUG] Vulkan validation layer (General):
+Checking for Driver Manifest files in Registry at HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\Drivers
+
+[DEBUG] Vulkan validation layer (General):
+windows_add_json_entry: Located json file "C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\nv-vk64.json" from PnP registry: E
+
+[DEBUG] Vulkan validation layer (General):
+Found no registry files in HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\Vulkan\Drivers
+
+[DEBUG] Vulkan validation layer (General):
+Found ICD manifest file C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\nv-vk64.json, version 1.0.0
+
+[DEBUG] Vulkan validation layer (General):
+Insert instance layer "VK_LAYER_KHRONOS_validation" (E:\dev\VulkanSDK\1.3.283.0\Bin\.\VkLayer_khronos_validation.dll)
+
+[DEBUG] Vulkan validation layer (General):
+Insert instance layer "VK_LAYER_NV_optimus" (C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\.\nvoglv64.dll)
+
+[DEBUG] Vulkan validation layer (General):
+vkCreateInstance layer callstack setup to:
+
+[DEBUG] Vulkan validation layer (General):
+   <Application>
+
+[DEBUG] Vulkan validation layer (General):
+     ||
+
+[DEBUG] Vulkan validation layer (General):
+   <Loader>
+
+[DEBUG] Vulkan validation layer (General):
+     ||
+
+[DEBUG] Vulkan validation layer (General):
+   VK_LAYER_NV_optimus
+
+[DEBUG] Vulkan validation layer (General):
+           Type: Implicit
+
+[DEBUG] Vulkan validation layer (General):
+               Disable Env Var:  DISABLE_LAYER_NV_OPTIMUS_1
+
+[DEBUG] Vulkan validation layer (General):
+           Manifest: C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\nv-vk64.json
+
+[DEBUG] Vulkan validation layer (General):
+           Library:  C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\.\nvoglv64.dll
+
+[DEBUG] Vulkan validation layer (General):
+     ||
+
+[DEBUG] Vulkan validation layer (General):
+   VK_LAYER_KHRONOS_validation
+
+[DEBUG] Vulkan validation layer (General):
+           Type: Explicit
+
+[DEBUG] Vulkan validation layer (General):
+           Manifest: E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_validation.json
+
+[DEBUG] Vulkan validation layer (General):
+           Library:  E:\dev\VulkanSDK\1.3.283.0\Bin\.\VkLayer_khronos_validation.dll
+
+[DEBUG] Vulkan validation layer (General):
+     ||
+
+[DEBUG] Vulkan validation layer (General):
+   <Drivers>
+
+[DEBUG] Vulkan validation layer (Validation):
+Validation Information: [ WARNING-CreateInstance-status-message ] Object 0: handle = 0x13c80566020, type = VK_OBJECT_TYPE_INSTANCE; | MessageID = 0x23dfd876 | vkCreateInstance():  Khronos Validation Layer Active:
+    Settings File: None. Default location is E:\Projects\Celest\Asgard\vk_layer_settings.txt.
+    Current Enables: None.
+    Current Disables: None.
+
+
+[DEBUG] Vulkan validation layer (General):
+Inserted device layer "VK_LAYER_KHRONOS_validation" (E:\dev\VulkanSDK\1.3.283.0\Bin\.\VkLayer_khronos_validation.dll)
+
+[DEBUG] Vulkan validation layer (General):
+Inserted device layer "VK_LAYER_NV_optimus" (C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\.\nvoglv64.dll)
+
+[DEBUG] Vulkan validation layer (General):
+vkCreateDevice layer callstack setup to:
+
+[DEBUG] Vulkan validation layer (General):
+   <Application>
+
+[DEBUG] Vulkan validation layer (General):
+     ||
+
+[DEBUG] Vulkan validation layer (General):
+   <Loader>
+
+[DEBUG] Vulkan validation layer (General):
+     ||
+
+[DEBUG] Vulkan validation layer (General):
+   VK_LAYER_NV_optimus
+
+[DEBUG] Vulkan validation layer (General):
+           Type: Implicit
+
+[DEBUG] Vulkan validation layer (General):
+               Disable Env Var:  DISABLE_LAYER_NV_OPTIMUS_1
+
+[DEBUG] Vulkan validation layer (General):
+           Manifest: C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\nv-vk64.json
+
+[DEBUG] Vulkan validation layer (General):
+           Library:  C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\.\nvoglv64.dll
+
+[DEBUG] Vulkan validation layer (General):
+     ||
+
+[DEBUG] Vulkan validation layer (General):
+   VK_LAYER_KHRONOS_validation
+
+[DEBUG] Vulkan validation layer (General):
+           Type: Explicit
+
+[DEBUG] Vulkan validation layer (General):
+           Manifest: E:\dev\VulkanSDK\1.3.283.0\Bin\VkLayer_khronos_validation.json
+
+[DEBUG] Vulkan validation layer (General):
+           Library:  E:\dev\VulkanSDK\1.3.283.0\Bin\.\VkLayer_khronos_validation.dll
+
+[DEBUG] Vulkan validation layer (General):
+     ||
+
+[DEBUG] Vulkan validation layer (General):
+   <Device>
+
+[DEBUG] Vulkan validation layer (General):
+       Using "NVIDIA GeForce RTX 4060 Ti" with driver: "C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_23954e33c8a39da4\.\nvoglv64.dll"
+
+[ERROR] Vulkan validation layer (Validation):
+Validation Error: [ VUID-VkSubpassDescription-attachment-06914 ] | MessageID = 0xe8a3913d | vkCreateRenderPass(): pCreateInfo->pSubpasses[0].pResolveAttachments[0].layout (VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) is invalid. The Vulkan spec states: If the attachment member of an element of pResolveAttachments is not VK_ATTACHMENT_UNUSED, its layout member must not be VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL or VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL (https://vulkan.lunarg.com/doc/view/1.3.283.0/windows/1.3-extensions/vkspec.html#VUID-VkSubpassDescription-attachment-06914)
+
