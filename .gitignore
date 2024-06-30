@@ -1,4 +1,4 @@
-./assets/textures/*
-./assets/models/*
-./logs/*
-./build/*
+assets/textures/*
+assets/models/*
+logs/*
+build/*

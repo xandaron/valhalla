@@ -1,6 +1,7 @@
 package Valhalla
 
 import "base:runtime"
+
 import "core:fmt"
 import "core:strings"
 import "core:mem"
@@ -8,6 +9,7 @@ import "core:os"
 import "core:math"
 import t "core:time"
 import dt "core:time/datetime"
+
 import vk "vendor:vulkan"
 
 MessageFlag :: enum {

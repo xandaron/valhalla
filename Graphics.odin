@@ -5,6 +5,7 @@ import "core:os"
 import "core:mem"
 import "core:fmt"
 import t "core:time"
+
 import "vendor:glfw"
 import vk "vendor:vulkan"
 import im "vendor:stb/image"
@@ -57,6 +58,11 @@ SwapchainSupportDetails :: struct {
     capabilities : vk.SurfaceCapabilitiesKHR,
     formats      : []vk.SurfaceFormatKHR,
     modes        : []vk.PresentModeKHR,
+}
+
+Camera :: struct {
+    eye, center, up : Vec3,
+    distance : f32,
 }
 
 GraphicsContext :: struct {
@@ -125,9 +131,6 @@ GraphicsContext :: struct {
     colourImage           : vk.Image,
     colourImageMemory     : vk.DeviceMemory,
     colourImageView       : vk.ImageView,
-
-    //Utility. Will be removed
-    startTime             : t.Time,
 }
 
 // Consts
@@ -1729,7 +1732,7 @@ createSyncObjects :: proc(graphicsContext : ^GraphicsContext) {
     }
 }
 
-drawFrame :: proc(graphicsContext : ^GraphicsContext) {
+drawFrame :: proc(graphicsContext : ^GraphicsContext, camera : Camera) {
     vk.WaitForFences(graphicsContext^.device, 1, &graphicsContext^.inFlightFrames[graphicsContext^.currentFrame], true, max(u64))
     
     imageIndex : u32
@@ -1747,7 +1750,7 @@ drawFrame :: proc(graphicsContext : ^GraphicsContext) {
     vk.ResetFences(graphicsContext^.device, 1, &graphicsContext^.inFlightFrames[graphicsContext^.currentFrame])
 
     vk.ResetCommandBuffer(graphicsContext^.commandBuffers[graphicsContext^.currentFrame], {})
-    updateUniformBuffer(graphicsContext)
+    updateUniformBuffer(graphicsContext, camera)
     recordCommandBuffer(graphicsContext, &graphicsContext^.commandBuffers[graphicsContext^.currentFrame], imageIndex)
 
     submitInfo : vk.SubmitInfo = {
@@ -1863,11 +1866,10 @@ recordCommandBuffer :: proc(graphicsContext : ^GraphicsContext, commandBuffer : 
 }
 
 @(private="file")
-updateUniformBuffer :: proc(graphicsContext : ^GraphicsContext) {
-    delta := t.duration_seconds(t.since(graphicsContext^.startTime))
+updateUniformBuffer :: proc(graphicsContext : ^GraphicsContext, camera : Camera) {
     ubo : UniformBufferObject = {
-        model      = rotation4(f32(delta) * radians(f32(45.0)), Vec3{0, 0, 1}),
-        view       = lookAt(Vec3{0, 2, 2}, Vec3{0, 0, 0}, Vec3{0, 1, -1}),
+        model      = IMat4,
+        view       = lookAt(camera.eye, camera.center, camera.up),
         projection = perspective(radians(f32(45.0)), f32(graphicsContext^.swapchainExtent.width) / f32(graphicsContext^.swapchainExtent.height), 0.1, 100),
     }
     mem.copy(graphicsContext^.uniformBuffersMapped[graphicsContext^.currentFrame], &ubo, size_of(UniformBufferObject))

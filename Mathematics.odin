@@ -14,6 +14,10 @@ Vec2 :: linalg.Vector2f32
 Vec3 :: linalg.Vector3f32
 Vec4 :: linalg.Vector4f32
 
+f64Vec2 :: linalg.Vector2f64
+f64Vec3 :: linalg.Vector3f64
+f64Vec4 :: linalg.Vector4f64
+
 Mat2 :: linalg.Matrix2f32
 Mat3 :: linalg.Matrix3f32
 Mat4 :: linalg.Matrix4f32
@@ -39,6 +43,8 @@ IMat4 : Mat4 : {
 radians :: linalg.to_radians
 
 transpose :: linalg.transpose
+
+distance :: linalg.distance
 
 normalize :: linalg.normalize
 
