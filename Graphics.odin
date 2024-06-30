@@ -176,10 +176,10 @@ vertexInputAttributeDescriptions : []vk.VertexInputAttributeDescription = {
 }
 
 @(private="file")
-MODEL_PATH : cstring : "./assets/models/viking_room.obj"
+MODEL_PATH : cstring : "./assets/models/claudia.fbx"
 
 @(private="file")
-TEXTURE_PATH : cstring : "./assets/textures/viking_room.png"
+TEXTURE_PATH : cstring : "./assets/textures/claudia.jpg"
 
 
 // Methods
@@ -1419,39 +1419,28 @@ loadModel :: proc(graphicsContext : ^GraphicsContext) {
             break
         }
 
-        {
-            // Unpack / triangulate the index data
-            index_count := 3 * mesh.num_triangles
-            indices := make([]u32, index_count)
-            off : u32 = 0
-            for i in 0 ..< mesh.faces.count {
+        // Unpack / triangulate the index data
+        index_count := 3 * mesh.num_triangles
+        indices := make([]u32, index_count)
+        off := u32(0)
+        for i in 0 ..< mesh.faces.count {
                 face := mesh.faces.data[i]
                 tris := fbx.catch_triangulate_face(nil, &indices[off], uint(index_count), mesh, face)
                 off += 3 * tris
-            }
         }
 
         // Unpack the vertex data
-        indices : [dynamic]u32
-        vertices : [dynamic]Vertex
+        vertex_count := mesh.num_indices
+        vertices := make([]Vertex, vertex_count)
 
-        vertexMap := make(map[Vertex]u32)
-        defer delete(vertexMap)
-
-        for i in 0..< mesh.num_indices {
-            pos := mesh.vertex_position.values.data[mesh.vertex_position.indices.data[i]]
-            uv := mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[i]]
-            //norm := mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[i]]
-
-            vertex : Vertex = {
-                position = { f32(pos.x), f32(pos.y), f32(pos.z) },
-                texCoord = { f32(uv.x), 1 - f32(uv.y) },
-            }
-            if !(vertex in vertexMap) {
-                vertexMap[vertex] = u32(len(vertices))
-                append(&vertices, vertex)
-            }
-            append(&indices, vertexMap[vertex])
+        for i in 0..< vertex_count {
+                pos := mesh.vertex_position.values.data[mesh.vertex_position.indices.data[i]]
+                //norm := mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[i]]
+                uv := mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[i]]
+                vertices[i] = {
+                    position = {f32(pos.x), f32(pos.y), f32(pos.z)},
+                    texCoord = {f32(uv.x), 1-f32(uv.y)},
+                }
         }
         return indices[:], vertices[:]
     }
@@ -1870,7 +1859,7 @@ updateUniformBuffer :: proc(graphicsContext : ^GraphicsContext, camera : Camera)
     ubo : UniformBufferObject = {
         model      = IMat4,
         view       = lookAt(camera.eye, camera.center, camera.up),
-        projection = perspective(radians(f32(45.0)), f32(graphicsContext^.swapchainExtent.width) / f32(graphicsContext^.swapchainExtent.height), 0.1, 100),
+        projection = perspective(radians(f32(45.0)), f32(graphicsContext^.swapchainExtent.width) / f32(graphicsContext^.swapchainExtent.height), 0.1, 1000000),
     }
     mem.copy(graphicsContext^.uniformBuffersMapped[graphicsContext^.currentFrame], &ubo, size_of(UniformBufferObject))
 }

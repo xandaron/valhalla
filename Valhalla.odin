@@ -1,7 +1,5 @@
 package Valhalla
 
-import "base:runtime"
-
 import "core:os"
 import t "core:time"
 import "core:fmt"
@@ -145,7 +143,6 @@ glfwCursorPosCallback :: proc "c" (window: glfw.WindowHandle, xpos, ypos: f64) {
 
 glfwScrollCallback :: proc "c" (window: glfw.WindowHandle, xoffset, yoffset : f64) {
     scrollDelta = { xoffset, yoffset }
-    context = runtime.default_context()
 }
 
 framebufferResizeCallback :: proc "c" (window : glfw.WindowHandle, width : i32, height : i32) {
