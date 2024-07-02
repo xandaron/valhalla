@@ -137,7 +137,7 @@ glfwMouseButtonCallback :: proc "c" (window: glfw.WindowHandle, button, action, 
 
 glfwCursorPosCallback :: proc "c" (window: glfw.WindowHandle, xpos, ypos: f64) {
     newPos : f64Vec2 = { xpos, ypos } * mouseSensitivity
-    mouseDelta = newPos - mousePos
+    mouseDelta += newPos - mousePos
     mousePos = newPos
 }
 

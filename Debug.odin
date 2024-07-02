@@ -13,6 +13,7 @@ import dt "core:time/datetime"
 import vk "vendor:vulkan"
 
 MessageFlag :: enum {
+    NONE,
     MESSAGE,
     DEBUG,
     WARNING,

@@ -15,23 +15,29 @@ import fbx "ufbx"
 // Data structs
 @(private="file")
 Vertex :: struct {
-    position : Vec3,
-    texCoord : Vec2,
+    position    : Vec3,
+    texCoord    : Vec2,
+    bones       : Vec3,
+    boneWeights : Vec3,
 }
 
 @(private="file")
 Bone :: struct {
-    name      : string,
-    parent    : ^Bone,
-    transform : Mat4
+    name        : cstring,
+    isRoot      : bool,
+    parentIndex : u32,
+    inverseBind : Mat4,
 }
+
+@(private="file")
+Skeleton :: []Bone
 
 @(private="file")
 Model :: struct {
     id       : u32,
     vertices : []Vertex,
     indices  : []u32,
-    bones    : []Bone,
+    Skeleton : Skeleton,
 }
 
 @(private="file")
@@ -131,6 +137,8 @@ GraphicsContext :: struct {
     colourImage           : vk.Image,
     colourImageMemory     : vk.DeviceMemory,
     colourImageView       : vk.ImageView,
+
+    models                : []Model,
 }
 
 // Consts
@@ -173,10 +181,22 @@ vertexInputAttributeDescriptions : []vk.VertexInputAttributeDescription = {
         format   = .R32G32_SFLOAT,
         offset   = u32(offset_of(Vertex, texCoord)),
     },
+    {
+        location = 2,
+        binding  = 0,
+        format   = .R32G32B32_SFLOAT,
+        offset   = u32(offset_of(Vertex, texCoord)),
+    },
+    {
+        location = 3,
+        binding  = 0,
+        format   = .R32G32B32_SFLOAT,
+        offset   = u32(offset_of(Vertex, texCoord)),
+    },
 }
 
 @(private="file")
-MODEL_PATH : cstring : "./assets/models/claudia.fbx"
+MODEL_PATH : cstring : "./assets/models/dancing.fbx"
 
 @(private="file")
 TEXTURE_PATH : cstring : "./assets/textures/claudia.jpg"
@@ -1399,53 +1419,126 @@ createTextureSampler :: proc(graphicsContext : ^GraphicsContext) {
 
 @(private="file")
 loadModel :: proc(graphicsContext : ^GraphicsContext) {
-    loadFBX :: proc(filename : cstring) -> ([]u32, []Vertex) {
-        // Load the .fbx file
+    loadFBX :: proc(graphicsContext : ^GraphicsContext, id : u32, filename : cstring) {
+        loadSkeleton :: proc(node : ^fbx.Node) -> Skeleton {
+            loadBone :: proc(node : ^fbx.Node, skeleton : ^[dynamic]Bone, parentIndex : u32) {
+                bone : Bone = {
+                    name        = node^.bone^.element.name.data,
+                    isRoot      = false,
+                    parentIndex = parentIndex,
+                }
+                thisIndex := len(skeleton^)
+                append(skeleton, bone)
+                for index in 0..<node^.children.count {
+                    loadBone(node^.children.data[index], skeleton, u32(thisIndex))
+                }
+            }
+
+            skeleton : [dynamic]Bone
+            bone : Bone = {
+                name        = node^.bone^.element.name.data,
+                isRoot      = true,
+                parentIndex = 0,
+            }
+            append(&skeleton, bone)
+            for index in 0..<node^.children.count {
+                loadBone(node^.children.data[index], &skeleton, 0)
+            }
+            return skeleton[:]
+        }
+
         opts := fbx.Load_Opts{}
         err := fbx.Error{}
         scene := fbx.load_file(filename, &opts, &err)
         defer fbx.free_scene(scene)
         if scene == nil {
-            log(.ERROR, fmt.aprintf("failed to load FBX file! Reason\n{}", err.description.data))
+            log(.ERROR, fmt.aprintf("Failed to load FBX file! Reason\n{}", err.description.data))
             panic("Failed to load FBX file!")
         }
-
-        // Retrieve the first mesh
+        
         mesh: ^fbx.Mesh
-        for i in 0 ..< scene.nodes.count {
+        skeleton : Skeleton
+        for i in 0..<scene.nodes.count {
             node := scene.nodes.data[i]
-            if node.is_root || node.mesh == nil { continue }
-            mesh = node.mesh
-            break
+            if node.is_root do continue
+            if node.mesh != nil && mesh == nil {
+                mesh = node.mesh
+                continue
+            }
+            else if node.bone != nil && skeleton == nil {
+                skeleton = loadSkeleton(node)
+                continue
+            }
         }
-
-        // Unpack / triangulate the index data
+        
         index_count := 3 * mesh.num_triangles
         indices := make([]u32, index_count)
         off := u32(0)
-        for i in 0 ..< mesh.faces.count {
-                face := mesh.faces.data[i]
-                tris := fbx.catch_triangulate_face(nil, &indices[off], uint(index_count), mesh, face)
-                off += 3 * tris
+        for i in 0..<mesh.faces.count {
+            face := mesh.faces.data[i]
+            tris := fbx.catch_triangulate_face(nil, &indices[off], uint(index_count), mesh, face)
+            off += 3 * tris
         }
 
-        // Unpack the vertex data
         vertex_count := mesh.num_indices
         vertices := make([]Vertex, vertex_count)
 
-        for i in 0..< vertex_count {
-                pos := mesh.vertex_position.values.data[mesh.vertex_position.indices.data[i]]
-                //norm := mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[i]]
-                uv := mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[i]]
-                vertices[i] = {
-                    position = {f32(pos.x), f32(pos.y), f32(pos.z)},
-                    texCoord = {f32(uv.x), 1-f32(uv.y)},
-                }
+        for i in 0..<vertex_count {
+            pos := mesh.vertex_position.values.data[mesh.vertex_position.indices.data[i]]
+            uv := mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[i]]
+            vertices[i] = {
+                position    = {f32(pos.x), f32(pos.y), f32(pos.z)},
+                texCoord    = {f32(uv.x), 1 - f32(uv.y)},
+                bones       = {-1, -1, -1},
+                boneWeights = {-1, -1, -1},
+            }
         }
-        return indices[:], vertices[:]
+
+        for index in 0..<scene.skin_cluster.count {
+            skinCluster := scene.skin_cluster.data[index]^
+            boneIndex : u32
+
+            for &bone, index in skeleton {
+                if bone.name == skinCluster.bone_node^.element.name.data {
+                    boneIndex = u32(index)
+                    m := skinCluster.geometry_to_bone.cols
+                    bone.inverseBind = {
+                        f32(m[0][0]), f32(m[1][0]), f32(m[2][0]), f32(m[3][0]),
+                        f32(m[0][1]), f32(m[1][1]), f32(m[2][1]), f32(m[3][1]),
+                        f32(m[0][2]), f32(m[1][2]), f32(m[2][2]), f32(m[3][2]),
+                                   0,            0,            0,            1,
+                    }
+                    break
+                }
+            }
+
+            for index in 0..<skinCluster.vertices.count {
+                vertex := vertices[skinCluster.vertices.data[index]]
+                if vertex.bones.x == -1 {
+                    vertex.bones.x = f32(boneIndex)
+                    vertex.boneWeights.x = f32(skinCluster.weights.data[index])
+                }
+                else if vertex.bones.y == -1 {
+                    vertex.bones.y = f32(boneIndex)
+                    vertex.boneWeights.y = f32(skinCluster.weights.data[index])
+                }
+                else if vertex.bones.z == -1 {
+                    vertex.bones.z = f32(boneIndex)
+                    vertex.boneWeights.z = f32(skinCluster.weights.data[index])
+                }
+            }
+        }
+        
+        graphicsContext^.models[id] = {
+            id       = id,
+            vertices = vertices[:],
+            indices  = indices[:],
+            Skeleton = skeleton,
+        }
     }
 
-    graphicsContext^.indices, graphicsContext^.vertices = loadFBX(MODEL_PATH)
+    graphicsContext^.models = make([]Model, 1)
+    loadFBX(graphicsContext, 0, MODEL_PATH)
 }
 
 @(private="file")
