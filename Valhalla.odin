@@ -1,151 +1,197 @@
 package Valhalla
 
-import "core:os"
-import t "core:time"
+import "base:runtime"
+
 import "core:fmt"
+import "core:os"
 import "core:strings"
+import t "core:time"
 
 import "vendor:glfw"
 
-APP_VERSION : u32 : (0<<22) | (0<<12) | (1)
+APP_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 
-frameCount : u16 = 0
-fpsTimer : t.Time = t.now()
+frameCount: u16 = 0
+fpsTimer: t.Time = t.now()
 
-mouseMode : bool = false
-mousePos, mouseDelta : f64Vec2 = { 0, 0 }, { 0, 0 }
-mouseSensitivity : f64 = 1
-scrollDelta : f64Vec2 = { 0, 0 }
+mouseMode: bool = false
+mousePos, mouseDelta: f64Vec2 = {0, 0}, {0, 0}
+mouseSensitivity: f64 = 1
+scrollDelta: f64Vec2 = {0, 0}
 
-cameraSpeed : f64 = 1
+cameraSpeed: f64 = 1
+cameraMoveSpeed: f32 = 0.0001
+cameraVerticalMove: f32 = 0
 
 EngineState :: struct {
-    camera          : Camera,
-    graphicsContext : GraphicsContext,
+	camera:          Camera,
+	graphicsContext: GraphicsContext,
 }
 
 main :: proc() {
-    glfw.SetErrorCallback(glfwErrorCallback)
+	glfw.SetErrorCallback(glfwErrorCallback)
 
-    if !glfw.Init() {
-        log(.ERROR, "Failed to initalize glfw, quitting application.")
-        panic("Failed to initalize glfw, quitting application.")
-    }
-    defer glfw.Terminate()
+	if !glfw.Init() {
+		log(.ERROR, "Failed to initalize glfw, quitting application.")
+		panic("Failed to initalize glfw, quitting application.")
+	}
+	defer glfw.Terminate()
 
-    glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
+	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 
-    width : i32 = 800
-    height : i32 = 600
-    name : cstring : "New Innsmouth"
-    monitor : glfw.MonitorHandle = nil
-    window : glfw.WindowHandle = glfw.CreateWindow(width, height, name, monitor, nil)
-    if window == nil {
-        log(.ERROR, "Failed to create window, quitting application.")
-        panic("Failed to create window, quitting application.")
-    }
-    defer glfw.DestroyWindow(window)
+	width: i32 = 800
+	height: i32 = 600
+	name: cstring : "New Innsmouth"
+	monitor: glfw.MonitorHandle = nil
+	window: glfw.WindowHandle = glfw.CreateWindow(width, height, name, monitor, nil)
+	if window == nil {
+		log(.ERROR, "Failed to create window, quitting application.")
+		panic("Failed to create window, quitting application.")
+	}
+	defer glfw.DestroyWindow(window)
 
-    glfw.SetKeyCallback(window, keyCallback)
-    glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
-    glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
-    glfw.SetScrollCallback(window, glfwScrollCallback)
-    glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
-    
-    engineState : EngineState = {
-        camera = {
-            eye      = { 0, 2, 2 },
-            center   = { 0, 0, 0 },
-            up       = { 0, 1,-1 },
-        },
-        graphicsContext = {
-            window = window,
-        },
-    }
-    engineState.camera.distance = distance(engineState.camera.center, engineState.camera.eye)
+	glfw.SetKeyCallback(window, keyCallback)
+	glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
+	glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
+	glfw.SetScrollCallback(window, glfwScrollCallback)
+	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
 
-    glfw.SetWindowUserPointer(window, &engineState)
-    initVkGraphics(&engineState.graphicsContext)
-    defer clanupVkGraphics(&engineState.graphicsContext)
+	engineState: EngineState = {
+		camera = {
+			eye = {0.0, -0.45, 1.3},
+			center = {0.0, -0.45, 0.0},
+			up = {0.0, 1.0, 0.0},
+		},
+		graphicsContext = {window = window},
+	}
+	engineState.camera.distance = distance(engineState.camera.center, engineState.camera.eye)
 
-    lastFrameTime := t.now()
-    for !glfw.WindowShouldClose(window) {
-        glfw.PollEvents()
+	glfw.SetWindowUserPointer(window, &engineState)
+	initVkGraphics(&engineState.graphicsContext)
+	defer clanupVkGraphics(&engineState.graphicsContext)
 
-        if mouseMode {
-            if mouseDelta != { 0, 0 } {
-                axis : Vec3 = { 0, 0, 0 }
-                forward := engineState.camera.center - engineState.camera.eye
-                if mouseDelta.x < 0 {
-                    axis += engineState.camera.up
-                }
-                else if mouseDelta.x > 0 {
-                    axis -= engineState.camera.up
-                }
-                if mouseDelta.y > 0 {
-                    axis += cross(engineState.camera.up, forward)
-                }
-                else if mouseDelta.y < 0 {
-                    axis -= cross(engineState.camera.up, forward)
-                }
-                rotation := rotation3(f32(radians(cameraSpeed)), axis)
-                engineState.camera.up = rotation * engineState.camera.up
-                forward = rotation * forward
-                engineState.camera.eye = engineState.camera.center - forward
-                mouseDelta = { 0, 0 }
-            }
-            if scrollDelta.y != 0 {
-                forward := (engineState.camera.center - engineState.camera.eye) / engineState.camera.distance
-                engineState.camera.distance *= 1 + f32(-scrollDelta.y * 0.1)
-                engineState.camera.eye = engineState.camera.center - forward * engineState.camera.distance
-                scrollDelta = { 0, 0 }
-            }
-        }
+	lastFrameTime := t.now()
+	for !glfw.WindowShouldClose(window) {
+		glfw.PollEvents()
 
-        drawFrame(&engineState.graphicsContext, engineState.camera)
-        lastFrameTime = t.now()
-        calcFrameRate(window)
-    }
+		if mouseMode {
+			if mouseDelta != {0, 0} {
+				axis: Vec3 = {0, 0, 0}
+				forward := engineState.camera.center - engineState.camera.eye
+				if mouseDelta.x < 0 {
+					axis += engineState.camera.up
+				} else if mouseDelta.x > 0 {
+					axis -= engineState.camera.up
+				}
+				if mouseDelta.y > 0 {
+					axis += cross(engineState.camera.up, forward)
+				} else if mouseDelta.y < 0 {
+					axis -= cross(engineState.camera.up, forward)
+				}
+				rotation := rotation3(f32(radians(cameraSpeed)), axis)
+				engineState.camera.up = rotation * engineState.camera.up
+				forward = rotation * forward
+				engineState.camera.eye = engineState.camera.center - forward
+				mouseDelta = {0, 0}
+			}
+			if scrollDelta.y != 0 {
+				forward :=
+					(engineState.camera.center - engineState.camera.eye) /
+					engineState.camera.distance
+				engineState.camera.distance *= 1 + f32(-scrollDelta.y * 0.1)
+				engineState.camera.eye =
+					engineState.camera.center - forward * engineState.camera.distance
+				scrollDelta = {0, 0}
+			}
+		}
+
+
+		if cameraVerticalMove != 0 {
+			movement := cameraMoveSpeed * cameraVerticalMove * engineState.camera.up
+			engineState.camera.eye += movement
+			engineState.camera.center += movement
+		}
+
+
+		drawFrame(&engineState.graphicsContext, engineState.camera)
+		lastFrameTime = t.now()
+		calcFrameRate(window)
+	}
 }
 
-calcFrameRate :: proc(window : glfw.WindowHandle) {
-    frameCount += 1
-    if timeDelta := t.duration_seconds(t.since(fpsTimer)); timeDelta >= 1 {
-        glfw.SetWindowTitle(window, strings.clone_to_cstring(fmt.aprintf("{:.2f}", (f64)(frameCount) / timeDelta)))
-        frameCount = 0
-        fpsTimer = t.now()
-    }
+calcFrameRate :: proc(window: glfw.WindowHandle) {
+	frameCount += 1
+	if timeDelta := t.duration_seconds(t.since(fpsTimer)); timeDelta >= 1 {
+		glfw.SetWindowTitle(
+			window,
+			strings.clone_to_cstring(fmt.aprintf("{:.2f}", (f64)(frameCount) / timeDelta)),
+		)
+		frameCount = 0
+		fpsTimer = t.now()
+	}
 }
 
 keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
-    if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
+	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, glfw.TRUE)
+	}
+	if key == glfw.KEY_SPACE {
+		if action == glfw.PRESS {
+			cameraVerticalMove -= 1
+		} else if action == glfw.RELEASE {
+			cameraVerticalMove += 1
+		}
+	}
+	if key == glfw.KEY_LEFT_SHIFT {
+		if action == glfw.PRESS {
+			cameraVerticalMove += 1
+		} else if action == glfw.RELEASE {
+			cameraVerticalMove -= 1
+		}
+	}
+	if key == glfw.KEY_C && action == glfw.PRESS {
+		context = runtime.default_context()
+		camera := (^EngineState)(glfw.GetWindowUserPointer(window))^.camera
+		log(
+			.DEBUG,
+			fmt.aprintf(
+				"eye: ({}, {}, {}), center: ({}, {}, {}), up: ({}, {}, {})",
+				camera.eye.x,
+				camera.eye.y,
+				camera.eye.z,
+				camera.center.x,
+				camera.center.y,
+				camera.center.z,
+				camera.up.x,
+				camera.up.y,
+				camera.up.z,
+			),
+		)
 	}
 }
 
 glfwMouseButtonCallback :: proc "c" (window: glfw.WindowHandle, button, action, mods: i32) {
-    if button == glfw.MOUSE_BUTTON_MIDDLE && action == glfw.PRESS {
-        if mouseMode {
-            glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_NORMAL);
-        }
-        else {
-            glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_DISABLED);
-        }
-        mouseMode = !mouseMode
-    }
+	if button == glfw.MOUSE_BUTTON_MIDDLE && action == glfw.PRESS {
+		if mouseMode {
+			glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+		} else {
+			glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+		}
+		mouseMode = !mouseMode
+	}
 }
 
 glfwCursorPosCallback :: proc "c" (window: glfw.WindowHandle, xpos, ypos: f64) {
-    newPos : f64Vec2 = { xpos, ypos } * mouseSensitivity
-    mouseDelta += newPos - mousePos
-    mousePos = newPos
+	newPos: f64Vec2 = {xpos, ypos} * mouseSensitivity
+	mouseDelta += newPos - mousePos
+	mousePos = newPos
 }
 
-glfwScrollCallback :: proc "c" (window: glfw.WindowHandle, xoffset, yoffset : f64) {
-    scrollDelta = { xoffset, yoffset }
+glfwScrollCallback :: proc "c" (window: glfw.WindowHandle, xoffset, yoffset: f64) {
+	scrollDelta = {xoffset, yoffset}
 }
 
-framebufferResizeCallback :: proc "c" (window : glfw.WindowHandle, width : i32, height : i32) {
-    engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
-    engineState^.graphicsContext.framebufferResized = true
+framebufferResizeCallback :: proc "c" (window: glfw.WindowHandle, width: i32, height: i32) {
+	engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
+	engineState^.graphicsContext.framebufferResized = true
 }

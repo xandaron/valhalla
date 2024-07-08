@@ -1,27 +1,35 @@
 #version 450
 
-layout(set = 0, binding = 0) uniform UBO {
-	mat4 view;
-	mat4 projection;
-	mat4 viewProjection;
-} cameraData;
+layout(binding = 0) uniform UniformBufferObject {
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+} ubo;
 
-layout(std140, set = 0, binding = 1) readonly buffer storageBuffer {
-	mat4 model[];
-} ObjectData;
+layout(binding = 1) readonly buffer storageBuffer {
+	mat4 boneTransforms[];
+} BoneBuffer;
 
-layout(location = 0) in vec3 vertexPosition;
-layout(location = 1) in vec3 vertexColor;
-layout(location = 2) in vec2 vertexTexCoord;
-layout(location = 3) in vec3 vertexNormal;
+layout(location = 0) in vec3 inPosition;
+layout(location = 1) in vec2 inTexCoord;
+layout(location = 2) in uvec4 inBones;
+layout(location = 3) in vec4 inWeights;
 
-layout(location = 0) out vec3 fragColor;
-layout(location = 1) out vec2 fragTexCoord;
-layout(location = 2) out vec3 fragNormal;
+layout(location = 0) out vec2 fragTexCoord;
+layout(location = 1) out vec4 fragColour;
+
+mat4 identity = mat4(1.0);
 
 void main() {
-	gl_Position = cameraData.viewProjection * ObjectData.model[gl_InstanceIndex] * vec4(vertexPosition, 1.0);
-	fragColor = vertexColor;
-	fragTexCoord = vertexTexCoord;
-	fragNormal = normalize((ObjectData.model[gl_InstanceIndex] * vec4(vertexNormal, 0.0)).xyz);
+    mat4 transform = mat4(0.0);
+
+    for (int id = 0; id < 4; id++) {
+        if (inWeights[id] > 0.0) {
+            transform += BoneBuffer.boneTransforms[inBones[id]] * inWeights[id];
+        }
+    }
+
+    gl_Position = ubo.projection * ubo.view * ubo.model * transform * vec4(inPosition, 1.0);
+    fragTexCoord = inTexCoord;
+    fragColour = vec4(1.0, 1.0, 1.0, 1.0);
 }
