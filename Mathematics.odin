@@ -20,6 +20,10 @@ f64Vec4 :: linalg.Vector4f64
 
 Quat :: linalg.Quaternionf32
 
+quatFromX :: linalg.quaternion_from_euler_angle_x_f32
+quatFromY :: linalg.quaternion_from_euler_angle_y_f32
+quatFromZ :: linalg.quaternion_from_euler_angle_z_f32
+
 Mat2 :: linalg.Matrix2f32
 Mat3 :: linalg.Matrix3f32
 Mat4 :: linalg.Matrix4f32
@@ -87,7 +91,7 @@ perspective :: proc(fov, aspect, near, far: f32) -> (m: Mat4) {
 	assert(aspect != 0, "Aspect ratio can't be zero!")
 	tanHalfFov := tan(0.5 * fov)
 	m[0, 0] = 1 / (aspect * tanHalfFov)
-	m[1, 1] = 1 / (tanHalfFov)
+	m[1, 1] = -1 / (tanHalfFov)
 	m[2, 2] = far / (far - near)
 	m[3, 2] = 1
 	m[2, 3] = -(far * near) / (far - near)

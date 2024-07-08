@@ -58,8 +58,8 @@ main :: proc() {
 
 	engineState: EngineState = {
 		camera = {
-			eye = {0.0, -0.45, 1.3},
-			center = {0.0, -0.45, 0.0},
+			eye = {0.0, 0.45, -1.3},
+			center = {0.0, 0.45, 0.0},
 			up = {0.0, 1.0, 0.0},
 		},
 		graphicsContext = {window = window},

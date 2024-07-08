@@ -48,9 +48,6 @@ KeyQuat :: struct {
 @(private = "file")
 AnimNode :: struct {
 	bone:            u32,
-	positionKey:     u32,
-	rotationKey:     u32,
-	scaleKey:        u32,
 	keyPositions:    []KeyVector,
 	keyRotations:    []KeyQuat,
 	keyScales:       []KeyVector,
@@ -67,10 +64,24 @@ Anim :: struct {
 
 @(private = "file")
 Model :: struct {
-	vertices:   []Vertex,
-	indices:    []u32,
-	skeleton:   Skeleton,
-	animations: []Anim,
+	vertices:    []Vertex,
+	indices:     []u32,
+	indexOffset: u32,
+	indexCount:  u32,
+	skeleton:    Skeleton,
+	animations:  []Anim,
+}
+
+@(private = "file")
+ModelInstance :: struct {
+	modelID:      u32,
+	animID:       u32,
+	position:     Vec3,
+	rotation:     Quat,
+	scale:        Vec3,
+	positionKeys: [1024]u32,
+	rotationKeys: [1024]u32,
+	scaleKeys:    [1024]u32,
 }
 
 @(private = "file")
@@ -81,9 +92,9 @@ PipelineType :: enum {
 
 @(private = "file")
 UniformBufferObject :: struct #align (16) {
-	model:      Mat4,
-	view:       Mat4,
-	projection: Mat4,
+	view:           Mat4,
+	projection:     Mat4,
+	viewProjection: Mat4,
 }
 
 @(private = "file")
@@ -105,69 +116,79 @@ Camera :: struct {
 }
 
 GraphicsContext :: struct {
-	window:                glfw.WindowHandle,
-	instance:              vk.Instance,
-	debugMessenger:        vk.DebugUtilsMessengerEXT,
-	surface:               vk.SurfaceKHR,
-	physicalDevice:        vk.PhysicalDevice,
-	device:                vk.Device,
-	queueFamilies:         QueueFamilyIndices,
-	graphicsQueue:         vk.Queue,
-	presentQueue:          vk.Queue,
-	swapchain:             vk.SwapchainKHR,
-	swapchainFormat:       vk.SurfaceFormatKHR,
-	swapchainMode:         vk.PresentModeKHR,
-	swapchainExtent:       vk.Extent2D,
-	swapchainImages:       []vk.Image,
-	swapchainImageViews:   []vk.ImageView,
-	swapchainFrameBuffers: []vk.Framebuffer,
-	pipelines:             []vk.Pipeline,
-	descriptorSetLayout:   vk.DescriptorSetLayout,
-	pipelineLayouts:       []vk.PipelineLayout,
-	renderPasses:          []vk.RenderPass,
-	commandPool:           vk.CommandPool,
-	commandBuffers:        []vk.CommandBuffer,
-	imagesAvailable:       []vk.Semaphore,
-	rendersFinished:       []vk.Semaphore,
-	inFlightFrames:        []vk.Fence,
-	currentFrame:          u32,
-	framebufferResized:    b8,
+	window:                  glfw.WindowHandle,
+	instance:                vk.Instance,
+	debugMessenger:          vk.DebugUtilsMessengerEXT,
+	surface:                 vk.SurfaceKHR,
+	physicalDevice:          vk.PhysicalDevice,
+	device:                  vk.Device,
+	queueFamilies:           QueueFamilyIndices,
+	graphicsQueue:           vk.Queue,
+	presentQueue:            vk.Queue,
+	swapchain:               vk.SwapchainKHR,
+	swapchainFormat:         vk.SurfaceFormatKHR,
+	swapchainMode:           vk.PresentModeKHR,
+	swapchainExtent:         vk.Extent2D,
+	swapchainImages:         []vk.Image,
+	swapchainImageViews:     []vk.ImageView,
+	swapchainFrameBuffers:   []vk.Framebuffer,
+	pipelines:               []vk.Pipeline,
+	descriptorSetLayout:     vk.DescriptorSetLayout,
+	pipelineLayouts:         []vk.PipelineLayout,
+	renderPasses:            []vk.RenderPass,
+	commandPool:             vk.CommandPool,
+	commandBuffers:          []vk.CommandBuffer,
+	imagesAvailable:         []vk.Semaphore,
+	rendersFinished:         []vk.Semaphore,
+	inFlightFrames:          []vk.Fence,
+	currentFrame:            u32,
+	framebufferResized:      b8,
 
+	// Storage Buffers
+	models:                  []Model,
+	modelInstances:          []ModelInstance,
 	// To-Do: Vertex and Index buffers should be one buffer
-	vertices:              []Vertex,
-	vertexBuffer:          vk.Buffer,
-	vertexBufferMemory:    vk.DeviceMemory,
-	indices:               []u32,
-	indexBuffer:           vk.Buffer,
-	indexBufferMemory:     vk.DeviceMemory,
-	uniformBuffers:        [MAX_FRAMES_IN_FLIGHT]vk.Buffer,
-	uniformBuffersMemory:  [MAX_FRAMES_IN_FLIGHT]vk.DeviceMemory,
-	uniformBuffersMapped:  [MAX_FRAMES_IN_FLIGHT]rawptr,
-	descriptorPool:        vk.DescriptorPool,
-	descriptorSets:        []vk.DescriptorSet,
-	mipLevels:             u32,
-	texture:               vk.Image,
-	textureMemory:         vk.DeviceMemory,
-	textureView:           vk.ImageView,
-	textureSampler:        vk.Sampler,
-	depthImage:            vk.Image,
-	depthImageMemory:      vk.DeviceMemory,
-	depthImageView:        vk.ImageView,
-	depthFormat:           vk.Format,
-	msaaSamples:           vk.SampleCountFlags,
-	colourImage:           vk.Image,
-	colourImageMemory:     vk.DeviceMemory,
-	colourImageView:       vk.ImageView,
+	vertices:                []Vertex,
+	vertexBuffer:            vk.Buffer,
+	vertexBufferMemory:      vk.DeviceMemory,
+	indices:                 []u32,
+	indexCount:              u32,
+	indexBuffer:             vk.Buffer,
+	indexBufferMemory:       vk.DeviceMemory,
+	descriptorPool:          vk.DescriptorPool,
+	descriptorSets:          []vk.DescriptorSet,
+	mipLevels:               u32,
+	texture:                 vk.Image,
+	textureMemory:           vk.DeviceMemory,
+	textureView:             vk.ImageView,
+	textureSampler:          vk.Sampler,
+	depthImage:              vk.Image,
+	depthImageMemory:        vk.DeviceMemory,
+	depthImageView:          vk.ImageView,
+	depthFormat:             vk.Format,
+	msaaSamples:             vk.SampleCountFlags,
+	colourImage:             vk.Image,
+	colourImageMemory:       vk.DeviceMemory,
+	colourImageView:         vk.ImageView,
 
-	// Models
-	models:                []Model,
-	boneBuffers:           [MAX_FRAMES_IN_FLIGHT]vk.Buffer,
-	boneBuffersMemory:     [MAX_FRAMES_IN_FLIGHT]vk.DeviceMemory,
-	boneBuffersMapped:     [MAX_FRAMES_IN_FLIGHT]rawptr,
+	// storage and uniform buffers
+	// ToDo: Combine into single buffer
+	modelBuffers:            [MAX_FRAMES_IN_FLIGHT]vk.Buffer,
+	modelBuffersMemory:      [MAX_FRAMES_IN_FLIGHT]vk.DeviceMemory,
+	modelBuffersMapped:      [MAX_FRAMES_IN_FLIGHT]rawptr,
+	boneBuffers:             [MAX_FRAMES_IN_FLIGHT]vk.Buffer,
+	boneBuffersMemory:       [MAX_FRAMES_IN_FLIGHT]vk.DeviceMemory,
+	boneBuffersMapped:       [MAX_FRAMES_IN_FLIGHT]rawptr,
+	boneOffsetBuffers:       [MAX_FRAMES_IN_FLIGHT]vk.Buffer,
+	boneOffsetBuffersMemory: [MAX_FRAMES_IN_FLIGHT]vk.DeviceMemory,
+	boneOffsetBuffersMapped: [MAX_FRAMES_IN_FLIGHT]rawptr,
+	uniformBuffers:          [MAX_FRAMES_IN_FLIGHT]vk.Buffer,
+	uniformBuffersMemory:    [MAX_FRAMES_IN_FLIGHT]vk.DeviceMemory,
+	uniformBuffersMapped:    [MAX_FRAMES_IN_FLIGHT]rawptr,
 
 	// Util
-	startTime:             t.Time,
-	timeKeeper:            f64,
+	startTime:               t.Time,
+	timeKeeper:              f64,
 }
 
 // Consts
@@ -195,6 +216,9 @@ shaderFiles: []string = {
 
 @(private = "file")
 MAX_FRAMES_IN_FLIGHT: u32 : 2
+
+@(private = "file")
+MAX_MODEL_INSTANCES: int : 3
 
 @(private = "file")
 vertexBindingDescription: vk.VertexInputBindingDescription = {
@@ -274,6 +298,8 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 
 	createUniformBuffer(graphicsContext)
 	createBoneBuffer(graphicsContext)
+	createBoneOffsetBuffer(graphicsContext)
+	createModelBuffer(graphicsContext)
 
 	createDescriptorPool(graphicsContext)
 	createDescriptionSetLayout(graphicsContext)
@@ -302,6 +328,7 @@ createInstance :: proc(graphicsContext: ^GraphicsContext) {
 
 	glfwExtensions := glfw.GetRequiredInstanceExtensions()
 	supportedExtensions: [dynamic]cstring
+	defer delete(supportedExtensions)
 
 	extensionCount: u32
 	vk.EnumerateInstanceExtensionProperties(nil, &extensionCount, nil)
@@ -345,6 +372,7 @@ createInstance :: proc(graphicsContext: ^GraphicsContext) {
 	debugMessengerCreateInfo: vk.DebugUtilsMessengerCreateInfoEXT
 	when ODIN_DEBUG {
 		supportedLayers: [dynamic]cstring
+		defer delete(supportedLayers)
 		layerCount: u32
 		vk.EnumerateInstanceLayerProperties(&layerCount, nil)
 		layers := make([]vk.LayerProperties, layerCount)
@@ -448,6 +476,7 @@ findQueueFamilies :: proc(
 	queueFamilyCount: u32
 	vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nil)
 	queueFamilies := make([]vk.QueueFamilyProperties, queueFamilyCount)
+	defer delete(queueFamilies)
 	vk.GetPhysicalDeviceQueueFamilyProperties(
 		physicalDevice,
 		&queueFamilyCount,
@@ -519,6 +548,7 @@ pickPhysicalDevice :: proc(graphicsContext: ^GraphicsContext) {
 		extensionCount: u32
 		vk.EnumerateDeviceExtensionProperties(physicalDevice, nil, &extensionCount, nil)
 		availableExtensions := make([]vk.ExtensionProperties, extensionCount)
+		defer delete(availableExtensions)
 		vk.EnumerateDeviceExtensionProperties(
 			physicalDevice,
 			nil,
@@ -607,6 +637,7 @@ createLogicalDevice :: proc(graphicsContext: ^GraphicsContext) {
 
 	queuePriority: f32 = 1.0
 	queueCreateInfos: [dynamic]vk.DeviceQueueCreateInfo
+	defer delete(queueCreateInfos)
 	queueCreateInfo: vk.DeviceQueueCreateInfo = {
 		sType            = .DEVICE_QUEUE_CREATE_INFO,
 		pNext            = nil,
@@ -1006,11 +1037,13 @@ createPipeline :: proc(graphicsContext: ^GraphicsContext) {
 	}
 
 	shaderModules, shaderModulesCount := createShaderModules(graphicsContext, shaderFiles)
+	defer delete(shaderModules)
 	defer for shaderModule in shaderModules {
 		vk.DestroyShaderModule(graphicsContext^.device, shaderModule, nil)
 	}
 
 	shaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, shaderModulesCount)
+	defer delete(shaderStagesInfo)
 	for index in 0 ..< shaderModulesCount {
 		shaderStageInfo: vk.PipelineShaderStageCreateInfo = {
 			sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -1069,7 +1102,7 @@ createPipeline :: proc(graphicsContext: ^GraphicsContext) {
 		rasterizerDiscardEnable = false,
 		polygonMode             = .FILL,
 		cullMode                = {.BACK},
-		frontFace               = .COUNTER_CLOCKWISE,
+		frontFace               = .CLOCKWISE,
 		depthBiasEnable         = false,
 		depthBiasConstantFactor = 0.0,
 		depthBiasClamp          = 0.0,
@@ -1780,7 +1813,7 @@ loadModel :: proc(graphicsContext: ^GraphicsContext) {
 		opts: fbx.Load_Opts = {
 			target_axes = fbx.Coordinate_Axes {
 				right = .POSITIVE_X,
-				up = .NEGATIVE_Y,
+				up = .POSITIVE_Y,
 				front = .NEGATIVE_Z,
 			},
 		}
@@ -1810,7 +1843,8 @@ loadModel :: proc(graphicsContext: ^GraphicsContext) {
 		{
 			index_count := 3 * mesh.num_triangles
 			model^.indices = make([]u32, index_count)
-			off := u32(0)
+			model^.indexCount = u32(index_count)
+			off: u32 = 0
 			for i in 0 ..< mesh.faces.count {
 				face := mesh.faces.data[i]
 				tris := fbx.catch_triangulate_face(
@@ -1930,9 +1964,6 @@ loadModel :: proc(graphicsContext: ^GraphicsContext) {
 					}
 					animNode := AnimNode {
 						bone            = u32(index),
-						positionKey     = 0,
-						rotationKey     = 0,
-						scaleKey        = 0,
 						keyPositions    = make([]KeyVector, bakedNode.translation_keys.count),
 						keyRotations    = make([]KeyQuat, bakedNode.rotation_keys.count),
 						keyScales       = make([]KeyVector, bakedNode.scale_keys.count),
@@ -1969,10 +2000,31 @@ loadModel :: proc(graphicsContext: ^GraphicsContext) {
 			fbx.free_baked_anim(bakedAnim)
 		}
 	}
+
 	graphicsContext^.models = make([]Model, 1)
-	loadFBX(graphicsContext, 0, MODEL_PATH)
-	graphicsContext^.vertices = graphicsContext^.models[0].vertices
-	graphicsContext^.indices = graphicsContext^.models[0].indices
+	indexCount: u32 = 0
+	vertices: [dynamic]Vertex
+	indices: [dynamic]u32
+	for &model, modelIndex in graphicsContext^.models {
+		loadFBX(graphicsContext, u32(modelIndex), MODEL_PATH)
+		model.indexOffset = indexCount
+		indexCount += model.indexCount
+		append(&vertices, ..model.vertices)
+		append(&indices, ..model.indices)
+	}
+	graphicsContext^.vertices = vertices[:]
+	graphicsContext^.indices = indices[:]
+
+	graphicsContext^.modelInstances = make([]ModelInstance, 3)
+	for index in 0 ..< MAX_MODEL_INSTANCES {
+		graphicsContext^.modelInstances[index] = {
+			modelID  = 0,
+			animID   = 1,
+			position = {f32(index - 1), 0, index == 1 ? 0 : 1},
+			rotation = quatFromY(f32(radians(180.0))),
+			scale    = {0.005, 0.005, 0.005},
+		}
+	}
 }
 
 @(private = "file")
@@ -2131,7 +2183,9 @@ createBoneBuffer :: proc(graphicsContext: ^GraphicsContext) {
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		createBuffer(
 			graphicsContext,
-			size_of(Mat4) * len(graphicsContext^.models[0].skeleton),
+			size_of(Mat4) *
+			len(graphicsContext^.models[0].skeleton) *
+			len(graphicsContext^.modelInstances),
 			{.STORAGE_BUFFER},
 			{.HOST_VISIBLE, .HOST_COHERENT},
 			&graphicsContext^.boneBuffers[i],
@@ -2141,9 +2195,57 @@ createBoneBuffer :: proc(graphicsContext: ^GraphicsContext) {
 			graphicsContext^.device,
 			graphicsContext^.boneBuffersMemory[i],
 			0,
-			vk.DeviceSize(size_of(Mat4) * len(graphicsContext^.models[0].skeleton)),
+			vk.DeviceSize(
+				size_of(Mat4) *
+				len(graphicsContext^.models[0].skeleton) *
+				len(graphicsContext^.modelInstances),
+			),
 			{},
 			&graphicsContext^.boneBuffersMapped[i],
+		)
+	}
+}
+
+@(private = "file")
+createBoneOffsetBuffer :: proc(graphicsContext: ^GraphicsContext) {
+	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		createBuffer(
+			graphicsContext,
+			size_of(u32) * len(graphicsContext^.modelInstances),
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&graphicsContext^.boneOffsetBuffers[i],
+			&graphicsContext^.boneOffsetBuffersMemory[i],
+		)
+		vk.MapMemory(
+			graphicsContext^.device,
+			graphicsContext^.boneOffsetBuffersMemory[i],
+			0,
+			vk.DeviceSize(size_of(u32) * len(graphicsContext^.modelInstances)),
+			{},
+			&graphicsContext^.boneOffsetBuffersMapped[i],
+		)
+	}
+}
+
+@(private = "file")
+createModelBuffer :: proc(graphicsContext: ^GraphicsContext) {
+	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		createBuffer(
+			graphicsContext,
+			size_of(Mat4) * MAX_MODEL_INSTANCES,
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&graphicsContext^.modelBuffers[i],
+			&graphicsContext^.modelBuffersMemory[i],
+		)
+		vk.MapMemory(
+			graphicsContext^.device,
+			graphicsContext^.modelBuffersMemory[i],
+			0,
+			vk.DeviceSize(size_of(Mat4) * MAX_MODEL_INSTANCES),
+			{},
+			&graphicsContext^.modelBuffersMapped[i],
 		)
 	}
 }
@@ -2214,6 +2316,8 @@ createDescriptorPool :: proc(graphicsContext: ^GraphicsContext) {
 	poolSize: []vk.DescriptorPoolSize = {
 		{type = .UNIFORM_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 		{type = .STORAGE_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
+		{type = .STORAGE_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
+		{type = .STORAGE_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 		{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 	}
 	poolInfo: vk.DescriptorPoolCreateInfo = {
@@ -2245,15 +2349,29 @@ createDescriptionSetLayout :: proc(graphicsContext: ^GraphicsContext) {
 		stageFlags         = {.VERTEX},
 		pImmutableSamplers = nil,
 	}
-	boneLayoutBinding: vk.DescriptorSetLayoutBinding = {
+	modelLayoutBinding: vk.DescriptorSetLayoutBinding = {
 		binding            = 1,
 		descriptorType     = .STORAGE_BUFFER,
 		descriptorCount    = 1,
 		stageFlags         = {.VERTEX},
 		pImmutableSamplers = nil,
 	}
-	samplerLayoutBinding: vk.DescriptorSetLayoutBinding = {
+	boneOffsetLayoutBinding: vk.DescriptorSetLayoutBinding = {
 		binding            = 2,
+		descriptorType     = .STORAGE_BUFFER,
+		descriptorCount    = 1,
+		stageFlags         = {.VERTEX},
+		pImmutableSamplers = nil,
+	}
+	boneLayoutBinding: vk.DescriptorSetLayoutBinding = {
+		binding            = 3,
+		descriptorType     = .STORAGE_BUFFER,
+		descriptorCount    = 1,
+		stageFlags         = {.VERTEX},
+		pImmutableSamplers = nil,
+	}
+	samplerLayoutBinding: vk.DescriptorSetLayoutBinding = {
+		binding            = 4,
 		descriptorType     = .COMBINED_IMAGE_SAMPLER,
 		descriptorCount    = 1,
 		stageFlags         = {.FRAGMENT},
@@ -2263,12 +2381,14 @@ createDescriptionSetLayout :: proc(graphicsContext: ^GraphicsContext) {
 		sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 		pNext        = nil,
 		flags        = {},
-		bindingCount = 3,
+		bindingCount = 5,
 		pBindings    = raw_data(
 			[]vk.DescriptorSetLayoutBinding {
 				uboLayoutBinding,
-				samplerLayoutBinding,
+				modelLayoutBinding,
+				boneOffsetLayoutBinding,
 				boneLayoutBinding,
+				samplerLayoutBinding,
 			},
 		),
 	}
@@ -2287,6 +2407,7 @@ createDescriptionSetLayout :: proc(graphicsContext: ^GraphicsContext) {
 @(private = "file")
 createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 	layouts := make([]vk.DescriptorSetLayout, MAX_FRAMES_IN_FLIGHT)
+	defer delete(layouts)
 	for &layout in layouts {
 		layout = graphicsContext^.descriptorSetLayout
 	}
@@ -2313,10 +2434,22 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 			offset = 0,
 			range  = size_of(UniformBufferObject),
 		}
+		modelBufferInfo: vk.DescriptorBufferInfo = {
+			buffer = graphicsContext^.modelBuffers[index],
+			offset = 0,
+			range  = vk.DeviceSize(MAX_MODEL_INSTANCES * size_of(Mat4)),
+		}
+		boneOffsetBufferInfo: vk.DescriptorBufferInfo = {
+			buffer = graphicsContext^.boneOffsetBuffers[index],
+			offset = 0,
+			range  = vk.DeviceSize(MAX_MODEL_INSTANCES * size_of(u32)),
+		}
 		boneBufferInfo: vk.DescriptorBufferInfo = {
 			buffer = graphicsContext^.boneBuffers[index],
 			offset = 0,
-			range  = vk.DeviceSize(size_of(Mat4) * len(graphicsContext^.models[0].skeleton)),
+			range  = vk.DeviceSize(
+				size_of(Mat4) * len(graphicsContext^.models[0].skeleton) * MAX_MODEL_INSTANCES,
+			),
 		}
 		imageInfo: vk.DescriptorImageInfo = {
 			sampler     = graphicsContext^.textureSampler,
@@ -2345,7 +2478,7 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 				descriptorCount = 1,
 				descriptorType = .STORAGE_BUFFER,
 				pImageInfo = nil,
-				pBufferInfo = &boneBufferInfo,
+				pBufferInfo = &modelBufferInfo,
 				pTexelBufferView = nil,
 			},
 			{
@@ -2355,13 +2488,37 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 				dstBinding = 2,
 				dstArrayElement = 0,
 				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &boneOffsetBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = graphicsContext^.descriptorSets[index],
+				dstBinding = 3,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &boneBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = graphicsContext^.descriptorSets[index],
+				dstBinding = 4,
+				dstArrayElement = 0,
+				descriptorCount = 1,
 				descriptorType = .COMBINED_IMAGE_SAMPLER,
 				pImageInfo = &imageInfo,
 				pBufferInfo = nil,
 				pTexelBufferView = nil,
 			},
 		}
-		vk.UpdateDescriptorSets(graphicsContext^.device, 3, raw_data(descriptorWrite), 0, nil)
+		vk.UpdateDescriptorSets(graphicsContext^.device, 5, raw_data(descriptorWrite), 0, nil)
 	}
 }
 
@@ -2460,7 +2617,8 @@ drawFrame :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 	)
 
 	vk.ResetCommandBuffer(graphicsContext^.commandBuffers[graphicsContext^.currentFrame], {})
-	updateModelAnims(graphicsContext, graphicsContext^.currentFrame)
+	updateModelTransforms(graphicsContext)
+	updateModelAnims(graphicsContext)
 	updateUniformBuffer(graphicsContext, camera)
 	recordCommandBuffer(
 		graphicsContext,
@@ -2591,7 +2749,7 @@ recordCommandBuffer :: proc(
 		0,
 		nil,
 	)
-	vk.CmdDrawIndexed(commandBuffer^, u32(len(graphicsContext^.indices)), 1, 0, 0, 0)
+	vk.CmdDrawIndexed(commandBuffer^, u32(len(graphicsContext^.indices)), 3, 0, 0, 0)
 
 	vk.CmdEndRenderPass(commandBuffer^)
 	if vk.EndCommandBuffer(commandBuffer^) != .SUCCESS {
@@ -2603,9 +2761,6 @@ recordCommandBuffer :: proc(
 @(private = "file")
 updateUniformBuffer :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 	ubo: UniformBufferObject = {
-		model      = scale(
-			Vec3{0.005, 0.005, 0.005},
-		) * rotation4(f32(radians(180.0)), Vec3{1, 0, 0}) * rotation4(f32(radians(180.0)), Vec3{0, 1, 0}),
 		view       = lookAt(camera.eye, camera.center, camera.up),
 		projection = perspective(
 			radians(f32(45.0)),
@@ -2615,6 +2770,7 @@ updateUniformBuffer :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 			1000000,
 		),
 	}
+	ubo.viewProjection = ubo.projection * ubo.view
 	mem.copy(
 		graphicsContext^.uniformBuffersMapped[graphicsContext^.currentFrame],
 		&ubo,
@@ -2623,150 +2779,151 @@ updateUniformBuffer :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 }
 
 @(private = "file")
-updateModelAnims :: proc(graphicsContext: ^GraphicsContext, imageIndex: u32) {
-	updateKeyIndex :: proc(node: ^AnimNode, time: f64) {
-		id := node^.positionKey
-		for true {
-			if time > node^.keyPositions[id].time && time < node^.keyPositions[id + 1].time {
-				node^.positionKey = id
-				break
-			}
-			id += 1
-			if id == node^.numKeyPositions - 2 {
-				id = 0
-			}
-		}
-		id = node^.rotationKey
-		for true {
-			if time > node^.keyRotations[id].time && time < node^.keyRotations[id + 1].time {
-				node^.rotationKey = id
-				break
-			}
-			id += 1
-			if id == node^.numKeyRotations - 2 {
-				id = 0
-			}
-		}
-		id = node^.scaleKey
-		for true {
-			if time > node^.keyScales[id].time && time < node^.keyScales[id + 1].time {
-				node^.scaleKey = id
-				break
-			}
-			id += 1
-			if id == node^.numKeyScales - 2 {
-				id = 0
-			}
-		}
-	}
-
-	animation := graphicsContext^.models[0].animations[1]
-	timeSinceStart := t.duration_seconds(t.since(graphicsContext^.startTime))
-	timeStamp := timeSinceStart - (floor(timeSinceStart / animation.duration) * animation.duration)
-	skeleton := &graphicsContext^.models[0].skeleton
-	localBoneTransforms := make([]Mat4, len(skeleton))
-	finalBoneTransforms := make([]Mat4, len(skeleton))
-	defer delete(localBoneTransforms)
+updateModelAnims :: proc(graphicsContext: ^GraphicsContext) {
+	finalBoneTransforms := make(
+		[]Mat4,
+		MAX_MODEL_INSTANCES * len(graphicsContext^.models[0].skeleton),
+	)
 	defer delete(finalBoneTransforms)
-	for index in 0 ..< len(skeleton) {
-		localBoneTransforms[index] = IMat4
-		finalBoneTransforms[index] = IMat4
-	}
-	for &node in animation.nodes {
-		bone := skeleton[node.bone]
-		parentTransform := localBoneTransforms[bone.parentIndex]
-		animTransform: Mat4
+	boneOffsets := make([]u32, MAX_MODEL_INSTANCES)
+	defer delete(boneOffsets)
+	boneOffset: u32 = 0
+	timeSinceStart := t.duration_seconds(t.since(graphicsContext^.startTime))
+	for &instance, instanceIndex in graphicsContext^.modelInstances {
+		boneOffsets[instanceIndex] = boneOffset
+		animation := graphicsContext^.models[instance.modelID].animations[instance.animID]
+		localTime := timeSinceStart + f64(instanceIndex * 3)
+		timeStamp := localTime - (floor(localTime / animation.duration) * animation.duration)
+		skeleton := &graphicsContext^.models[instance.modelID].skeleton
+		localBoneTransforms := make([]Mat4, len(skeleton))
+		defer delete(localBoneTransforms)
+		for index in 0 ..< len(skeleton) {
+			localBoneTransforms[index] = IMat4
+		}
+		for &node, nodeIndex in animation.nodes {
+			bone := skeleton[node.bone]
+			parentTransform := localBoneTransforms[bone.parentIndex]
+			animTransform: Mat4
 
-		// a *= b == a = a * b
-		// therefore aT *= T *= R *= S == aT = T * R * S * aT
-		if node.numKeyPositions == 1 {
-			animTransform = translate(node.keyPositions[0].value)
-		} else {
-			id := node.positionKey
-			for true {
-				if node.keyPositions[id].time <= timeStamp &&
-				   timeStamp <= node.keyPositions[id + 1].time {
-					node.positionKey = id
-					break
+			// a *= b == a = a * b
+			// therefore aT *= T *= R *= S == aT = T * R * S * aT
+			if node.numKeyPositions == 1 {
+				animTransform = translate(node.keyPositions[0].value)
+			} else {
+				id := instance.positionKeys[nodeIndex]
+				for true {
+					if node.keyPositions[id].time <= timeStamp &&
+					   timeStamp <= node.keyPositions[id + 1].time {
+						instance.positionKeys[nodeIndex] = id
+						break
+					}
+					id += 1
+					if id == node.numKeyPositions - 1 {
+						id = 0
+					}
 				}
-				id += 1
-				if id == node.numKeyPositions - 1 {
-					id = 0
-				}
+				valueDiff :=
+					node.keyPositions[instance.positionKeys[nodeIndex] + 1].value -
+					node.keyPositions[instance.positionKeys[nodeIndex]].value
+				timeDiff :=
+					(timeStamp - node.keyPositions[instance.positionKeys[nodeIndex]].time) /
+					(node.keyPositions[instance.positionKeys[nodeIndex] + 1].time -
+							node.keyPositions[instance.positionKeys[nodeIndex]].time)
+				value :=
+					f32(timeDiff) * valueDiff +
+					node.keyPositions[instance.positionKeys[nodeIndex]].value
+				animTransform = translate(value)
 			}
-			valueDiff :=
-				node.keyPositions[node.positionKey + 1].value -
-				node.keyPositions[node.positionKey].value
-			timeDiff :=
-				(timeStamp - node.keyPositions[node.positionKey].time) /
-				(node.keyPositions[node.positionKey + 1].time -
-						node.keyPositions[node.positionKey].time)
-			value := f32(timeDiff) * valueDiff + node.keyPositions[node.positionKey].value
-			animTransform = translate(value)
-		}
-		
-		if node.numKeyRotations == 1 {
-			animTransform *= quatToRotation(node.keyRotations[0].value)
-		} else {
-			id := node.rotationKey
-			for true {
-				if node.keyRotations[id].time <= timeStamp &&
-				   timeStamp <= node.keyRotations[id + 1].time {
-					node.rotationKey = id
-					break
-				}
-				id += 1
-				if id == node.numKeyRotations - 1 {
-					id = 0
-				}
-			}
-			valueDiff :=
-				node.keyRotations[node.rotationKey + 1].value -
-				node.keyRotations[node.rotationKey].value
-			timeDiff :=
-				(timeStamp - node.keyRotations[node.rotationKey].time) /
-				(node.keyRotations[node.rotationKey + 1].time -
-						node.keyRotations[node.rotationKey].time)
-			animTransform *= quatToRotation(
-				quatLurp(
-					node.keyRotations[node.rotationKey].value,
-					node.keyRotations[node.rotationKey + 1].value,
-					f32(timeDiff),
-				),
-			)
-		}
-		
-		if node.numKeyScales == 1 {
-			animTransform *= scale(node.keyScales[0].value)
-		} else {
-			id := node.scaleKey
-			for true {
-				if node.keyScales[id].time <= timeStamp &&
-				   timeStamp <= node.keyScales[id + 1].time {
-					node.scaleKey = id
-					break
-				}
-				id += 1
-				if id == node.numKeyScales - 1 {
-					id = 0
-				}
-			}
-			valueDiff :=
-				node.keyScales[node.scaleKey + 1].value - node.keyScales[node.scaleKey].value
-			timeDiff :=
-				(timeStamp - node.keyScales[node.scaleKey].time) /
-				(node.keyScales[node.scaleKey + 1].time - node.keyScales[node.scaleKey].time)
-			value := f32(timeDiff) * valueDiff + node.keyScales[node.scaleKey].value
-			animTransform *= scale(value)
-		}
 
-		localBoneTransforms[node.bone] = parentTransform * animTransform
-		finalBoneTransforms[node.bone] = localBoneTransforms[node.bone] * bone.inverseBind
+			if node.numKeyRotations == 1 {
+				animTransform *= quatToRotation(node.keyRotations[0].value)
+			} else {
+				id := instance.rotationKeys[nodeIndex]
+				for true {
+					if node.keyRotations[id].time <= timeStamp &&
+					   timeStamp <= node.keyRotations[id + 1].time {
+						instance.rotationKeys[nodeIndex] = id
+						break
+					}
+					id += 1
+					if id == node.numKeyRotations - 1 {
+						id = 0
+					}
+				}
+				valueDiff :=
+					node.keyRotations[instance.rotationKeys[nodeIndex] + 1].value -
+					node.keyRotations[instance.rotationKeys[nodeIndex]].value
+				timeDiff :=
+					(timeStamp - node.keyRotations[instance.rotationKeys[nodeIndex]].time) /
+					(node.keyRotations[instance.rotationKeys[nodeIndex] + 1].time -
+							node.keyRotations[instance.rotationKeys[nodeIndex]].time)
+				animTransform *= quatToRotation(
+					quatLurp(
+						node.keyRotations[instance.rotationKeys[nodeIndex]].value,
+						node.keyRotations[instance.rotationKeys[nodeIndex] + 1].value,
+						f32(timeDiff),
+					),
+				)
+			}
+
+			if node.numKeyScales == 1 {
+				animTransform *= scale(node.keyScales[0].value)
+			} else {
+				id := instance.scaleKeys[nodeIndex]
+				for true {
+					if node.keyScales[id].time <= timeStamp &&
+					   timeStamp <= node.keyScales[id + 1].time {
+						instance.scaleKeys[nodeIndex] = id
+						break
+					}
+					id += 1
+					if id == node.numKeyScales - 1 {
+						id = 0
+					}
+				}
+				valueDiff :=
+					node.keyScales[instance.scaleKeys[nodeIndex] + 1].value -
+					node.keyScales[instance.scaleKeys[nodeIndex]].value
+				timeDiff :=
+					(timeStamp - node.keyScales[instance.scaleKeys[nodeIndex]].time) /
+					(node.keyScales[instance.scaleKeys[nodeIndex] + 1].time -
+							node.keyScales[instance.scaleKeys[nodeIndex]].time)
+				value :=
+					f32(timeDiff) * valueDiff + node.keyScales[instance.scaleKeys[nodeIndex]].value
+				animTransform *= scale(value)
+			}
+			localBoneTransforms[node.bone] = parentTransform * animTransform
+			finalBoneTransforms[node.bone + boneOffset] =
+				localBoneTransforms[node.bone] * bone.inverseBind
+		}
+		boneOffset += u32(len(skeleton))
 	}
 	mem.copy(
-		graphicsContext^.boneBuffersMapped[imageIndex],
+		graphicsContext^.boneBuffersMapped[graphicsContext^.currentFrame],
 		raw_data(finalBoneTransforms),
 		len(finalBoneTransforms) * size_of(Mat4),
+	)
+	mem.copy(
+		graphicsContext^.boneOffsetBuffersMapped[graphicsContext^.currentFrame],
+		raw_data(boneOffsets),
+		MAX_MODEL_INSTANCES * size_of(u32),
+	)
+}
+
+@(private = "file")
+updateModelTransforms :: proc(graphicsContext: ^GraphicsContext) {
+	modelTransforms := make([]Mat4, MAX_MODEL_INSTANCES)
+	defer delete(modelTransforms)
+	for instance, index in graphicsContext^.modelInstances {
+		modelTransforms[index] =
+			translate(instance.position) *
+			quatToRotation(instance.rotation) *
+			scale(instance.scale)
+	}
+	mem.copy(
+		graphicsContext^.modelBuffersMapped[graphicsContext^.currentFrame],
+		raw_data(modelTransforms),
+		MAX_MODEL_INSTANCES * size_of(Mat4),
 	)
 }
 
@@ -2803,6 +2960,10 @@ clanupVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 		vk.FreeMemory(graphicsContext^.device, graphicsContext^.uniformBuffersMemory[i], nil)
 		vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.boneBuffers[i], nil)
 		vk.FreeMemory(graphicsContext^.device, graphicsContext^.boneBuffersMemory[i], nil)
+		vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.boneOffsetBuffers[i], nil)
+		vk.FreeMemory(graphicsContext^.device, graphicsContext^.boneOffsetBuffersMemory[i], nil)
+		vk.DestroyBuffer(graphicsContext^.device, graphicsContext^.modelBuffers[i], nil)
+		vk.FreeMemory(graphicsContext^.device, graphicsContext^.modelBuffersMemory[i], nil)
 	}
 	vk.DestroyDescriptorPool(graphicsContext^.device, graphicsContext^.descriptorPool, nil)
 	vk.DestroyDescriptorSetLayout(
@@ -2851,6 +3012,7 @@ clanupVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 	delete(graphicsContext^.indices)
 	delete(graphicsContext^.descriptorSets)
 	delete(graphicsContext^.models)
+	delete(graphicsContext^.modelInstances)
 }
 
 @(private = "file")
