@@ -18,8 +18,6 @@ layout(location = 3) in vec4 inWeights;
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColour;
 
-mat4 identity = mat4(1.0);
-
 void main() {
     mat4 transform = mat4(0.0);
 
