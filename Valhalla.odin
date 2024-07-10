@@ -79,9 +79,9 @@ main :: proc() {
 				axis: Vec3 = {0, 0, 0}
 				forward := engineState.camera.center - engineState.camera.eye
 				if mouseDelta.x < 0 {
-					axis += engineState.camera.up
-				} else if mouseDelta.x > 0 {
 					axis -= engineState.camera.up
+				} else if mouseDelta.x > 0 {
+					axis += engineState.camera.up
 				}
 				if mouseDelta.y > 0 {
 					axis += cross(engineState.camera.up, forward)
