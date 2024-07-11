@@ -3827,7 +3827,7 @@ Load_Opts :: struct {
 	_begin_zero:                          u32,
 	temp_allocator:                       Allocator_Opts, // < Allocator used during loading
 	result_allocator:                     Allocator_Opts, // < Allocator used for the final scene
-	thread_opts:                          Thread_Pool, // < Threading options
+	thread_opts:                          Thread_Opts, // < Threading options
 
 	// Preferences
 	ignore_geometry:                      c.bool, // < Do not load geometry datsa (vertices, indices, etc)
