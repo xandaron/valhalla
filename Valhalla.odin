@@ -137,16 +137,16 @@ keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods:
 	}
 	if key == glfw.KEY_SPACE {
 		if action == glfw.PRESS {
-			cameraVerticalMove -= 1
-		} else if action == glfw.RELEASE {
 			cameraVerticalMove += 1
+		} else if action == glfw.RELEASE {
+			cameraVerticalMove -= 1
 		}
 	}
 	if key == glfw.KEY_LEFT_SHIFT {
 		if action == glfw.PRESS {
-			cameraVerticalMove += 1
-		} else if action == glfw.RELEASE {
 			cameraVerticalMove -= 1
+		} else if action == glfw.RELEASE {
+			cameraVerticalMove += 1
 		}
 	}
 	if key == glfw.KEY_C && action == glfw.PRESS {

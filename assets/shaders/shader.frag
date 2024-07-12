@@ -3,11 +3,11 @@
 layout(binding = 3) uniform sampler2DArray samplerArray;
 
 layout(location = 0) in vec3 inUV;
-layout(location = 1) in vec4 inColour;
+// layout(location = 1) in vec4 inColour;
 
-layout(location = 0) out vec4 outColor;
+layout(location = 0) out vec4 outColour;
 
 void main() {
-    outColor = texture(samplerArray, inUV);
-    // outColor = fragColour;
+    outColour = texture(samplerArray, inUV);
+    // outColour = fragColour;
 }

@@ -23,6 +23,13 @@ requestedLayers: []cstring = {"VK_LAYER_KHRONOS_validation"}
 requiredDeviceExtensions: []cstring = {vk.KHR_SWAPCHAIN_EXTENSION_NAME}
 
 @(private = "file")
+skyShaderStages: []vk.ShaderStageFlag = {
+	.VERTEX,
+	.FRAGMENT,
+	/*.COMPUTE,*/
+}
+
+@(private = "file")
 shaderStages: []vk.ShaderStageFlag = {
 	.VERTEX,
 	.FRAGMENT,
@@ -31,9 +38,12 @@ shaderStages: []vk.ShaderStageFlag = {
 
 @(private = "file")
 shaderFiles: []string = {
-	"./assets/shaders/vert.spv",
-	"./assets/shaders/frag.spv", /*"./assets/shaders/comp.spv",*/
+	"./assets/shaders/shader_vert.spv",
+	"./assets/shaders/shader_frag.spv", /*"./assets/shaders/shader_comp.spv",*/
 }
+
+@(private = "file")
+skyShaderFiles: []string = {"./assets/shaders/skybox_vert.spv", "./assets/shaders/skybox_frag.spv"}
 
 @(private = "file")
 vertexBindingDescription: vk.VertexInputBindingDescription = {
@@ -74,7 +84,18 @@ vertexInputAttributeDescriptions: []vk.VertexInputAttributeDescription = {
 ENGINE_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 
 @(private = "file")
+CUBE_PATH: cstring : "./assets/models/cube.fbx"
+
+@(private = "file")
 MODEL_PATH: cstring : "./assets/models/dancing.fbx"
+
+@(private = "file")
+SKY_FRONT: cstring : "./assets/textures/cubemap_front.jpg"
+SKY_BACK: cstring : "./assets/textures/cubemap_back.jpg"
+SKY_LEFT: cstring : "./assets/textures/cubemap_left.jpg"
+SKY_RIGHT: cstring : "./assets/textures/cubemap_right.jpg"
+SKY_TOP: cstring : "./assets/textures/cubemap_top.jpg"
+SKY_BOTTOM: cstring : "./assets/textures/cubemap_bottom.jpg"
 
 @(private = "file")
 R_TEXTURE_PATH: cstring : "./assets/textures/red.jpg"
@@ -85,7 +106,7 @@ B_TEXTURE_PATH: cstring : "./assets/textures/blue.jpg"
 MAX_FRAMES_IN_FLIGHT: u32 : 2
 
 @(private = "file")
-MAX_MODEL_INSTANCES: int : 3
+MAX_MODEL_INSTANCES: int : 4
 
 // ###################################################################
 // #                       Data Structures                           #
@@ -142,20 +163,23 @@ Anim :: struct {
 
 @(private = "file")
 Model :: struct {
-	vertices:    []Vertex,
-	indices:     []u32,
-	indexOffset: u32,
-	indexCount:  u32,
-	skeleton:    Skeleton,
-	animations:  []Anim,
+	vertices:     []Vertex,
+	vertexOffset: u32,
+	indices:      []u32,
+	indexOffset:  u32,
+	indexCount:   u32,
+	skeleton:     Skeleton,
+	animations:   []Anim,
 }
 
 @(private = "file")
 Image :: struct {
-	image:  vk.Image,
-	memory: vk.DeviceMemory,
-	view:   vk.ImageView,
-	format: vk.Format,
+	image:     vk.Image,
+	memory:    vk.DeviceMemory,
+	view:      vk.ImageView,
+	format:    vk.Format,
+	sampler:   vk.Sampler,
+	mipLevels: u32,
 }
 
 @(private = "file")
@@ -174,12 +198,14 @@ Instance :: struct {
 
 @(private = "file")
 PipelineType :: enum {
-	STANDARD,
-	COUNT,
+	SKYBOX = 0,
+	MAIN   = 1,
 }
 
 @(private = "file")
 ViewProjectionUniform :: struct #align (16) {
+	view:           Mat4,
+	projection:     Mat4,
 	viewProjection: Mat4,
 }
 
@@ -247,7 +273,7 @@ GraphicsContext :: struct {
 	descriptorSets:         []vk.DescriptorSet,
 
 	// Pipeline
-	pipeline:               vk.Pipeline,
+	pipelines:              []vk.Pipeline,
 	descriptorSetLayout:    vk.DescriptorSetLayout,
 	pipelineLayout:         vk.PipelineLayout,
 	renderPass:             vk.RenderPass,
@@ -259,11 +285,10 @@ GraphicsContext :: struct {
 	// Assets
 	models:                 []Model,
 	textures:               Image,
-	textureSampler:         vk.Sampler,
 	instances:              []Instance,
 	vertices:               []Vertex, // To-Do: Vertex and Index buffers should be one buffer
 	indices:                []u32,
-	mipLevels:              u32,
+	skybox:                 Image,
 	boneCount:              int,
 
 	// Buffers
@@ -313,7 +338,6 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 
 	// Assets
 	loadAssets(graphicsContext)
-	createTextureSampler(graphicsContext)
 
 	// Shader buffers
 	createViewProjectionUniform(graphicsContext)
@@ -331,7 +355,7 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 	// Pipeline
 	createRenderPass(graphicsContext)
 	createFramebuffers(graphicsContext)
-	createPipeline(graphicsContext)
+	createPipelines(graphicsContext)
 }
 
 @(private = "file")
@@ -1441,7 +1465,14 @@ copyBufferToTextureArray :: proc(
 			imageExtent = vk.Extent3D{width = width, height = height, depth = 1},
 		}
 	}
-	vk.CmdCopyBufferToImage(commandBuffer, buffer, image, .TRANSFER_DST_OPTIMAL, u32(len(regions)), raw_data(regions))
+	vk.CmdCopyBufferToImage(
+		commandBuffer,
+		buffer,
+		image,
+		.TRANSFER_DST_OPTIMAL,
+		u32(len(regions)),
+		raw_data(regions),
+	)
 }
 
 generateMipmaps :: proc(
@@ -1670,10 +1701,12 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 				vertexIndex := mesh.vertex_position.indices.data[i]
 				pos := mesh.vertex_position.values.data[vertexIndex]
 				uv := mesh.vertex_uv.values.data[vertexIndex]
-				vertex := &model^.vertices[i]
-				vertex^ = {
+				model^.vertices[i] = {
 					position = {f32(pos.x), f32(pos.y), f32(pos.z)},
 					texCoord = {f32(uv.x), 1 - f32(uv.y)},
+				}
+				if len(model^.skeleton) == 0 {
+					continue
 				}
 				deformer := mesh.skin_deformers.data[0]^
 				numWeights := deformer.vertices.data[vertexIndex].num_weights
@@ -1688,15 +1721,15 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 						deformer.clusters.data[skinWeight.cluster_index]^.bone_node.element.name
 					for bone, index in model^.skeleton {
 						if bone.name == boneName.data {
-							vertex^.bones[j] = u32(index)
+							model^.vertices[i].bones[j] = u32(index)
 						}
 					}
-					vertex^.weights[j] = f32(skinWeight.weight)
+					model^.vertices[i].weights[j] = f32(skinWeight.weight)
 					totalWeight += f32(skinWeight.weight)
 				}
 				if totalWeight != 1.0 {
 					for j in 0 ..< numWeights {
-						vertex^.weights[j] /= totalWeight
+						model^.vertices[i].weights[j] /= totalWeight
 					}
 				}
 			}
@@ -1812,6 +1845,7 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 	indices: [dynamic]u32
 	for path, index in modelPaths {
 		loadFBX(graphicsContext, &graphicsContext^.models[index], path)
+		graphicsContext^.models[index].vertexOffset = u32(len(vertices))
 		graphicsContext^.models[index].indexOffset = indexCount
 		indexCount += graphicsContext^.models[index].indexCount
 		append(&vertices, ..graphicsContext^.models[index].vertices)
@@ -1822,13 +1856,13 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 }
 
 @(private = "file")
-loadTextures :: proc(graphicsContext: ^GraphicsContext, texturePaths: []cstring) {
-	textureWidth: i32 = 500
-	textureHeight: i32 = 500
-	textureChannels := 4
+loadTextures :: proc(graphicsContext: ^GraphicsContext, texture: ^Image, texturePaths: []cstring) {
+	textureWidth, textureHeight: i32
+	pixels := image.load(texturePaths[0], &textureWidth, &textureHeight, nil, 4)
+	image.image_free(pixels)
 	textureSize := int(textureWidth * textureHeight * 4)
 	textureCount := len(texturePaths)
-	graphicsContext^.mipLevels = u32(floor(log2(f32(max(textureWidth, textureHeight))))) + 1
+	texture^.mipLevels = u32(floor(log2(f32(max(textureWidth, textureHeight))))) + 1
 
 	stagingBuffer: vk.Buffer
 	stagingBufferMemory: vk.DeviceMemory
@@ -1842,17 +1876,19 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texturePaths: []cstring)
 	)
 
 	for path, index in texturePaths {
-		pixels := image.load(path, &textureWidth, &textureHeight, nil, 4)
+		width, height: i32
+		pixels := image.load(path, &width, &height, nil, 4)
+		defer image.image_free(pixels)
 		if pixels == nil {
 			log(.ERROR, "Failed to load texture!")
 			panic("Failed to load texture!")
 		}
-		
-		if textureWidth != 500 || textureHeight != 500 {
+
+		if textureWidth != width || textureHeight != height {
 			log(.ERROR, "Image of wrong dims!")
 			panic("Image of wrong dims!")
 		}
-		
+
 		data: rawptr
 		vk.MapMemory(
 			graphicsContext^.device,
@@ -1873,25 +1909,25 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texturePaths: []cstring)
 		.R8G8B8A8_SRGB,
 		u32(textureWidth),
 		u32(textureHeight),
-		graphicsContext^.mipLevels,
+		texture^.mipLevels,
 		u32(textureCount),
 		{._1},
 		.OPTIMAL,
 		{.TRANSFER_DST, .TRANSFER_SRC, .SAMPLED},
 		{.DEVICE_LOCAL},
-		&graphicsContext^.textures.image,
-		&graphicsContext^.textures.memory,
+		&texture^.image,
+		&texture^.memory,
 	)
 
 	commandBuffer := beginSingleTimeCommands(graphicsContext)
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		graphicsContext^.textures.image,
+		texture^.image,
 		.R8G8B8A8_SRGB,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
-		graphicsContext^.mipLevels,
+		texture^.mipLevels,
 		u32(textureCount),
 	)
 
@@ -1899,7 +1935,7 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texturePaths: []cstring)
 		graphicsContext,
 		commandBuffer,
 		stagingBuffer,
-		graphicsContext^.textures.image,
+		texture^.image,
 		u32(textureWidth),
 		u32(textureHeight),
 		u32(textureCount),
@@ -1908,39 +1944,68 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texturePaths: []cstring)
 	generateMipmaps(
 		graphicsContext,
 		commandBuffer,
-		graphicsContext^.textures.image,
+		texture^.image,
 		.R8G8B8A8_SRGB,
 		u32(textureWidth),
 		u32(textureHeight),
-		graphicsContext^.mipLevels,
+		texture^.mipLevels,
 		u32(textureCount),
 	)
-
-	// transitionImageLayout(
-	// 	graphicsContext,
-	// 	commandBuffer,
-	// 	graphicsContext^.textures.image,
-	// 	.R8G8B8A8_SRGB,
-	// 	.TRANSFER_DST_OPTIMAL,
-	// 	.SHADER_READ_ONLY_OPTIMAL,
-	// 	1,
-	// 	u32(textureCount),
-	// )
 
 	endSingleTimeCommands(graphicsContext, commandBuffer)
 
 	vk.DestroyBuffer(graphicsContext^.device, stagingBuffer, nil)
 	vk.FreeMemory(graphicsContext^.device, stagingBufferMemory, nil)
+}
 
-	graphicsContext^.textures.view = createImageView(
+@(private = "file")
+createTextureView :: proc(
+	graphicsContext: ^GraphicsContext,
+	texture: ^Image,
+	viewType: vk.ImageViewType,
+	format: vk.Format,
+	aspectFlags: vk.ImageAspectFlags,
+	layerCount: u32,
+) {
+	texture^.view = createImageView(
 		graphicsContext,
-		graphicsContext^.textures.image,
-		.D2_ARRAY,
-		.R8G8B8A8_SRGB,
-		{.COLOR},
-		graphicsContext^.mipLevels,
-		u32(textureCount),
+		texture^.image,
+		viewType,
+		format,
+		aspectFlags,
+		texture^.mipLevels,
+		layerCount,
 	)
+}
+
+@(private = "file")
+createSampler :: proc(graphicsContext: ^GraphicsContext, image: ^Image) {
+	properties: vk.PhysicalDeviceProperties
+	vk.GetPhysicalDeviceProperties(graphicsContext^.physicalDevice, &properties)
+	samplerInfo: vk.SamplerCreateInfo = {
+		sType                   = .SAMPLER_CREATE_INFO,
+		pNext                   = nil,
+		flags                   = {},
+		magFilter               = .LINEAR,
+		minFilter               = .LINEAR,
+		mipmapMode              = .LINEAR,
+		addressModeU            = .REPEAT,
+		addressModeV            = .REPEAT,
+		addressModeW            = .REPEAT,
+		mipLodBias              = 0,
+		anisotropyEnable        = true,
+		maxAnisotropy           = properties.limits.maxSamplerAnisotropy,
+		compareEnable           = false,
+		compareOp               = .ALWAYS,
+		minLod                  = 0,
+		maxLod                  = vk.LOD_CLAMP_NONE,
+		borderColor             = .INT_OPAQUE_BLACK,
+		unnormalizedCoordinates = false,
+	}
+	if vk.CreateSampler(graphicsContext^.device, &samplerInfo, nil, &image^.sampler) != .SUCCESS {
+		log(.ERROR, "Failed to create texture sampler!")
+		panic("Failed to create texture sampler!")
+	}
 }
 
 @(private = "file")
@@ -1949,18 +2014,53 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 		cleanupAssets(graphicsContext)
 	}
 
-	loadModels(graphicsContext, {MODEL_PATH})
+	loadModels(graphicsContext, {CUBE_PATH, MODEL_PATH})
 
 	createVertexBuffer(graphicsContext)
 	createIndexBuffer(graphicsContext)
 
-	loadTextures(graphicsContext, {R_TEXTURE_PATH, G_TEXTURE_PATH, B_TEXTURE_PATH})
+	loadTextures(
+		graphicsContext,
+		&graphicsContext^.skybox,
+		{
+			SKY_RIGHT, //x++
+			SKY_LEFT, //x--
+			SKY_TOP, // y++
+			SKY_BOTTOM, // y--
+			SKY_FRONT, // z++
+			SKY_BACK, // z--
+		},
+	)
+	createTextureView(
+		graphicsContext,
+		&graphicsContext^.skybox,
+		.CUBE,
+		.R8G8B8A8_SRGB,
+		{.COLOR},
+		6,
+	)
+	createSampler(graphicsContext, &graphicsContext^.skybox)
+
+	loadTextures(
+		graphicsContext,
+		&graphicsContext^.textures,
+		{R_TEXTURE_PATH, G_TEXTURE_PATH, B_TEXTURE_PATH},
+	)
+	createTextureView(
+		graphicsContext,
+		&graphicsContext^.textures,
+		.D2_ARRAY,
+		.R8G8B8A8_SRGB,
+		{.COLOR},
+		3,
+	)
+	createSampler(graphicsContext, &graphicsContext^.textures)
 
 	now := t.now()
-	graphicsContext^.instances = make([]Instance, 3)
+	graphicsContext^.instances = make([]Instance, MAX_MODEL_INSTANCES)
 	for &instance, index in graphicsContext^.instances {
 		instance = {
-			modelID       = 0,
+			modelID       = 1,
 			animID        = 1,
 			textureID     = u32(index),
 			position      = {f32(index - 1), 0, index == 1 ? 0 : 1},
@@ -1986,42 +2086,6 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 	graphicsContext^.hasAssetsLoaded = true
 }
 
-@(private = "file")
-createTextureSampler :: proc(graphicsContext: ^GraphicsContext) {
-	properties: vk.PhysicalDeviceProperties
-	vk.GetPhysicalDeviceProperties(graphicsContext^.physicalDevice, &properties)
-	samplerInfo: vk.SamplerCreateInfo = {
-		sType                   = .SAMPLER_CREATE_INFO,
-		pNext                   = nil,
-		flags                   = {},
-		magFilter               = .LINEAR,
-		minFilter               = .LINEAR,
-		mipmapMode              = .LINEAR,
-		addressModeU            = .REPEAT,
-		addressModeV            = .REPEAT,
-		addressModeW            = .REPEAT,
-		mipLodBias              = 0,
-		anisotropyEnable        = true,
-		maxAnisotropy           = properties.limits.maxSamplerAnisotropy,
-		compareEnable           = false,
-		compareOp               = .ALWAYS,
-		minLod                  = 0,
-		maxLod                  = vk.LOD_CLAMP_NONE,
-		borderColor             = .INT_OPAQUE_BLACK,
-		unnormalizedCoordinates = false,
-	}
-	if vk.CreateSampler(
-		   graphicsContext^.device,
-		   &samplerInfo,
-		   nil,
-		   &graphicsContext^.textureSampler,
-	   ) !=
-	   .SUCCESS {
-		log(.ERROR, "Failed to create texture sampler!")
-		panic("Failed to create texture sampler!")
-	}
-}
-
 // ###################################################################
 // #                      Shader Descriptors                         #
 // ###################################################################
@@ -2032,6 +2096,7 @@ createDescriptorPool :: proc(graphicsContext: ^GraphicsContext) {
 		{type = .UNIFORM_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 		{type = .STORAGE_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 		{type = .STORAGE_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
+		{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 		{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 	}
 	poolInfo: vk.DescriptorPoolCreateInfo = {
@@ -2077,8 +2142,15 @@ createDescriptionSetLayout :: proc(graphicsContext: ^GraphicsContext) {
 		stageFlags         = {.VERTEX},
 		pImmutableSamplers = nil,
 	}
-	samplerLayoutBinding: vk.DescriptorSetLayoutBinding = {
+	textureSamplerLayoutBinding: vk.DescriptorSetLayoutBinding = {
 		binding            = 3,
+		descriptorType     = .COMBINED_IMAGE_SAMPLER,
+		descriptorCount    = 1,
+		stageFlags         = {.FRAGMENT},
+		pImmutableSamplers = nil,
+	}
+	skySamplerLayoutBinding: vk.DescriptorSetLayoutBinding = {
+		binding            = 4,
 		descriptorType     = .COMBINED_IMAGE_SAMPLER,
 		descriptorCount    = 1,
 		stageFlags         = {.FRAGMENT},
@@ -2088,13 +2160,14 @@ createDescriptionSetLayout :: proc(graphicsContext: ^GraphicsContext) {
 		sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 		pNext        = nil,
 		flags        = {},
-		bindingCount = 4,
+		bindingCount = 5,
 		pBindings    = raw_data(
 			[]vk.DescriptorSetLayoutBinding {
 				viewProjectionLayoutBinding,
 				instanceLayoutBinding,
 				boneLayoutBinding,
-				samplerLayoutBinding,
+				textureSamplerLayoutBinding,
+				skySamplerLayoutBinding,
 			},
 		),
 	}
@@ -2150,9 +2223,14 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 			offset = 0,
 			range  = vk.DeviceSize(graphicsContext^.boneCount * size_of(Mat4)),
 		}
-		imageInfo: vk.DescriptorImageInfo = {
-			sampler     = graphicsContext^.textureSampler,
+		textureInfo: vk.DescriptorImageInfo = {
+			sampler     = graphicsContext^.textures.sampler,
 			imageView   = graphicsContext^.textures.view,
+			imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+		}
+		skyInfo: vk.DescriptorImageInfo = {
+			sampler     = graphicsContext^.skybox.sampler,
+			imageView   = graphicsContext^.skybox.view,
 			imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 		}
 		descriptorWrite: []vk.WriteDescriptorSet = {
@@ -2200,12 +2278,24 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 				dstArrayElement = 0,
 				descriptorCount = 1,
 				descriptorType = .COMBINED_IMAGE_SAMPLER,
-				pImageInfo = &imageInfo,
+				pImageInfo = &textureInfo,
+				pBufferInfo = nil,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = graphicsContext^.descriptorSets[index],
+				dstBinding = 4,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .COMBINED_IMAGE_SAMPLER,
+				pImageInfo = &skyInfo,
 				pBufferInfo = nil,
 				pTexelBufferView = nil,
 			},
 		}
-		vk.UpdateDescriptorSets(graphicsContext^.device, 4, raw_data(descriptorWrite), 0, nil)
+		vk.UpdateDescriptorSets(graphicsContext^.device, 5, raw_data(descriptorWrite), 0, nil)
 	}
 }
 
@@ -2483,13 +2573,12 @@ createFramebuffers :: proc(graphicsContext: ^GraphicsContext) {
 }
 
 @(private = "file")
-createPipeline :: proc(graphicsContext: ^GraphicsContext) {
-	createShaderModules :: proc(
+createPipelines :: proc(graphicsContext: ^GraphicsContext) {
+	createShaderModule :: proc(
 		graphicsContext: ^GraphicsContext,
-		filenames: []string,
+		filename: string,
 	) -> (
-		shaderModules: []vk.ShaderModule,
-		count: u32 = 0,
+		shaderModule: vk.ShaderModule,
 	) {
 		loadShaderFile :: proc(filepath: string) -> (data: []byte) {
 			fileHandle, err := os.open(filepath, mode = (os.O_RDONLY | os.O_APPEND))
@@ -2506,59 +2595,43 @@ createPipeline :: proc(graphicsContext: ^GraphicsContext) {
 			return
 		}
 
-		shaderModules = make([]vk.ShaderModule, len(filenames))
-		for filename, index in filenames {
-			code := loadShaderFile(filename)
-			createInfo: vk.ShaderModuleCreateInfo = {
-				sType    = .SHADER_MODULE_CREATE_INFO,
-				pNext    = nil,
-				flags    = {},
-				codeSize = len(code),
-				pCode    = (^u32)(raw_data(code)),
-			}
-			if vk.CreateShaderModule(
-				   graphicsContext^.device,
-				   &createInfo,
-				   nil,
-				   &shaderModules[index],
-			   ) !=
-			   .SUCCESS {
-				log(.ERROR, "Failed to create shader module")
-				panic("Failed to create shader module")
-			}
-			count += 1
+		code := loadShaderFile(filename)
+		createInfo: vk.ShaderModuleCreateInfo = {
+			sType    = .SHADER_MODULE_CREATE_INFO,
+			pNext    = nil,
+			flags    = {},
+			codeSize = len(code),
+			pCode    = (^u32)(raw_data(code)),
+		}
+		if vk.CreateShaderModule(graphicsContext^.device, &createInfo, nil, &shaderModule) !=
+		   .SUCCESS {
+			log(.ERROR, "Failed to create shader module")
+			panic("Failed to create shader module")
 		}
 		return
 	}
 
-	shaderModules, shaderModulesCount := createShaderModules(graphicsContext, shaderFiles)
-	defer delete(shaderModules)
-	defer for shaderModule in shaderModules {
-		vk.DestroyShaderModule(graphicsContext^.device, shaderModule, nil)
+	graphicsContext^.pipelines = make([]vk.Pipeline, 2)
+
+	PipelineLayoutInfo: vk.PipelineLayoutCreateInfo = {
+		sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
+		pNext                  = nil,
+		flags                  = {},
+		setLayoutCount         = 1,
+		pSetLayouts            = &graphicsContext^.descriptorSetLayout,
+		pushConstantRangeCount = 0,
+		pPushConstantRanges    = nil,
 	}
 
-	shaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, shaderModulesCount)
-	defer delete(shaderStagesInfo)
-	for index in 0 ..< shaderModulesCount {
-		shaderStageInfo: vk.PipelineShaderStageCreateInfo = {
-			sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-			pNext               = nil,
-			flags               = {},
-			stage               = {shaderStages[index]},
-			module              = shaderModules[index],
-			pName               = "main",
-			pSpecializationInfo = nil,
-		}
-		shaderStagesInfo[index] = shaderStageInfo
-	}
-
-	dynamicStates: []vk.DynamicState = {.VIEWPORT, .SCISSOR}
-	dynamicStateInfo: vk.PipelineDynamicStateCreateInfo = {
-		sType             = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-		pNext             = nil,
-		flags             = {},
-		dynamicStateCount = u32(len(dynamicStates)),
-		pDynamicStates    = raw_data(dynamicStates),
+	if vk.CreatePipelineLayout(
+		   graphicsContext^.device,
+		   &PipelineLayoutInfo,
+		   nil,
+		   &graphicsContext^.pipelineLayout,
+	   ) !=
+	   .SUCCESS {
+		log(.ERROR, "Failed to create pipeline layout!")
+		panic("Failed to create pipeline layout!")
 	}
 
 	vertexInputInfo: vk.PipelineVertexInputStateCreateInfo = {
@@ -2621,8 +2694,8 @@ createPipeline :: proc(graphicsContext: ^GraphicsContext) {
 		sType                 = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
 		pNext                 = nil,
 		flags                 = {},
-		depthTestEnable       = true,
-		depthWriteEnable      = true,
+		depthTestEnable       = false,
+		depthWriteEnable      = false,
 		depthCompareOp        = .LESS,
 		depthBoundsTestEnable = false,
 		stencilTestEnable     = false,
@@ -2654,33 +2727,34 @@ createPipeline :: proc(graphicsContext: ^GraphicsContext) {
 		blendConstants  = {0, 0, 0, 0},
 	}
 
-	PipelineLayoutInfo: vk.PipelineLayoutCreateInfo = {
-		sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
-		pNext                  = nil,
-		flags                  = {},
-		setLayoutCount         = 1,
-		pSetLayouts            = &graphicsContext^.descriptorSetLayout,
-		pushConstantRangeCount = 0,
-		pPushConstantRanges    = nil,
+	dynamicStates: []vk.DynamicState = {.VIEWPORT, .SCISSOR}
+	dynamicStateInfo: vk.PipelineDynamicStateCreateInfo = {
+		sType             = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+		pNext             = nil,
+		flags             = {},
+		dynamicStateCount = u32(len(dynamicStates)),
+		pDynamicStates    = raw_data(dynamicStates),
 	}
 
-	if vk.CreatePipelineLayout(
-		   graphicsContext^.device,
-		   &PipelineLayoutInfo,
-		   nil,
-		   &graphicsContext^.pipelineLayout,
-	   ) !=
-	   .SUCCESS {
-		log(.ERROR, "Failed to create pipeline layout!")
-		panic("Failed to create pipeline layout!")
+	skyShaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, len(skyShaderFiles))
+	for path, index in skyShaderFiles {
+		skyShaderStagesInfo[index] = {
+			sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+			pNext               = nil,
+			flags               = {},
+			stage               = {skyShaderStages[index]},
+			module              = createShaderModule(graphicsContext, path),
+			pName               = "main",
+			pSpecializationInfo = nil,
+		}
 	}
 
 	pipelineInfo: vk.GraphicsPipelineCreateInfo = {
 		sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
 		pNext               = nil,
 		flags               = {},
-		stageCount          = u32(len(shaderStages)),
-		pStages             = raw_data(shaderStagesInfo),
+		stageCount          = u32(len(skyShaderStagesInfo)),
+		pStages             = raw_data(skyShaderStagesInfo),
 		pVertexInputState   = &vertexInputInfo,
 		pInputAssemblyState = &inputAssembly,
 		pTessellationState  = nil,
@@ -2697,18 +2771,77 @@ createPipeline :: proc(graphicsContext: ^GraphicsContext) {
 		basePipelineIndex   = -1,
 	}
 
+	pipelineCacheCreateInfo: vk.PipelineCacheCreateInfo = {
+		sType           = .PIPELINE_CACHE_CREATE_INFO,
+		pNext           = nil,
+		flags           = {},
+		initialDataSize = 0,
+		pInitialData    = nil,
+	}
+
+	pipelineCache: vk.PipelineCache
+	vk.CreatePipelineCache(graphicsContext^.device, &pipelineCacheCreateInfo, nil, &pipelineCache)
+
+	// depthStencil.depthWriteEnable = true
+	// depthStencil.depthTestEnable = true
+	rasterizer.cullMode = {.FRONT}
+	// rasterizer.frontFace = .CLOCKWISE
 	if vk.CreateGraphicsPipelines(
 		   graphicsContext^.device,
-		   {},
+		   pipelineCache,
 		   1,
 		   &pipelineInfo,
 		   nil,
-		   &graphicsContext^.pipeline,
+		   &graphicsContext^.pipelines[PipelineType.SKYBOX],
 	   ) !=
 	   .SUCCESS {
 		log(.ERROR, "Failed to create pipeline!")
 		panic("Failed to create pipeline!")
 	}
+
+	shaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, len(shaderFiles))
+	for path, index in shaderFiles {
+		shaderStagesInfo[index] = {
+			sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+			pNext               = nil,
+			flags               = {},
+			stage               = {shaderStages[index]},
+			module              = createShaderModule(graphicsContext, path),
+			pName               = "main",
+			pSpecializationInfo = nil,
+		}
+	}
+
+	depthStencil.depthWriteEnable = true
+	depthStencil.depthTestEnable = true
+	rasterizer.cullMode = {.BACK}
+	rasterizer.frontFace = .CLOCKWISE
+	pipelineInfo.stageCount = u32(len(shaderStages))
+	pipelineInfo.pStages = raw_data(shaderStagesInfo)
+	if vk.CreateGraphicsPipelines(
+		   graphicsContext^.device,
+		   pipelineCache,
+		   1,
+		   &pipelineInfo,
+		   nil,
+		   &graphicsContext^.pipelines[PipelineType.MAIN],
+	   ) !=
+	   .SUCCESS {
+		log(.ERROR, "Failed to create pipeline!")
+		panic("Failed to create pipeline!")
+	}
+
+	for stage in skyShaderStagesInfo {
+		vk.DestroyShaderModule(graphicsContext^.device, stage.module, nil)
+	}
+	delete(skyShaderStagesInfo)
+
+	for stage in shaderStagesInfo {
+		vk.DestroyShaderModule(graphicsContext^.device, stage.module, nil)
+	}
+	delete(shaderStagesInfo)
+
+	vk.DestroyPipelineCache(graphicsContext^.device, pipelineCache, nil)
 }
 
 // ###################################################################
@@ -2747,16 +2880,6 @@ recordCommandBuffer :: proc(
 		),
 	}
 	vk.CmdBeginRenderPass(commandBuffer^, &renderPassInfo, .INLINE)
-	vk.CmdBindPipeline(commandBuffer^, .GRAPHICS, graphicsContext^.pipeline)
-
-	vk.CmdBindVertexBuffers(
-		commandBuffer^,
-		0,
-		1,
-		raw_data([]vk.Buffer{graphicsContext^.vertexBuffer.buffer}),
-		raw_data([]vk.DeviceSize{0}),
-	)
-	vk.CmdBindIndexBuffer(commandBuffer^, graphicsContext^.indexBuffer.buffer, 0, .UINT32)
 
 	viewport: vk.Viewport = {
 		x        = 0,
@@ -2784,7 +2907,30 @@ recordCommandBuffer :: proc(
 		0,
 		nil,
 	)
-	vk.CmdDrawIndexed(commandBuffer^, u32(len(graphicsContext^.indices)), 3, 0, 0, 0)
+
+	vk.CmdBindVertexBuffers(
+		commandBuffer^,
+		0,
+		1,
+		&graphicsContext^.vertexBuffer.buffer,
+		raw_data([]vk.DeviceSize{0}),
+	)
+	vk.CmdBindIndexBuffer(commandBuffer^, graphicsContext^.indexBuffer.buffer, 0, .UINT32)
+
+	vk.CmdBindPipeline(commandBuffer^, .GRAPHICS, graphicsContext^.pipelines[PipelineType.SKYBOX])
+	vk.CmdDrawIndexed(commandBuffer^, graphicsContext^.models[0].indexCount, 1, 0, 0, 0)
+
+	vk.CmdBindPipeline(commandBuffer^, .GRAPHICS, graphicsContext^.pipelines[PipelineType.MAIN])
+	for &model in graphicsContext^.models[1:] {
+		vk.CmdDrawIndexed(
+			commandBuffer^,
+			model.indexCount,
+			3,
+			model.indexOffset,
+			i32(model.vertexOffset),
+			1,
+		)
+	}
 
 	vk.CmdEndRenderPass(commandBuffer^)
 	if vk.EndCommandBuffer(commandBuffer^) != .SUCCESS {
@@ -2803,6 +2949,8 @@ updateViewProjectionUniform :: proc(graphicsContext: ^GraphicsContext, camera: C
 		10000,
 	)
 	viewProjection: ViewProjectionUniform = {
+		view           = view,
+		projection     = projection,
 		viewProjection = projection * view,
 	}
 	mem.copy(
@@ -2814,10 +2962,7 @@ updateViewProjectionUniform :: proc(graphicsContext: ^GraphicsContext, camera: C
 
 @(private = "file")
 updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
-	finalBoneTransforms := make(
-		[]Mat4,
-		MAX_MODEL_INSTANCES * len(graphicsContext^.models[0].skeleton),
-	)
+	finalBoneTransforms := make([]Mat4, graphicsContext^.boneCount)
 	instanceData := make([]InstanceInfo, MAX_MODEL_INSTANCES)
 	defer delete(finalBoneTransforms)
 	defer delete(instanceData)
@@ -2831,17 +2976,22 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 			boneOffset    = boneOffset,
 			samplerOffset = f32(instance.textureID),
 		}
+
+		skeleton := &graphicsContext^.models[instance.modelID].skeleton
 		animation := graphicsContext^.models[instance.modelID].animations[instance.animID]
 		timeSinceAnimStart := t.duration_seconds(t.diff(instance.animStartTime, now))
 		timeStamp :=
 			timeSinceAnimStart -
 			(floor(timeSinceAnimStart / animation.duration) * animation.duration)
-		skeleton := &graphicsContext^.models[instance.modelID].skeleton
 		localBoneTransforms := make([]Mat4, len(skeleton))
-		defer delete(localBoneTransforms)
+
 		for index in 0 ..< len(skeleton) {
 			localBoneTransforms[index] = IMat4
 		}
+
+		defer boneOffset += u32(len(skeleton))
+		defer delete(localBoneTransforms)
+
 		for &node, nodeIndex in animation.nodes {
 			bone := skeleton[node.bone]
 			parentTransform := localBoneTransforms[bone.parentIndex]
@@ -2938,7 +3088,6 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 			finalBoneTransforms[node.bone + boneOffset] =
 				localBoneTransforms[node.bone] * bone.inverseBind
 		}
-		boneOffset += u32(len(skeleton))
 	}
 	mem.copy(
 		graphicsContext^.boneBuffers[graphicsContext^.currentFrame].mapped,
@@ -3087,6 +3236,11 @@ cleanupAssets :: proc(graphicsContext: ^GraphicsContext) {
 	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.textures.view, nil)
 	vk.DestroyImage(graphicsContext^.device, graphicsContext^.textures.image, nil)
 	vk.FreeMemory(graphicsContext^.device, graphicsContext^.textures.memory, nil)
+	vk.DestroySampler(graphicsContext^.device, graphicsContext^.textures.sampler, nil)
+	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.skybox.view, nil)
+	vk.DestroyImage(graphicsContext^.device, graphicsContext^.skybox.image, nil)
+	vk.FreeMemory(graphicsContext^.device, graphicsContext^.skybox.memory, nil)
+	vk.DestroySampler(graphicsContext^.device, graphicsContext^.skybox.sampler, nil)
 
 	delete(graphicsContext^.models)
 	delete(graphicsContext^.instances)
@@ -3096,7 +3250,6 @@ cleanupAssets :: proc(graphicsContext: ^GraphicsContext) {
 
 clanupVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 	vk.DeviceWaitIdle(graphicsContext^.device)
-	vk.DestroySampler(graphicsContext^.device, graphicsContext^.textureSampler, nil)
 	cleanupAssets(graphicsContext)
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		vk.DestroyBuffer(
@@ -3116,7 +3269,9 @@ clanupVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 		graphicsContext^.descriptorSetLayout,
 		nil,
 	)
-	vk.DestroyPipeline(graphicsContext^.device, graphicsContext^.pipeline, nil)
+	for pipeline in graphicsContext^.pipelines {
+		vk.DestroyPipeline(graphicsContext^.device, pipeline, nil)
+	}
 	vk.DestroyPipelineLayout(graphicsContext^.device, graphicsContext^.pipelineLayout, nil)
 	vk.DestroyRenderPass(graphicsContext^.device, graphicsContext^.renderPass, nil)
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
