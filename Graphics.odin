@@ -1856,7 +1856,12 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 }
 
 @(private = "file")
-loadTextures :: proc(graphicsContext: ^GraphicsContext, texture: ^Image, texturePaths: []cstring) {
+loadTextures :: proc(
+	graphicsContext: ^GraphicsContext,
+	texture: ^Image,
+	texturePaths: []cstring,
+	cube: b8,
+) {
 	textureWidth, textureHeight: i32
 	pixels := image.load(texturePaths[0], &textureWidth, &textureHeight, nil, 4)
 	image.image_free(pixels)
@@ -1902,9 +1907,15 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texture: ^Image, texture
 		vk.UnmapMemory(graphicsContext^.device, stagingBufferMemory)
 	}
 
+	format: vk.ImageCreateFlags
+
+	if cube {
+		format = {.CUBE_COMPATIBLE}
+	}
+
 	createImage(
 		graphicsContext,
-		{},
+		format,
 		.D2,
 		.R8G8B8A8_SRGB,
 		u32(textureWidth),
@@ -2030,6 +2041,7 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 			SKY_FRONT, // z++
 			SKY_BACK, // z--
 		},
+		true,
 	)
 	createTextureView(
 		graphicsContext,
@@ -2045,6 +2057,7 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 		graphicsContext,
 		&graphicsContext^.textures,
 		{R_TEXTURE_PATH, G_TEXTURE_PATH, B_TEXTURE_PATH},
+		false,
 	)
 	createTextureView(
 		graphicsContext,
