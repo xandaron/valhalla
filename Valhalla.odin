@@ -21,7 +21,7 @@ scrollDelta: f64Vec2 = {0, 0}
 
 cameraSpeed: f64 = 1
 cameraMoveSpeed: f32 = 0.0001
-cameraVerticalMove: f32 = 0
+cameraMove: Vec3 = {0, 0, 0}
 
 EngineState :: struct {
 	camera:          Camera,
@@ -57,11 +57,7 @@ main :: proc() {
 	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
 
 	engineState: EngineState = {
-		camera = {
-			eye = {0.0, 0.45, -1.3},
-			center = {0.0, 0.45, 0.0},
-			up = {0.0, 1.0, 0.0},
-		},
+		camera = {eye = {0.0, 0.45, -1.3}, center = {0.0, 0.45, 0.0}, up = {0.0, 1.0, 0.0}},
 		graphicsContext = {window = window},
 	}
 	engineState.camera.distance = distance(engineState.camera.center, engineState.camera.eye)
@@ -105,13 +101,32 @@ main :: proc() {
 			}
 		}
 
-
-		if cameraVerticalMove != 0 {
-			movement := cameraMoveSpeed * cameraVerticalMove * engineState.camera.up
+		if cameraMove.x != 0 {
+			right := normalize(
+				cross(
+					engineState.camera.up,
+					(engineState.camera.center - engineState.camera.eye) /
+					engineState.camera.distance,
+				),
+			)
+			movement := cameraMoveSpeed * cameraMove.x * right
 			engineState.camera.eye += movement
 			engineState.camera.center += movement
 		}
-
+		if cameraMove.y != 0 {
+			movement := cameraMoveSpeed * cameraMove.y * engineState.camera.up
+			engineState.camera.eye += movement
+			engineState.camera.center += movement
+		}
+		if cameraMove.z != 0 {
+			movement :=
+				cameraMoveSpeed *
+				cameraMove.z *
+				(engineState.camera.center - engineState.camera.eye) /
+				engineState.camera.distance
+			engineState.camera.eye += movement
+			engineState.camera.center += movement
+		}
 
 		drawFrame(&engineState.graphicsContext, engineState.camera)
 		lastFrameTime = t.now()
@@ -135,18 +150,46 @@ keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods:
 	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, glfw.TRUE)
 	}
+	if key == glfw.KEY_D {
+		if action == glfw.PRESS {
+			cameraMove.x += 1
+		} else if action == glfw.RELEASE {
+			cameraMove.x -= 1
+		}
+	}
+	if key == glfw.KEY_A {
+		if action == glfw.PRESS {
+			cameraMove.x -= 1
+		} else if action == glfw.RELEASE {
+			cameraMove.x += 1
+		}
+	}
 	if key == glfw.KEY_SPACE {
 		if action == glfw.PRESS {
-			cameraVerticalMove += 1
+			cameraMove.y += 1
 		} else if action == glfw.RELEASE {
-			cameraVerticalMove -= 1
+			cameraMove.y -= 1
 		}
 	}
 	if key == glfw.KEY_LEFT_SHIFT {
 		if action == glfw.PRESS {
-			cameraVerticalMove -= 1
+			cameraMove.y -= 1
 		} else if action == glfw.RELEASE {
-			cameraVerticalMove += 1
+			cameraMove.y += 1
+		}
+	}
+	if key == glfw.KEY_W {
+		if action == glfw.PRESS {
+			cameraMove.z += 1
+		} else if action == glfw.RELEASE {
+			cameraMove.z -= 1
+		}
+	}
+	if key == glfw.KEY_S {
+		if action == glfw.PRESS {
+			cameraMove.z -= 1
+		} else if action == glfw.RELEASE {
+			cameraMove.z += 1
 		}
 	}
 	if key == glfw.KEY_C && action == glfw.PRESS {

@@ -30,14 +30,14 @@ layout(location = 0) out vec3 fragTexCoord;
 
 void main() {
     mat4 transform = mat4(0.0);
-    uint boneOffset = instanceBuffer.instanceInfo[gl_InstanceIndex - 1].boneOffset;
+    uint boneOffset = instanceBuffer.instanceInfo[gl_InstanceIndex].boneOffset;
     for (int id = 0; id < 4; id++) {
         if (inWeights[id] > 0.0) {
             transform += boneBuffer.boneTransforms[boneOffset + inBones[id]] * inWeights[id];
         }
     }
 
-    gl_Position = viewProjectionUniform.viewProjection * instanceBuffer.instanceInfo[gl_InstanceIndex - 1].model * transform * vec4(inPosition, 1.0);
-    fragTexCoord = vec3(inUV.xy, instanceBuffer.instanceInfo[gl_InstanceIndex - 1].samplerOffset);
+    gl_Position = viewProjectionUniform.viewProjection * instanceBuffer.instanceInfo[gl_InstanceIndex].model * transform * vec4(inPosition, 1.0);
+    fragTexCoord = vec3(inUV.xy, instanceBuffer.instanceInfo[gl_InstanceIndex].samplerOffset);
     // fragColour = vec4(1.0, 1.0, 1.0, 1.0);
 }
