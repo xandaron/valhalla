@@ -1657,7 +1657,7 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 					texCoord = {f32(uv.x), 1 - f32(uv.y)},
 					weights  = {1.0, 0.0, 0.0, 0.0},
 				}
-				if len(skeleton^) != 0 {
+				if len(skeleton) != 0 {
 					deformer := mesh.skin_deformers.data[0]^
 					numWeights := deformer.vertices.data[vertexIndex].num_weights
 					if numWeights > 4 {
@@ -1672,6 +1672,7 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 						for bone, index in skeleton^ {
 							if bone.name == boneName.data {
 								vertex.bones[j] = u32(index)
+								break
 							}
 						}
 						vertex.weights[j] = f32(skinWeight.weight)
@@ -2016,7 +2017,7 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 		cleanupAssets(graphicsContext)
 	}
 
-	loadModels(graphicsContext, {CUBE_PATH, MODEL_PATH})
+	loadModels(graphicsContext, {CUBE_PATH, "./assets/models/archer_dancing.fbx"})
 
 	createVertexBuffer(graphicsContext)
 	createIndexBuffer(graphicsContext)
@@ -2998,6 +2999,10 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 			samplerOffset = f32(instance.textureID),
 		}
 
+		if len(graphicsContext^.models[instance.modelID].animations) == 0 {
+			continue
+		}
+
 		skeleton := &graphicsContext^.models[instance.modelID].skeleton
 		animation := graphicsContext^.models[instance.modelID].animations[instance.animID]
 		timeSinceAnimStart := t.duration_seconds(t.diff(instance.animStartTime, now))
@@ -3010,19 +3015,13 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 		for index in 0 ..< len(skeleton) {
 			localBoneTransforms[index] = IMat4
 		}
-
-		defer boneOffset += u32(len(skeleton))
-
+		
 		for &node, nodeIndex in animation.nodes {
-			bone := skeleton[node.bone]
-			parentTransform := localBoneTransforms[bone.parentIndex]
-			animTransform: Mat4
-
 			// a *= b == a = a * b
 			// therefore aT *= T *= R *= S == aT = T * R * S * aT
 			if node.numKeyPositions == 1 {
-				animTransform = translate(node.keyPositions[0].value)
-			} else {
+				localBoneTransforms[node.bone] *= translate(node.keyPositions[0].value)
+			} else if node.numKeyPositions != 0 {
 				id := instance.positionKeys[nodeIndex]
 				for true {
 					if node.keyPositions[id].time <= timeStamp &&
@@ -3045,12 +3044,12 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 				value :=
 					f32(timeDiff) * valueDiff +
 					node.keyPositions[instance.positionKeys[nodeIndex]].value
-				animTransform = translate(value)
+				localBoneTransforms[node.bone] *= translate(value)
 			}
 
 			if node.numKeyRotations == 1 {
-				animTransform *= quatToRotation(node.keyRotations[0].value)
-			} else {
+				localBoneTransforms[node.bone] *= quatToRotation(node.keyRotations[0].value)
+			} else if node.numKeyRotations != 0 {
 				id := instance.rotationKeys[nodeIndex]
 				for true {
 					if node.keyRotations[id].time <= timeStamp &&
@@ -3070,7 +3069,7 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 					(timeStamp - node.keyRotations[instance.rotationKeys[nodeIndex]].time) /
 					(node.keyRotations[instance.rotationKeys[nodeIndex] + 1].time -
 							node.keyRotations[instance.rotationKeys[nodeIndex]].time)
-				animTransform *= quatToRotation(
+				localBoneTransforms[node.bone] *= quatToRotation(
 					quatLurp(
 						node.keyRotations[instance.rotationKeys[nodeIndex]].value,
 						node.keyRotations[instance.rotationKeys[nodeIndex] + 1].value,
@@ -3080,8 +3079,8 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 			}
 
 			if node.numKeyScales == 1 {
-				animTransform *= scale(node.keyScales[0].value)
-			} else {
+				localBoneTransforms[node.bone] *= scale(node.keyScales[0].value)
+			} else if node.numKeyScales != 0 {
 				id := instance.scaleKeys[nodeIndex]
 				for true {
 					if node.keyScales[id].time <= timeStamp &&
@@ -3103,12 +3102,16 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 							node.keyScales[instance.scaleKeys[nodeIndex]].time)
 				value :=
 					f32(timeDiff) * valueDiff + node.keyScales[instance.scaleKeys[nodeIndex]].value
-				animTransform *= scale(value)
+				localBoneTransforms[node.bone] *= scale(value)
 			}
-			localBoneTransforms[node.bone] = parentTransform * animTransform
-			finalBoneTransforms[node.bone + boneOffset] =
-				localBoneTransforms[node.bone] * bone.inverseBind
 		}
+
+		finalBoneTransforms[boneOffset] = localBoneTransforms[0] * skeleton[0].inverseBind
+		for boneIndex in 1 ..< len(skeleton) {
+			localBoneTransforms[boneIndex] = localBoneTransforms[skeleton[boneIndex].parentIndex] * localBoneTransforms[boneIndex]
+			finalBoneTransforms[boneOffset + u32(boneIndex)] = localBoneTransforms[boneIndex] * skeleton[boneIndex].inverseBind
+		}
+		boneOffset += u32(len(skeleton))
 	}
 	mem.copy(
 		graphicsContext^.boneBuffers[graphicsContext^.currentFrame].mapped,
