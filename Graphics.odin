@@ -152,12 +152,11 @@ Model :: struct {
 
 @(private = "file")
 Image :: struct {
-	image:     vk.Image,
-	memory:    vk.DeviceMemory,
-	view:      vk.ImageView,
-	format:    vk.Format,
-	sampler:   vk.Sampler,
-	mipLevels: u32,
+	image:   vk.Image,
+	memory:  vk.DeviceMemory,
+	view:    vk.ImageView,
+	format:  vk.Format,
+	sampler: vk.Sampler,
 }
 
 @(private = "file")
@@ -176,7 +175,7 @@ Instance :: struct {
 
 @(private = "file")
 PipelineType :: enum {
-	MAIN   = 0,
+	MAIN = 0,
 }
 
 @(private = "file")
@@ -247,6 +246,7 @@ GraphicsContext :: struct {
 	// Frame Resources
 	depthImage:             Image,
 	colourImage:            Image,
+	swapchainImage:         Image,
 	imagesAvailable:        []vk.Semaphore,
 	rendersFinished:        []vk.Semaphore,
 	inFlightFrames:         []vk.Fence,
@@ -270,7 +270,7 @@ GraphicsContext :: struct {
 	textures:               Image,
 	normalTextures:         Image,
 	instances:              []Instance,
-	vertices:               []Vertex, // To-Do: Vertex and Index buffers should be one buffer
+	vertices:               []Vertex, // TODO: Vertex and Index buffers should be one buffer
 	indices:                []u32,
 	skybox:                 Image,
 	boneCount:              int,
@@ -278,7 +278,7 @@ GraphicsContext :: struct {
 	// Buffers
 	vertexBuffer:           Buffer,
 	indexBuffer:            Buffer,
-	viewProjectionUniforms: [MAX_FRAMES_IN_FLIGHT]Buffer, // ToDo: Combine into single buffer
+	viewProjectionUniforms: [MAX_FRAMES_IN_FLIGHT]Buffer, // TODO: Combine into single buffer
 	instanceBuffers:        [MAX_FRAMES_IN_FLIGHT]Buffer,
 	boneBuffers:            [MAX_FRAMES_IN_FLIGHT]Buffer,
 
@@ -919,7 +919,6 @@ createSwapchainImageViews :: proc(graphicsContext: ^GraphicsContext) {
 			graphicsContext^.swapchainFormat.format,
 			{.COLOR},
 			1,
-			1,
 		)
 	}
 }
@@ -1262,7 +1261,7 @@ createImage :: proc(
 	flags: vk.ImageCreateFlags,
 	imageType: vk.ImageType,
 	format: vk.Format,
-	width, height, mipLevels, arrayLayers: u32,
+	width, height, arrayLayers: u32,
 	sampleCount: vk.SampleCountFlags,
 	tiling: vk.ImageTiling,
 	usage: vk.ImageUsageFlags,
@@ -1277,7 +1276,7 @@ createImage :: proc(
 		imageType             = imageType,
 		format                = format,
 		extent                = {width, height, 1},
-		mipLevels             = mipLevels,
+		mipLevels             = 1,
 		arrayLayers           = arrayLayers,
 		samples               = sampleCount,
 		tiling                = tiling,
@@ -1319,7 +1318,7 @@ createImageView :: proc(
 	viewType: vk.ImageViewType,
 	format: vk.Format,
 	aspectFlags: vk.ImageAspectFlags,
-	levelCount, layerCount: u32,
+	layerCount: u32,
 ) -> (
 	imageView: vk.ImageView,
 ) {
@@ -1334,7 +1333,7 @@ createImageView :: proc(
 		subresourceRange = vk.ImageSubresourceRange {
 			aspectMask = aspectFlags,
 			baseMipLevel = 0,
-			levelCount = levelCount,
+			levelCount = 1,
 			baseArrayLayer = 0,
 			layerCount = layerCount,
 		},
@@ -1352,7 +1351,7 @@ transitionImageLayout :: proc(
 	image: vk.Image,
 	format: vk.Format,
 	oldLayout, newLayout: vk.ImageLayout,
-	mipLevel, layerCount: u32,
+	layerCount: u32,
 ) {
 	barrier: vk.ImageMemoryBarrier = {
 		sType = .IMAGE_MEMORY_BARRIER,
@@ -1367,7 +1366,7 @@ transitionImageLayout :: proc(
 		subresourceRange = vk.ImageSubresourceRange {
 			aspectMask = {.COLOR},
 			baseMipLevel = 0,
-			levelCount = mipLevel,
+			levelCount = 1,
 			baseArrayLayer = 0,
 			layerCount = layerCount,
 		},
@@ -1456,143 +1455,6 @@ copyBufferToTextureArray :: proc(
 		.TRANSFER_DST_OPTIMAL,
 		u32(len(regions)),
 		raw_data(regions),
-	)
-}
-
-generateMipmaps :: proc(
-	graphicsContext: ^GraphicsContext,
-	commandBuffer: vk.CommandBuffer,
-	image: vk.Image,
-	format: vk.Format,
-	width, height, mipLevels, layerCount: u32,
-) {
-	formatProperties: vk.FormatProperties
-	vk.GetPhysicalDeviceFormatProperties(
-		graphicsContext^.physicalDevice,
-		format,
-		&formatProperties,
-	)
-
-	if !(.SAMPLED_IMAGE_FILTER_LINEAR in formatProperties.optimalTilingFeatures) {
-		log(.ERROR, "Image format does not support linear blitting!")
-		panic("Image format does not support linear blitting!")
-	}
-
-	barrier: vk.ImageMemoryBarrier = {
-		sType = .IMAGE_MEMORY_BARRIER,
-		pNext = nil,
-		srcAccessMask = {},
-		dstAccessMask = {},
-		oldLayout = .UNDEFINED,
-		newLayout = .UNDEFINED,
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		image = image,
-		subresourceRange = {
-			aspectMask = {.COLOR},
-			baseMipLevel = 0,
-			levelCount = 1,
-			baseArrayLayer = 0,
-			layerCount = layerCount,
-		},
-	}
-	mipWidth := i32(width)
-	mipHeight := i32(height)
-	for i in 1 ..< mipLevels {
-		barrier.subresourceRange.baseMipLevel = i - 1
-		barrier.oldLayout = .TRANSFER_DST_OPTIMAL
-		barrier.newLayout = .TRANSFER_SRC_OPTIMAL
-		barrier.srcAccessMask = {.TRANSFER_WRITE}
-		barrier.dstAccessMask = {.TRANSFER_READ}
-
-		vk.CmdPipelineBarrier(
-			commandBuffer,
-			{.TRANSFER},
-			{.TRANSFER},
-			{},
-			0,
-			nil,
-			0,
-			nil,
-			1,
-			&barrier,
-		)
-		blit: vk.ImageBlit = {
-			srcSubresource = vk.ImageSubresourceLayers {
-				aspectMask = {.COLOR},
-				mipLevel = i - 1,
-				baseArrayLayer = 0,
-				layerCount = layerCount,
-			},
-			srcOffsets = [2]vk.Offset3D {
-				{x = 0, y = 0, z = 0},
-				{x = mipWidth, y = mipHeight, z = 1},
-			},
-			dstSubresource = vk.ImageSubresourceLayers {
-				aspectMask = {.COLOR},
-				mipLevel = i,
-				baseArrayLayer = 0,
-				layerCount = layerCount,
-			},
-			dstOffsets = [2]vk.Offset3D {
-				{x = 0, y = 0, z = 0},
-				{
-					x = mipWidth > 1 ? mipWidth / 2 : 1,
-					y = mipHeight > 1 ? mipHeight / 2 : 1,
-					z = 1,
-				},
-			},
-		}
-		vk.CmdBlitImage(
-			commandBuffer,
-			image,
-			.TRANSFER_SRC_OPTIMAL,
-			image,
-			.TRANSFER_DST_OPTIMAL,
-			1,
-			&blit,
-			.LINEAR,
-		)
-
-		barrier.oldLayout = .TRANSFER_SRC_OPTIMAL
-		barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
-		barrier.srcAccessMask = {.TRANSFER_READ}
-		barrier.dstAccessMask = {.SHADER_READ}
-
-		vk.CmdPipelineBarrier(
-			commandBuffer,
-			{.TRANSFER},
-			{.FRAGMENT_SHADER},
-			{},
-			0,
-			nil,
-			0,
-			nil,
-			1,
-			&barrier,
-		)
-
-		if mipWidth > 1 do mipWidth /= 2
-		if mipHeight > 1 do mipHeight /= 2
-	}
-
-	barrier.subresourceRange.baseMipLevel = mipLevels - 1
-	barrier.oldLayout = .TRANSFER_DST_OPTIMAL
-	barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
-	barrier.srcAccessMask = {.TRANSFER_WRITE}
-	barrier.dstAccessMask = {.SHADER_READ}
-
-	vk.CmdPipelineBarrier(
-		commandBuffer,
-		{.TRANSFER},
-		{.FRAGMENT_SHADER},
-		{},
-		0,
-		nil,
-		0,
-		nil,
-		1,
-		&barrier,
 	)
 }
 
@@ -1828,17 +1690,12 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 }
 
 @(private = "file")
-loadTextures :: proc(
-	graphicsContext: ^GraphicsContext,
-	texture: ^Image,
-	texturePaths: []cstring,
-) {
+loadTextures :: proc(graphicsContext: ^GraphicsContext, texture: ^Image, texturePaths: []cstring) {
 	textureWidth, textureHeight: i32
 	pixels := image.load(texturePaths[0], &textureWidth, &textureHeight, nil, 4)
 	image.image_free(pixels)
 	textureSize := int(textureWidth * textureHeight * 4)
 	textureCount := len(texturePaths)
-	texture^.mipLevels = u32(floor(log2(f32(max(textureWidth, textureHeight))))) + 1
 
 	stagingBuffer: vk.Buffer
 	stagingBufferMemory: vk.DeviceMemory
@@ -1885,7 +1742,6 @@ loadTextures :: proc(
 		.R8G8B8A8_SRGB,
 		u32(textureWidth),
 		u32(textureHeight),
-		texture^.mipLevels,
 		u32(textureCount),
 		{._1},
 		.OPTIMAL,
@@ -1903,7 +1759,6 @@ loadTextures :: proc(
 		.R8G8B8A8_SRGB,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
-		texture^.mipLevels,
 		u32(textureCount),
 	)
 
@@ -1917,14 +1772,13 @@ loadTextures :: proc(
 		u32(textureCount),
 	)
 
-	generateMipmaps(
+	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
 		texture^.image,
-		.R8G8B8A8_SRGB,
-		u32(textureWidth),
-		u32(textureHeight),
-		texture^.mipLevels,
+		texture^.format,
+		.TRANSFER_DST_OPTIMAL,
+		.SHADER_READ_ONLY_OPTIMAL,
 		u32(textureCount),
 	)
 
@@ -1949,7 +1803,6 @@ createTextureView :: proc(
 		viewType,
 		format,
 		aspectFlags,
-		texture^.mipLevels,
 		layerCount,
 	)
 }
@@ -2239,7 +2092,13 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 				pTexelBufferView = nil,
 			},
 		}
-		vk.UpdateDescriptorSets(graphicsContext^.device, u32(len(descriptorWrite)), raw_data(descriptorWrite), 0, nil)
+		vk.UpdateDescriptorSets(
+			graphicsContext^.device,
+			u32(len(descriptorWrite)),
+			raw_data(descriptorWrite),
+			0,
+			nil,
+		)
 	}
 }
 
@@ -2258,7 +2117,6 @@ createColourResources :: proc(graphicsContext: ^GraphicsContext) {
 		graphicsContext^.swapchainExtent.width,
 		graphicsContext^.swapchainExtent.height,
 		1,
-		1,
 		graphicsContext^.msaaSamples,
 		.OPTIMAL,
 		{.TRANSIENT_ATTACHMENT, .COLOR_ATTACHMENT},
@@ -2272,7 +2130,6 @@ createColourResources :: proc(graphicsContext: ^GraphicsContext) {
 		.D2,
 		graphicsContext^.colourImage.format,
 		{.COLOR},
-		1,
 		1,
 	)
 }
@@ -2316,7 +2173,6 @@ createDepthResources :: proc(graphicsContext: ^GraphicsContext) {
 		graphicsContext^.swapchainExtent.width,
 		graphicsContext^.swapchainExtent.height,
 		1,
-		1,
 		graphicsContext^.msaaSamples,
 		.OPTIMAL,
 		{.DEPTH_STENCIL_ATTACHMENT},
@@ -2330,7 +2186,6 @@ createDepthResources :: proc(graphicsContext: ^GraphicsContext) {
 		.D2,
 		graphicsContext^.depthImage.format,
 		{.DEPTH},
-		1,
 		1,
 	)
 }
