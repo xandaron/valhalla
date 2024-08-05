@@ -23,13 +23,6 @@ requestedLayers: []cstring = {"VK_LAYER_KHRONOS_validation"}
 requiredDeviceExtensions: []cstring = {vk.KHR_SWAPCHAIN_EXTENSION_NAME}
 
 @(private = "file")
-skyShaderStages: []vk.ShaderStageFlag = {
-	.VERTEX,
-	.FRAGMENT,
-	/*.COMPUTE,*/
-}
-
-@(private = "file")
 shaderStages: []vk.ShaderStageFlag = {
 	.VERTEX,
 	.FRAGMENT,
@@ -41,9 +34,6 @@ shaderFiles: []string = {
 	"./assets/shaders/shader_vert.spv",
 	"./assets/shaders/shader_frag.spv", /*"./assets/shaders/shader_comp.spv",*/
 }
-
-@(private = "file")
-skyShaderFiles: []string = {"./assets/shaders/skybox_vert.spv", "./assets/shaders/skybox_frag.spv"}
 
 @(private = "file")
 vertexBindingDescription: vk.VertexInputBindingDescription = {
@@ -84,22 +74,11 @@ vertexInputAttributeDescriptions: []vk.VertexInputAttributeDescription = {
 ENGINE_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 
 @(private = "file")
-CUBE_PATH: cstring : "./assets/models/cube.fbx"
-
-@(private = "file")
 MODEL_PATH: cstring : "./assets/models/dancing.fbx"
 
 @(private = "file")
-SKY_FRONT: cstring : "./assets/textures/cubemap_front.jpg"
-SKY_BACK: cstring : "./assets/textures/cubemap_back.jpg"
-SKY_LEFT: cstring : "./assets/textures/cubemap_left.jpg"
-SKY_RIGHT: cstring : "./assets/textures/cubemap_right.jpg"
-SKY_TOP: cstring : "./assets/textures/cubemap_top.jpg"
-SKY_BOTTOM: cstring : "./assets/textures/cubemap_bottom.jpg"
-
-@(private = "file")
-R_TEXTURE_PATH: cstring : "./assets/textures/red.jpg"
-G_TEXTURE_PATH: cstring : "./assets/textures/green.jpg"
+R_TEXTURE_PATH: cstring : "./assets/textures/blue.jpg"
+G_TEXTURE_PATH: cstring : "./assets/textures/blue.jpg"
 B_TEXTURE_PATH: cstring : "./assets/textures/blue.jpg"
 
 @(private = "file")
@@ -197,8 +176,7 @@ Instance :: struct {
 
 @(private = "file")
 PipelineType :: enum {
-	SKYBOX = 0,
-	MAIN   = 1,
+	MAIN   = 0,
 }
 
 @(private = "file")
@@ -228,9 +206,15 @@ SwapchainSupportDetails :: struct {
 	modes:        []vk.PresentModeKHR,
 }
 
+CameraMode :: enum {
+	PERSPECTIVE,
+	ORTHOGRAPHIC,
+}
+
 Camera :: struct {
 	eye, center, up: Vec3,
 	distance:        f32,
+	mode:            CameraMode,
 }
 
 @(private = "file")
@@ -1657,7 +1641,7 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 					texCoord = {f32(uv.x), 1 - f32(uv.y)},
 					weights  = {1.0, 0.0, 0.0, 0.0},
 				}
-				if len(skeleton) != 0 {
+				if len(skeleton) != 0 && mesh.skin_deformers.count != 0 {
 					deformer := mesh.skin_deformers.data[0]^
 					numWeights := deformer.vertices.data[vertexIndex].num_weights
 					if numWeights > 4 {
@@ -1723,16 +1707,13 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 		}
 
 		meshes: [dynamic]^fbx.Mesh
+		defer delete(meshes)
 		skeleton: [dynamic]Bone
 		for index in 0 ..< scene.nodes.count {
 			node := scene.nodes.data[index]
 			if node.is_root do continue
-			if node.mesh != nil {
-				append(&meshes, node.mesh)
-			}
-			if node^.bone != nil {
-				loadBone(&skeleton, node)
-			}
+			if node.mesh != nil do append(&meshes, node.mesh)
+			if node^.bone != nil do loadBone(&skeleton, node)
 		}
 		model^.skeleton = skeleton[:]
 
@@ -1786,7 +1767,6 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 			for bakedIndex in 0 ..< bakedAnim.nodes.count {
 				bakedNode := bakedAnim.nodes.data[bakedIndex]
 				sceneNode := scene^.nodes.data[bakedNode.typed_id]
-				name := sceneNode^.element.name.data
 				for bone, index in model^.skeleton {
 					if bone.name != sceneNode^.element.name.data {
 						continue
@@ -1852,7 +1832,6 @@ loadTextures :: proc(
 	graphicsContext: ^GraphicsContext,
 	texture: ^Image,
 	texturePaths: []cstring,
-	cube: b8,
 ) {
 	textureWidth, textureHeight: i32
 	pixels := image.load(texturePaths[0], &textureWidth, &textureHeight, nil, 4)
@@ -1899,15 +1878,9 @@ loadTextures :: proc(
 		vk.UnmapMemory(graphicsContext^.device, stagingBufferMemory)
 	}
 
-	format: vk.ImageCreateFlags
-
-	if cube {
-		format = {.CUBE_COMPATIBLE}
-	}
-
 	createImage(
 		graphicsContext,
-		format,
+		{},
 		.D2,
 		.R8G8B8A8_SRGB,
 		u32(textureWidth),
@@ -2017,39 +1990,15 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 		cleanupAssets(graphicsContext)
 	}
 
-	loadModels(graphicsContext, {CUBE_PATH, "./assets/models/archer_dancing.fbx"})
+	loadModels(graphicsContext, {MODEL_PATH})
 
 	createVertexBuffer(graphicsContext)
 	createIndexBuffer(graphicsContext)
 
 	loadTextures(
 		graphicsContext,
-		&graphicsContext^.skybox,
-		{
-			SKY_RIGHT, //x++
-			SKY_LEFT, //x--
-			SKY_TOP, // y++
-			SKY_BOTTOM, // y--
-			SKY_FRONT, // z++
-			SKY_BACK, // z--
-		},
-		true,
-	)
-	createTextureView(
-		graphicsContext,
-		&graphicsContext^.skybox,
-		.CUBE,
-		.R8G8B8A8_SRGB,
-		{.COLOR},
-		6,
-	)
-	createSampler(graphicsContext, &graphicsContext^.skybox)
-
-	loadTextures(
-		graphicsContext,
 		&graphicsContext^.textures,
 		{R_TEXTURE_PATH, G_TEXTURE_PATH, B_TEXTURE_PATH},
-		false,
 	)
 	createTextureView(
 		graphicsContext,
@@ -2081,8 +2030,8 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 	graphicsContext^.instances = make([]Instance, MAX_MODEL_INSTANCES)
 	for &instance, index in graphicsContext^.instances {
 		instance = {
-			modelID       = 1,
-			animID        = 1,
+			modelID       = 0,
+			animID        = 0,
 			textureID     = u32(index),
 			position      = {f32(index - 1), 0, index == 1 ? 0 : 1},
 			rotation      = quatFromY(f32(radians(180.0))),
@@ -2117,7 +2066,6 @@ createDescriptorPool :: proc(graphicsContext: ^GraphicsContext) {
 		{type = .UNIFORM_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 		{type = .STORAGE_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 		{type = .STORAGE_BUFFER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
-		{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 		{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_FRAMES_IN_FLIGHT},
 	}
 	poolInfo: vk.DescriptorPoolCreateInfo = {
@@ -2170,25 +2118,17 @@ createDescriptionSetLayout :: proc(graphicsContext: ^GraphicsContext) {
 		stageFlags         = {.FRAGMENT},
 		pImmutableSamplers = nil,
 	}
-	skySamplerLayoutBinding: vk.DescriptorSetLayoutBinding = {
-		binding            = 4,
-		descriptorType     = .COMBINED_IMAGE_SAMPLER,
-		descriptorCount    = 1,
-		stageFlags         = {.FRAGMENT},
-		pImmutableSamplers = nil,
-	}
 	layoutInfo: vk.DescriptorSetLayoutCreateInfo = {
 		sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 		pNext        = nil,
 		flags        = {},
-		bindingCount = 5,
+		bindingCount = 4,
 		pBindings    = raw_data(
 			[]vk.DescriptorSetLayoutBinding {
 				viewProjectionLayoutBinding,
 				instanceLayoutBinding,
 				boneLayoutBinding,
 				textureSamplerLayoutBinding,
-				skySamplerLayoutBinding,
 			},
 		),
 	}
@@ -2249,11 +2189,6 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 			imageView   = graphicsContext^.textures.view,
 			imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 		}
-		skyInfo: vk.DescriptorImageInfo = {
-			sampler     = graphicsContext^.skybox.sampler,
-			imageView   = graphicsContext^.skybox.view,
-			imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-		}
 		descriptorWrite: []vk.WriteDescriptorSet = {
 			{
 				sType = .WRITE_DESCRIPTOR_SET,
@@ -2303,20 +2238,8 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 				pBufferInfo = nil,
 				pTexelBufferView = nil,
 			},
-			{
-				sType = .WRITE_DESCRIPTOR_SET,
-				pNext = nil,
-				dstSet = graphicsContext^.descriptorSets[index],
-				dstBinding = 4,
-				dstArrayElement = 0,
-				descriptorCount = 1,
-				descriptorType = .COMBINED_IMAGE_SAMPLER,
-				pImageInfo = &skyInfo,
-				pBufferInfo = nil,
-				pTexelBufferView = nil,
-			},
 		}
-		vk.UpdateDescriptorSets(graphicsContext^.device, 5, raw_data(descriptorWrite), 0, nil)
+		vk.UpdateDescriptorSets(graphicsContext^.device, u32(len(descriptorWrite)), raw_data(descriptorWrite), 0, nil)
 	}
 }
 
@@ -2632,7 +2555,7 @@ createPipelines :: proc(graphicsContext: ^GraphicsContext) {
 		return
 	}
 
-	graphicsContext^.pipelines = make([]vk.Pipeline, 2)
+	graphicsContext^.pipelines = make([]vk.Pipeline, 1)
 
 	PipelineLayoutInfo: vk.PipelineLayoutCreateInfo = {
 		sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
@@ -2757,13 +2680,13 @@ createPipelines :: proc(graphicsContext: ^GraphicsContext) {
 		pDynamicStates    = raw_data(dynamicStates),
 	}
 
-	skyShaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, len(skyShaderFiles))
-	for path, index in skyShaderFiles {
-		skyShaderStagesInfo[index] = {
+	shaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, len(shaderFiles))
+	for path, index in shaderFiles {
+		shaderStagesInfo[index] = {
 			sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			pNext               = nil,
 			flags               = {},
-			stage               = {skyShaderStages[index]},
+			stage               = {shaderStages[index]},
 			module              = createShaderModule(graphicsContext, path),
 			pName               = "main",
 			pSpecializationInfo = nil,
@@ -2774,8 +2697,8 @@ createPipelines :: proc(graphicsContext: ^GraphicsContext) {
 		sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
 		pNext               = nil,
 		flags               = {},
-		stageCount          = u32(len(skyShaderStagesInfo)),
-		pStages             = raw_data(skyShaderStagesInfo),
+		stageCount          = u32(len(shaderStagesInfo)),
+		pStages             = raw_data(shaderStagesInfo),
 		pVertexInputState   = &vertexInputInfo,
 		pInputAssemblyState = &inputAssembly,
 		pTessellationState  = nil,
@@ -2803,36 +2726,6 @@ createPipelines :: proc(graphicsContext: ^GraphicsContext) {
 	pipelineCache: vk.PipelineCache
 	vk.CreatePipelineCache(graphicsContext^.device, &pipelineCacheCreateInfo, nil, &pipelineCache)
 
-	// depthStencil.depthWriteEnable = true
-	// depthStencil.depthTestEnable = true
-	rasterizer.cullMode = {.FRONT}
-	// rasterizer.frontFace = .CLOCKWISE
-	if vk.CreateGraphicsPipelines(
-		   graphicsContext^.device,
-		   pipelineCache,
-		   1,
-		   &pipelineInfo,
-		   nil,
-		   &graphicsContext^.pipelines[PipelineType.SKYBOX],
-	   ) !=
-	   .SUCCESS {
-		log(.ERROR, "Failed to create pipeline!")
-		panic("Failed to create pipeline!")
-	}
-
-	shaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, len(shaderFiles))
-	for path, index in shaderFiles {
-		shaderStagesInfo[index] = {
-			sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-			pNext               = nil,
-			flags               = {},
-			stage               = {shaderStages[index]},
-			module              = createShaderModule(graphicsContext, path),
-			pName               = "main",
-			pSpecializationInfo = nil,
-		}
-	}
-
 	depthStencil.depthWriteEnable = true
 	depthStencil.depthTestEnable = true
 	rasterizer.cullMode = {.BACK}
@@ -2851,11 +2744,6 @@ createPipelines :: proc(graphicsContext: ^GraphicsContext) {
 		log(.ERROR, "Failed to create pipeline!")
 		panic("Failed to create pipeline!")
 	}
-
-	for stage in skyShaderStagesInfo {
-		vk.DestroyShaderModule(graphicsContext^.device, stage.module, nil)
-	}
-	delete(skyShaderStagesInfo)
 
 	for stage in shaderStagesInfo {
 		vk.DestroyShaderModule(graphicsContext^.device, stage.module, nil)
@@ -2938,11 +2826,8 @@ recordCommandBuffer :: proc(
 	)
 	vk.CmdBindIndexBuffer(commandBuffer^, graphicsContext^.indexBuffer.buffer, 0, .UINT32)
 
-	vk.CmdBindPipeline(commandBuffer^, .GRAPHICS, graphicsContext^.pipelines[PipelineType.SKYBOX])
-	vk.CmdDrawIndexed(commandBuffer^, graphicsContext^.models[0].indexCount, 1, 0, 0, 0)
-
 	vk.CmdBindPipeline(commandBuffer^, .GRAPHICS, graphicsContext^.pipelines[PipelineType.MAIN])
-	for &model in graphicsContext^.models[1:] {
+	for &model in graphicsContext^.models[0:] {
 		vk.CmdDrawIndexed(
 			commandBuffer^,
 			model.indexCount,
@@ -2963,12 +2848,27 @@ recordCommandBuffer :: proc(
 @(private = "file")
 updateViewProjectionUniform :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 	view := lookAt(camera.eye, camera.center, camera.up)
-	projection := perspective(
-		radians(f32(45.0)),
-		f32(graphicsContext^.swapchainExtent.width) / f32(graphicsContext^.swapchainExtent.height),
-		0.1,
-		10000,
-	)
+	projection: Mat4
+	if camera.mode == .PERSPECTIVE {
+		projection = perspective(
+			radians(f32(45.0)),
+			f32(graphicsContext^.swapchainExtent.width) /
+			f32(graphicsContext^.swapchainExtent.height),
+			0.1,
+			10000,
+		)
+	} else if camera.mode == .ORTHOGRAPHIC {
+		projection = orthographic(
+			radians(f32(45.0)),
+			f32(graphicsContext^.swapchainExtent.width) /
+			f32(graphicsContext^.swapchainExtent.height),
+			0.1,
+			10000,
+		)
+	} else {
+		log(.ERROR, "Undefined camera mode!")
+		panic("Undefined camera mode!")
+	}
 	viewProjection: ViewProjectionUniform = {
 		view           = view,
 		projection     = projection,
@@ -2984,8 +2884,8 @@ updateViewProjectionUniform :: proc(graphicsContext: ^GraphicsContext, camera: C
 @(private = "file")
 updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 	finalBoneTransforms := make([]Mat4, graphicsContext^.boneCount + 1)
-	defer delete(finalBoneTransforms)
 	instanceData := make([]InstanceInfo, MAX_MODEL_INSTANCES)
+	defer delete(finalBoneTransforms)
 	defer delete(instanceData)
 	finalBoneTransforms[0] = IMat4
 	boneOffset: u32 = 1
@@ -2999,12 +2899,14 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 			samplerOffset = f32(instance.textureID),
 		}
 
-		if len(graphicsContext^.models[instance.modelID].animations) == 0 {
+		model := &graphicsContext^.models[instance.modelID]
+
+		if len(model^.animations) == 0 {
 			continue
 		}
 
-		skeleton := &graphicsContext^.models[instance.modelID].skeleton
-		animation := graphicsContext^.models[instance.modelID].animations[instance.animID]
+		skeleton := &model^.skeleton
+		animation := model^.animations[instance.animID]
 		timeSinceAnimStart := t.duration_seconds(t.diff(instance.animStartTime, now))
 		timeStamp :=
 			timeSinceAnimStart -
@@ -3015,10 +2917,10 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 		for index in 0 ..< len(skeleton) {
 			localBoneTransforms[index] = IMat4
 		}
-		
+
 		for &node, nodeIndex in animation.nodes {
 			// a *= b == a = a * b
-			// therefore aT *= T *= R *= S == aT = T * R * S * aT
+			// therefore I *= T *= R *= S == aT = I * T * R * S
 			if node.numKeyPositions == 1 {
 				localBoneTransforms[node.bone] *= translate(node.keyPositions[0].value)
 			} else if node.numKeyPositions != 0 {
@@ -3106,10 +3008,18 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 			}
 		}
 
-		finalBoneTransforms[boneOffset] = localBoneTransforms[0] * skeleton[0].inverseBind
-		for boneIndex in 1 ..< len(skeleton) {
-			localBoneTransforms[boneIndex] = localBoneTransforms[skeleton[boneIndex].parentIndex] * localBoneTransforms[boneIndex]
-			finalBoneTransforms[boneOffset + u32(boneIndex)] = localBoneTransforms[boneIndex] * skeleton[boneIndex].inverseBind
+		finalBoneTransforms[boneOffset] = localBoneTransforms[0]
+		if localBoneTransforms[0] != IMat4 {
+			finalBoneTransforms[boneOffset] *= skeleton[0].inverseBind
+		}
+		for boneIndex in 1 ..< u32(len(skeleton)) {
+			localBoneTransforms[boneIndex] =
+				localBoneTransforms[skeleton[boneIndex].parentIndex] *
+				localBoneTransforms[boneIndex]
+			finalBoneTransforms[boneOffset + boneIndex] = localBoneTransforms[boneIndex]
+			if localBoneTransforms[boneIndex] != IMat4 {
+				finalBoneTransforms[boneOffset + boneIndex] *= skeleton[boneIndex].inverseBind
+			}
 		}
 		boneOffset += u32(len(skeleton))
 	}

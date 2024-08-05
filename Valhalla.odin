@@ -57,7 +57,12 @@ main :: proc() {
 	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
 
 	engineState: EngineState = {
-		camera = {eye = {0.0, 0.45, -1.3}, center = {0.0, 0.45, 0.0}, up = {0.0, 1.0, 0.0}},
+		camera = {
+			eye = {0.0, 0.45, -1.3},
+			center = {0.0, 0.45, 0.0},
+			up = {0.0, 1.0, 0.0},
+			mode = .ORTHOGRAPHIC,
+		},
 		graphicsContext = {window = window},
 	}
 	engineState.camera.distance = distance(engineState.camera.center, engineState.camera.eye)
@@ -226,7 +231,8 @@ glfwMouseButtonCallback :: proc "c" (window: glfw.WindowHandle, button, action, 
 
 glfwCursorPosCallback :: proc "c" (window: glfw.WindowHandle, xpos, ypos: f64) {
 	newPos: f64Vec2 = {xpos, ypos} * mouseSensitivity
-	mouseDelta += newPos - mousePos
+	vector1 := mousePos
+	mouseDelta = newPos - vector1
 	mousePos = newPos
 }
 

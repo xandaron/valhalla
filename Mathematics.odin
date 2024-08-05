@@ -66,7 +66,7 @@ lookAt :: proc(eye, center, up: Vec3) -> Mat4 {
 	f := normalize(center - eye)
 	s := normalize(cross(up, f))
 	u := cross(f, s)
-	
+
 	return {
 		s.x,
 		s.y,
@@ -93,7 +93,23 @@ perspective :: proc(fov, aspect, near, far: f32) -> (m: Mat4) {
 	m[0, 0] = 1 / (aspect * tanHalfFov)
 	m[1, 1] = -1 / (tanHalfFov)
 	m[2, 2] = far / (far - near)
-	m[3, 2] = 1
 	m[2, 3] = -(far * near) / (far - near)
+	m[3, 2] = 1
+	return
+}
+
+orthographic :: proc(fov, aspect, near, far: f32) -> (m: Mat4) {
+	assert(aspect != 0, "Aspect ratio can't be zero!")
+	tanHalfFov := tan(0.5 * fov)
+	top := tanHalfFov * near
+	bottom := -top
+	right := top * aspect
+	left := -right
+
+	m[0, 0] = 1 / right
+	m[1, 1] = -1 / top
+	m[2, 2] = 1 / (far - near)
+	m[2, 3] = -near / (far - near)
+	m[3, 2] = 1
 	return
 }
