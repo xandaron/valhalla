@@ -87,6 +87,12 @@ MAX_FRAMES_IN_FLIGHT: u32 : 2
 @(private = "file")
 MAX_MODEL_INSTANCES: int : 4
 
+@(private = "file")
+RENDER_WIDTH: u32 : 320
+
+@(private = "file")
+RENDER_HEIGHT: u32 : 195
+
 // ###################################################################
 // #                       Data Structures                           #
 // ###################################################################
@@ -244,9 +250,9 @@ GraphicsContext :: struct {
 	swapchainFrameBuffers:  []vk.Framebuffer,
 
 	// Frame Resources
+	multisamplerImage:      Image,
 	depthImage:             Image,
 	colourImage:            Image,
-	swapchainImage:         Image,
 	imagesAvailable:        []vk.Semaphore,
 	rendersFinished:        []vk.Semaphore,
 	inFlightFrames:         []vk.Fence,
@@ -272,7 +278,6 @@ GraphicsContext :: struct {
 	instances:              []Instance,
 	vertices:               []Vertex, // TODO: Vertex and Index buffers should be one buffer
 	indices:                []u32,
-	skybox:                 Image,
 	boneCount:              int,
 
 	// Buffers
@@ -311,7 +316,8 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 	createSurface(graphicsContext)
 	pickPhysicalDevice(graphicsContext)
 	createLogicalDevice(graphicsContext)
-
+	
+	graphicsContext^.msaaSamples = {._1}
 	// Swapchain
 	createSwapchain(graphicsContext)
 	createSwapchainImageViews(graphicsContext)
@@ -332,8 +338,9 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 	createDescriptorSets(graphicsContext)
 
 	// Frame Resources
-	createColourResources(graphicsContext)
+	createMultisamplerResources(graphicsContext)
 	createDepthResources(graphicsContext)
+	createColourResources(graphicsContext)
 	createSyncObjects(graphicsContext)
 
 	// Pipeline
@@ -866,7 +873,7 @@ createSwapchain :: proc(graphicsContext: ^GraphicsContext) {
 		imageColorSpace       = graphicsContext^.swapchainFormat.colorSpace,
 		imageExtent           = graphicsContext^.swapchainExtent,
 		imageArrayLayers      = 1,
-		imageUsage            = {.COLOR_ATTACHMENT},
+		imageUsage            = {.TRANSFER_DST, .COLOR_ATTACHMENT},
 		imageSharingMode      = oneQueueFamily ? .EXCLUSIVE : .CONCURRENT,
 		queueFamilyIndexCount = oneQueueFamily ? 0 : 2,
 		pQueueFamilyIndices   = oneQueueFamily \
@@ -936,8 +943,6 @@ recreateSwapchain :: proc(graphicsContext: ^GraphicsContext) {
 
 	createSwapchain(graphicsContext)
 	createSwapchainImageViews(graphicsContext)
-	createColourResources(graphicsContext)
-	createDepthResources(graphicsContext)
 	createFramebuffers(graphicsContext)
 }
 
@@ -1382,6 +1387,16 @@ transitionImageLayout :: proc(
 		barrier.dstAccessMask = {.SHADER_READ}
 		sourceStage = {.TRANSFER}
 		destinationStage = {.FRAGMENT_SHADER}
+	} else if oldLayout == .PRESENT_SRC_KHR && newLayout == .TRANSFER_DST_OPTIMAL {
+		barrier.srcAccessMask = {.COLOR_ATTACHMENT_READ}
+		barrier.dstAccessMask = {.TRANSFER_WRITE}
+		sourceStage = {.COLOR_ATTACHMENT_OUTPUT}
+		destinationStage = {.TRANSFER}
+	} else if oldLayout == .TRANSFER_DST_OPTIMAL && newLayout == .PRESENT_SRC_KHR {
+		barrier.srcAccessMask = {.TRANSFER_WRITE}
+		barrier.dstAccessMask = {.COLOR_ATTACHMENT_READ}
+		sourceStage = {.TRANSFER}
+		destinationStage = {.COLOR_ATTACHMENT_OUTPUT}
 	} else {
 		log(.ERROR, "Unsupported layout transition!")
 		panic("Unsupported layout transition!")
@@ -1455,6 +1470,36 @@ copyBufferToTextureArray :: proc(
 		.TRANSFER_DST_OPTIMAL,
 		u32(len(regions)),
 		raw_data(regions),
+	)
+}
+
+copyImageToImage :: proc(
+	commandBuffer: vk.CommandBuffer,
+	src, dst: vk.Image,
+	srcSize, dstSize: vk.Extent2D,
+) {
+	blit: vk.ImageBlit = {
+		srcSubresource = {aspectMask = {.COLOR}, mipLevel = 0, baseArrayLayer = 0, layerCount = 1},
+		srcOffsets = {
+			{x = 0, y = 0, z = 0},
+			{x = i32(srcSize.width), y = i32(srcSize.height), z = 1},
+		},
+		dstSubresource = {aspectMask = {.COLOR}, mipLevel = 0, baseArrayLayer = 0, layerCount = 1},
+		dstOffsets = {
+			{x = 0, y = 0, z = 0},
+			{x = i32(dstSize.width), y = i32(dstSize.height), z = 1},
+		},
+	}
+
+	vk.CmdBlitImage(
+		commandBuffer,
+		src,
+		.TRANSFER_SRC_OPTIMAL,
+		dst,
+		.TRANSFER_DST_OPTIMAL,
+		1,
+		&blit,
+		.NEAREST,
 	)
 }
 
@@ -1884,7 +1929,7 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 	for &instance, index in graphicsContext^.instances {
 		instance = {
 			modelID       = 0,
-			animID        = 0,
+			animID        = 1,
 			textureID     = u32(index),
 			position      = {f32(index - 1), 0, index == 1 ? 0 : 1},
 			rotation      = quatFromY(f32(radians(180.0))),
@@ -2107,28 +2152,28 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 // ###################################################################
 
 @(private = "file")
-createColourResources :: proc(graphicsContext: ^GraphicsContext) {
-	graphicsContext^.colourImage.format = graphicsContext^.swapchainFormat.format
+createMultisamplerResources :: proc(graphicsContext: ^GraphicsContext) {
+	graphicsContext^.multisamplerImage.format = graphicsContext^.swapchainFormat.format
 	createImage(
 		graphicsContext,
 		{},
 		.D2,
-		graphicsContext^.colourImage.format,
-		graphicsContext^.swapchainExtent.width,
-		graphicsContext^.swapchainExtent.height,
+		graphicsContext^.multisamplerImage.format,
+		RENDER_WIDTH,
+		RENDER_HEIGHT,
 		1,
 		graphicsContext^.msaaSamples,
 		.OPTIMAL,
 		{.TRANSIENT_ATTACHMENT, .COLOR_ATTACHMENT},
 		{.DEVICE_LOCAL},
-		&graphicsContext^.colourImage.image,
-		&graphicsContext^.colourImage.memory,
+		&graphicsContext^.multisamplerImage.image,
+		&graphicsContext^.multisamplerImage.memory,
 	)
-	graphicsContext^.colourImage.view = createImageView(
+	graphicsContext^.multisamplerImage.view = createImageView(
 		graphicsContext,
-		graphicsContext^.colourImage.image,
+		graphicsContext^.multisamplerImage.image,
 		.D2,
-		graphicsContext^.colourImage.format,
+		graphicsContext^.multisamplerImage.format,
 		{.COLOR},
 		1,
 	)
@@ -2170,8 +2215,8 @@ createDepthResources :: proc(graphicsContext: ^GraphicsContext) {
 		{},
 		.D2,
 		graphicsContext^.depthImage.format,
-		graphicsContext^.swapchainExtent.width,
-		graphicsContext^.swapchainExtent.height,
+		RENDER_WIDTH,
+		RENDER_HEIGHT,
 		1,
 		graphicsContext^.msaaSamples,
 		.OPTIMAL,
@@ -2186,6 +2231,34 @@ createDepthResources :: proc(graphicsContext: ^GraphicsContext) {
 		.D2,
 		graphicsContext^.depthImage.format,
 		{.DEPTH},
+		1,
+	)
+}
+
+@(private = "file")
+createColourResources :: proc(graphicsContext: ^GraphicsContext) {
+	graphicsContext^.colourImage.format = graphicsContext^.swapchainFormat.format
+	createImage(
+		graphicsContext,
+		{},
+		.D2,
+		graphicsContext^.colourImage.format,
+		RENDER_WIDTH,
+		RENDER_HEIGHT,
+		1,
+		{._1},
+		.OPTIMAL,
+		{.TRANSFER_SRC, .TRANSFER_SRC, .COLOR_ATTACHMENT},
+		{.DEVICE_LOCAL},
+		&graphicsContext^.colourImage.image,
+		&graphicsContext^.colourImage.memory,
+	)
+	graphicsContext^.colourImage.view = createImageView(
+		graphicsContext,
+		graphicsContext^.colourImage.image,
+		.D2,
+		graphicsContext^.colourImage.format,
+		{.COLOR},
 		1,
 	)
 }
@@ -2271,7 +2344,7 @@ createRenderPass :: proc(graphicsContext: ^GraphicsContext) {
 		stencilLoadOp  = .DONT_CARE,
 		stencilStoreOp = .DONT_CARE,
 		initialLayout  = .UNDEFINED,
-		finalLayout    = .PRESENT_SRC_KHR,
+		finalLayout    = .TRANSFER_SRC_OPTIMAL,
 	}
 
 	colourAttachmentRef: vk.AttachmentReference = {
@@ -2349,13 +2422,13 @@ createFramebuffers :: proc(graphicsContext: ^GraphicsContext) {
 			attachmentCount = 3,
 			pAttachments    = raw_data(
 				[]vk.ImageView {
-					graphicsContext^.colourImage.view,
+					graphicsContext^.multisamplerImage.view,
 					graphicsContext^.depthImage.view,
-					graphicsContext^.swapchainImageViews[index],
+					graphicsContext^.colourImage.view,
 				},
 			),
-			width           = graphicsContext^.swapchainExtent.width,
-			height          = graphicsContext^.swapchainExtent.height,
+			width           = RENDER_WIDTH,
+			height          = RENDER_HEIGHT,
 			layers          = 1,
 		}
 		if vk.CreateFramebuffer(
@@ -2615,7 +2688,7 @@ createPipelines :: proc(graphicsContext: ^GraphicsContext) {
 @(private = "file")
 recordCommandBuffer :: proc(
 	graphicsContext: ^GraphicsContext,
-	commandBuffer: ^vk.CommandBuffer,
+	commandBuffer: vk.CommandBuffer,
 	imageIndex: u32,
 ) {
 	beginInfo: vk.CommandBufferBeginInfo = {
@@ -2624,7 +2697,7 @@ recordCommandBuffer :: proc(
 		flags            = {},
 		pInheritanceInfo = nil,
 	}
-	if vk.BeginCommandBuffer(commandBuffer^, &beginInfo) != .SUCCESS {
+	if vk.BeginCommandBuffer(commandBuffer, &beginInfo) != .SUCCESS {
 		log(.ERROR, "Failed to being recording command buffer!")
 		panic("Failed to being recording command buffer!")
 	}
@@ -2634,7 +2707,7 @@ recordCommandBuffer :: proc(
 		pNext = nil,
 		renderPass = graphicsContext^.renderPass,
 		framebuffer = graphicsContext^.swapchainFrameBuffers[imageIndex],
-		renderArea = vk.Rect2D{offset = {0, 0}, extent = graphicsContext^.swapchainExtent},
+		renderArea = vk.Rect2D{offset = {0, 0}, extent = {RENDER_WIDTH, RENDER_HEIGHT}},
 		clearValueCount = 2,
 		pClearValues = raw_data(
 			[]vk.ClearValue {
@@ -2643,26 +2716,26 @@ recordCommandBuffer :: proc(
 			},
 		),
 	}
-	vk.CmdBeginRenderPass(commandBuffer^, &renderPassInfo, .INLINE)
+	vk.CmdBeginRenderPass(commandBuffer, &renderPassInfo, .INLINE)
 
 	viewport: vk.Viewport = {
 		x        = 0,
 		y        = 0,
-		width    = f32(graphicsContext^.swapchainExtent.width),
-		height   = f32(graphicsContext^.swapchainExtent.height),
+		width    = f32(RENDER_WIDTH),
+		height   = f32(RENDER_HEIGHT),
 		minDepth = 0,
 		maxDepth = 1,
 	}
-	vk.CmdSetViewport(commandBuffer^, 0, 1, &viewport)
+	vk.CmdSetViewport(commandBuffer, 0, 1, &viewport)
 
 	scissor: vk.Rect2D = {
 		offset = {0, 0},
-		extent = graphicsContext^.swapchainExtent,
+		extent = {RENDER_WIDTH, RENDER_HEIGHT},
 	}
-	vk.CmdSetScissor(commandBuffer^, 0, 1, &scissor)
+	vk.CmdSetScissor(commandBuffer, 0, 1, &scissor)
 
 	vk.CmdBindDescriptorSets(
-		commandBuffer^,
+		commandBuffer,
 		.GRAPHICS,
 		graphicsContext^.pipelineLayout,
 		0,
@@ -2673,18 +2746,18 @@ recordCommandBuffer :: proc(
 	)
 
 	vk.CmdBindVertexBuffers(
-		commandBuffer^,
+		commandBuffer,
 		0,
 		1,
 		&graphicsContext^.vertexBuffer.buffer,
 		raw_data([]vk.DeviceSize{0}),
 	)
-	vk.CmdBindIndexBuffer(commandBuffer^, graphicsContext^.indexBuffer.buffer, 0, .UINT32)
+	vk.CmdBindIndexBuffer(commandBuffer, graphicsContext^.indexBuffer.buffer, 0, .UINT32)
 
-	vk.CmdBindPipeline(commandBuffer^, .GRAPHICS, graphicsContext^.pipelines[PipelineType.MAIN])
-	for &model in graphicsContext^.models[0:] {
+	vk.CmdBindPipeline(commandBuffer, .GRAPHICS, graphicsContext^.pipelines[PipelineType.MAIN])
+	for &model in graphicsContext^.models {
 		vk.CmdDrawIndexed(
-			commandBuffer^,
+			commandBuffer,
 			model.indexCount,
 			3,
 			model.indexOffset,
@@ -2693,8 +2766,37 @@ recordCommandBuffer :: proc(
 		)
 	}
 
-	vk.CmdEndRenderPass(commandBuffer^)
-	if vk.EndCommandBuffer(commandBuffer^) != .SUCCESS {
+	vk.CmdEndRenderPass(commandBuffer)
+
+	transitionImageLayout(
+		graphicsContext,
+		commandBuffer,
+		graphicsContext^.swapchainImages[imageIndex],
+		graphicsContext^.swapchainFormat.format,
+		.PRESENT_SRC_KHR,
+		.TRANSFER_DST_OPTIMAL,
+		1,
+	)
+
+	copyImageToImage(
+		commandBuffer,
+		graphicsContext^.colourImage.image,
+		graphicsContext^.swapchainImages[imageIndex],
+		vk.Extent2D{RENDER_WIDTH, RENDER_HEIGHT},
+		graphicsContext^.swapchainExtent,
+	)
+
+	transitionImageLayout(
+		graphicsContext,
+		commandBuffer,
+		graphicsContext^.swapchainImages[imageIndex],
+		graphicsContext^.swapchainFormat.format,
+		.TRANSFER_DST_OPTIMAL,
+		.PRESENT_SRC_KHR,
+		1,
+	)
+
+	if vk.EndCommandBuffer(commandBuffer) != .SUCCESS {
 		log(.ERROR, "Failed to record command buffer!")
 		panic("Failed to record command buffer!")
 	}
@@ -2926,7 +3028,7 @@ drawFrame :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 	updateInstanceBuffer(graphicsContext)
 	recordCommandBuffer(
 		graphicsContext,
-		&graphicsContext^.commandBuffers[graphicsContext^.currentFrame],
+		graphicsContext^.commandBuffers[graphicsContext^.currentFrame],
 		imageIndex,
 	)
 
@@ -2990,12 +3092,6 @@ drawFrame :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 
 @(private = "file")
 cleanupSwapchain :: proc(graphicsContext: ^GraphicsContext) {
-	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.colourImage.view, nil)
-	vk.DestroyImage(graphicsContext^.device, graphicsContext^.colourImage.image, nil)
-	vk.FreeMemory(graphicsContext^.device, graphicsContext^.colourImage.memory, nil)
-	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.depthImage.view, nil)
-	vk.DestroyImage(graphicsContext^.device, graphicsContext^.depthImage.image, nil)
-	vk.FreeMemory(graphicsContext^.device, graphicsContext^.depthImage.memory, nil)
 	for frameBuffer in graphicsContext^.swapchainFrameBuffers {
 		vk.DestroyFramebuffer(graphicsContext^.device, frameBuffer, nil)
 	}
@@ -3026,10 +3122,6 @@ cleanupAssets :: proc(graphicsContext: ^GraphicsContext) {
 	vk.DestroyImage(graphicsContext^.device, graphicsContext^.textures.image, nil)
 	vk.FreeMemory(graphicsContext^.device, graphicsContext^.textures.memory, nil)
 	vk.DestroySampler(graphicsContext^.device, graphicsContext^.textures.sampler, nil)
-	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.skybox.view, nil)
-	vk.DestroyImage(graphicsContext^.device, graphicsContext^.skybox.image, nil)
-	vk.FreeMemory(graphicsContext^.device, graphicsContext^.skybox.memory, nil)
-	vk.DestroySampler(graphicsContext^.device, graphicsContext^.skybox.sampler, nil)
 
 	delete(graphicsContext^.models)
 	delete(graphicsContext^.instances)
@@ -3069,6 +3161,15 @@ clanupVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 		vk.DestroyFence(graphicsContext^.device, graphicsContext^.inFlightFrames[index], nil)
 	}
 	cleanupSwapchain(graphicsContext)
+	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.multisamplerImage.view, nil)
+	vk.DestroyImage(graphicsContext^.device, graphicsContext^.multisamplerImage.image, nil)
+	vk.FreeMemory(graphicsContext^.device, graphicsContext^.multisamplerImage.memory, nil)
+	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.depthImage.view, nil)
+	vk.DestroyImage(graphicsContext^.device, graphicsContext^.depthImage.image, nil)
+	vk.FreeMemory(graphicsContext^.device, graphicsContext^.depthImage.memory, nil)
+	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.colourImage.view, nil)
+	vk.DestroyImage(graphicsContext^.device, graphicsContext^.colourImage.image, nil)
+	vk.FreeMemory(graphicsContext^.device, graphicsContext^.colourImage.memory, nil)
 	vk.DestroyCommandPool(graphicsContext^.device, graphicsContext^.commandPool, nil)
 	vk.DestroyDevice(graphicsContext^.device, nil)
 	when ODIN_DEBUG {
