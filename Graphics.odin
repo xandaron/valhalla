@@ -32,7 +32,8 @@ shaderStages: []vk.ShaderStageFlag = {
 @(private = "file")
 shaderFiles: []string = {
 	"./assets/shaders/shader_vert.spv",
-	"./assets/shaders/shader_frag.spv", /*"./assets/shaders/shader_comp.spv",*/
+	"./assets/shaders/shader_frag.spv",
+	/*"./assets/shaders/shader_comp.spv",*/
 }
 
 @(private = "file")
@@ -77,21 +78,19 @@ ENGINE_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 MODEL_PATH: cstring : "./assets/models/dancing.fbx"
 
 @(private = "file")
-R_TEXTURE_PATH: cstring : "./assets/textures/blue.jpg"
-G_TEXTURE_PATH: cstring : "./assets/textures/blue.jpg"
-B_TEXTURE_PATH: cstring : "./assets/textures/blue.jpg"
+TEXTURE_PATH: cstring : "./assets/textures/baby_blue.jpg"
 
 @(private = "file")
 MAX_FRAMES_IN_FLIGHT: u32 : 2
 
 @(private = "file")
-MAX_MODEL_INSTANCES: int : 4
+MAX_MODEL_INSTANCES: int : 3
 
 @(private = "file")
-RENDER_WIDTH: u32 : 320
+RENDER_SIZE: Vec2 : {640, 390}
 
 @(private = "file")
-RENDER_HEIGHT: u32 : 195
+CLEAR_COLOUR: Vec4 : {255.0 / 255.0, 120.0 / 255.0, 0.0 / 255.0, 255.0 / 255.0}
 
 // ###################################################################
 // #                       Data Structures                           #
@@ -250,9 +249,8 @@ GraphicsContext :: struct {
 	swapchainFrameBuffers:  []vk.Framebuffer,
 
 	// Frame Resources
-	multisamplerImage:      Image,
-	depthImage:             Image,
 	colourImage:            Image,
+	depthImage:             Image,
 	imagesAvailable:        []vk.Semaphore,
 	rendersFinished:        []vk.Semaphore,
 	inFlightFrames:         []vk.Fence,
@@ -291,7 +289,6 @@ GraphicsContext :: struct {
 	startTime:              t.Time,
 	currentFrame:           u32,
 	framebufferResized:     b8,
-	msaaSamples:            vk.SampleCountFlags,
 	hasAssetsLoaded:        b8,
 }
 
@@ -305,7 +302,6 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 
 	graphicsContext^.framebufferResized = false
 	graphicsContext^.currentFrame = 0
-	graphicsContext^.msaaSamples = {._1}
 	graphicsContext^.startTime = t.now()
 	graphicsContext^.hasAssetsLoaded = false
 
@@ -316,8 +312,7 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 	createSurface(graphicsContext)
 	pickPhysicalDevice(graphicsContext)
 	createLogicalDevice(graphicsContext)
-	
-	graphicsContext^.msaaSamples = {._1}
+
 	// Swapchain
 	createSwapchain(graphicsContext)
 	createSwapchainImageViews(graphicsContext)
@@ -338,9 +333,8 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 	createDescriptorSets(graphicsContext)
 
 	// Frame Resources
-	createMultisamplerResources(graphicsContext)
-	createDepthResources(graphicsContext)
 	createColourResources(graphicsContext)
+	createDepthResources(graphicsContext)
 	createSyncObjects(graphicsContext)
 
 	// Pipeline
@@ -664,7 +658,6 @@ pickPhysicalDevice :: proc(graphicsContext: ^GraphicsContext) {
 		log(.ERROR, "No suitable physical device found!")
 		panic("No suitable physical device found!")
 	}
-	graphicsContext^.msaaSamples = getMaxUsableSampleCount(graphicsContext^.physicalDevice)
 }
 
 @(private = "file")
@@ -1893,11 +1886,7 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 	createVertexBuffer(graphicsContext)
 	createIndexBuffer(graphicsContext)
 
-	loadTextures(
-		graphicsContext,
-		&graphicsContext^.textures,
-		{R_TEXTURE_PATH, G_TEXTURE_PATH, B_TEXTURE_PATH},
-	)
+	loadTextures(graphicsContext, &graphicsContext^.textures, {TEXTURE_PATH})
 	createTextureView(
 		graphicsContext,
 		&graphicsContext^.textures,
@@ -1930,7 +1919,7 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 		instance = {
 			modelID       = 0,
 			animID        = 1,
-			textureID     = u32(index),
+			textureID     = 0,
 			position      = {f32(index - 1), 0, index == 1 ? 0 : 1},
 			rotation      = quatFromY(f32(radians(180.0))),
 			scale         = {0.005, 0.005, 0.005},
@@ -2152,28 +2141,28 @@ createDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 // ###################################################################
 
 @(private = "file")
-createMultisamplerResources :: proc(graphicsContext: ^GraphicsContext) {
-	graphicsContext^.multisamplerImage.format = graphicsContext^.swapchainFormat.format
+createColourResources :: proc(graphicsContext: ^GraphicsContext) {
+	graphicsContext^.colourImage.format = graphicsContext^.swapchainFormat.format
 	createImage(
 		graphicsContext,
 		{},
 		.D2,
-		graphicsContext^.multisamplerImage.format,
-		RENDER_WIDTH,
-		RENDER_HEIGHT,
+		graphicsContext^.colourImage.format,
+		u32(RENDER_SIZE.x),
+		u32(RENDER_SIZE.y),
 		1,
-		graphicsContext^.msaaSamples,
+		{._1},
 		.OPTIMAL,
-		{.TRANSIENT_ATTACHMENT, .COLOR_ATTACHMENT},
+		{.TRANSFER_SRC, .COLOR_ATTACHMENT},
 		{.DEVICE_LOCAL},
-		&graphicsContext^.multisamplerImage.image,
-		&graphicsContext^.multisamplerImage.memory,
+		&graphicsContext^.colourImage.image,
+		&graphicsContext^.colourImage.memory,
 	)
-	graphicsContext^.multisamplerImage.view = createImageView(
+	graphicsContext^.colourImage.view = createImageView(
 		graphicsContext,
-		graphicsContext^.multisamplerImage.image,
+		graphicsContext^.colourImage.image,
 		.D2,
-		graphicsContext^.multisamplerImage.format,
+		graphicsContext^.colourImage.format,
 		{.COLOR},
 		1,
 	)
@@ -2215,10 +2204,10 @@ createDepthResources :: proc(graphicsContext: ^GraphicsContext) {
 		{},
 		.D2,
 		graphicsContext^.depthImage.format,
-		RENDER_WIDTH,
-		RENDER_HEIGHT,
+		u32(RENDER_SIZE.x),
+		u32(RENDER_SIZE.y),
 		1,
-		graphicsContext^.msaaSamples,
+		{._1},
 		.OPTIMAL,
 		{.DEPTH_STENCIL_ATTACHMENT},
 		{.DEVICE_LOCAL},
@@ -2231,34 +2220,6 @@ createDepthResources :: proc(graphicsContext: ^GraphicsContext) {
 		.D2,
 		graphicsContext^.depthImage.format,
 		{.DEPTH},
-		1,
-	)
-}
-
-@(private = "file")
-createColourResources :: proc(graphicsContext: ^GraphicsContext) {
-	graphicsContext^.colourImage.format = graphicsContext^.swapchainFormat.format
-	createImage(
-		graphicsContext,
-		{},
-		.D2,
-		graphicsContext^.colourImage.format,
-		RENDER_WIDTH,
-		RENDER_HEIGHT,
-		1,
-		{._1},
-		.OPTIMAL,
-		{.TRANSFER_SRC, .TRANSFER_SRC, .COLOR_ATTACHMENT},
-		{.DEVICE_LOCAL},
-		&graphicsContext^.colourImage.image,
-		&graphicsContext^.colourImage.memory,
-	)
-	graphicsContext^.colourImage.view = createImageView(
-		graphicsContext,
-		graphicsContext^.colourImage.image,
-		.D2,
-		graphicsContext^.colourImage.format,
-		{.COLOR},
 		1,
 	)
 }
@@ -2314,37 +2275,25 @@ createRenderPass :: proc(graphicsContext: ^GraphicsContext) {
 	colourAttachment: vk.AttachmentDescription = {
 		flags          = {},
 		format         = graphicsContext^.colourImage.format,
-		samples        = graphicsContext^.msaaSamples,
+		samples        = {._1},
 		loadOp         = .CLEAR,
 		storeOp        = .STORE,
 		stencilLoadOp  = .DONT_CARE,
 		stencilStoreOp = .DONT_CARE,
 		initialLayout  = .UNDEFINED,
-		finalLayout    = .COLOR_ATTACHMENT_OPTIMAL,
+		finalLayout    = .TRANSFER_SRC_OPTIMAL,
 	}
 
 	depthAttachment: vk.AttachmentDescription = {
 		flags          = {},
 		format         = graphicsContext^.depthImage.format,
-		samples        = graphicsContext^.msaaSamples,
+		samples        = {._1},
 		loadOp         = .CLEAR,
 		storeOp        = .DONT_CARE,
 		stencilLoadOp  = .DONT_CARE,
 		stencilStoreOp = .DONT_CARE,
 		initialLayout  = .UNDEFINED,
 		finalLayout    = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-	}
-
-	colourAttachmentResolve: vk.AttachmentDescription = {
-		flags          = {},
-		format         = graphicsContext^.colourImage.format,
-		samples        = {._1},
-		loadOp         = .DONT_CARE,
-		storeOp        = .STORE,
-		stencilLoadOp  = .DONT_CARE,
-		stencilStoreOp = .DONT_CARE,
-		initialLayout  = .UNDEFINED,
-		finalLayout    = .TRANSFER_SRC_OPTIMAL,
 	}
 
 	colourAttachmentRef: vk.AttachmentReference = {
@@ -2357,11 +2306,6 @@ createRenderPass :: proc(graphicsContext: ^GraphicsContext) {
 		layout     = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 	}
 
-	colourAttachmentResolveRef: vk.AttachmentReference = {
-		attachment = 2,
-		layout     = .COLOR_ATTACHMENT_OPTIMAL,
-	}
-
 	subpass: vk.SubpassDescription = {
 		flags                   = {},
 		pipelineBindPoint       = .GRAPHICS,
@@ -2369,7 +2313,7 @@ createRenderPass :: proc(graphicsContext: ^GraphicsContext) {
 		pInputAttachments       = nil,
 		colorAttachmentCount    = 1,
 		pColorAttachments       = &colourAttachmentRef,
-		pResolveAttachments     = &colourAttachmentResolveRef,
+		pResolveAttachments     = nil,
 		pDepthStencilAttachment = &depthAttachmentRef,
 		preserveAttachmentCount = 0,
 		pPreserveAttachments    = nil,
@@ -2379,9 +2323,9 @@ createRenderPass :: proc(graphicsContext: ^GraphicsContext) {
 		sType           = .RENDER_PASS_CREATE_INFO,
 		pNext           = nil,
 		flags           = {},
-		attachmentCount = 3,
+		attachmentCount = 2,
 		pAttachments    = raw_data(
-			[]vk.AttachmentDescription{colourAttachment, depthAttachment, colourAttachmentResolve},
+			[]vk.AttachmentDescription{colourAttachment, depthAttachment},
 		),
 		subpassCount    = 1,
 		pSubpasses      = &subpass,
@@ -2419,16 +2363,15 @@ createFramebuffers :: proc(graphicsContext: ^GraphicsContext) {
 			pNext           = nil,
 			flags           = {},
 			renderPass      = graphicsContext^.renderPass,
-			attachmentCount = 3,
+			attachmentCount = 2,
 			pAttachments    = raw_data(
 				[]vk.ImageView {
-					graphicsContext^.multisamplerImage.view,
-					graphicsContext^.depthImage.view,
 					graphicsContext^.colourImage.view,
+					graphicsContext^.depthImage.view,
 				},
 			),
-			width           = RENDER_WIDTH,
-			height          = RENDER_HEIGHT,
+			width           = u32(RENDER_SIZE.x),
+			height          = u32(RENDER_SIZE.y),
 			layers          = 1,
 		}
 		if vk.CreateFramebuffer(
@@ -2554,7 +2497,7 @@ createPipelines :: proc(graphicsContext: ^GraphicsContext) {
 		sType                 = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 		pNext                 = nil,
 		flags                 = {},
-		rasterizationSamples  = graphicsContext^.msaaSamples,
+		rasterizationSamples  = {._1},
 		sampleShadingEnable   = false,
 		minSampleShading      = 1.0,
 		pSampleMask           = nil,
@@ -2707,11 +2650,11 @@ recordCommandBuffer :: proc(
 		pNext = nil,
 		renderPass = graphicsContext^.renderPass,
 		framebuffer = graphicsContext^.swapchainFrameBuffers[imageIndex],
-		renderArea = vk.Rect2D{offset = {0, 0}, extent = {RENDER_WIDTH, RENDER_HEIGHT}},
+		renderArea = vk.Rect2D{offset = {0, 0}, extent = {u32(RENDER_SIZE.x), u32(RENDER_SIZE.y)}},
 		clearValueCount = 2,
 		pClearValues = raw_data(
 			[]vk.ClearValue {
-				{color = vk.ClearColorValue{float32 = {0, 0, 0, 1}}},
+				{color = vk.ClearColorValue{float32 = CLEAR_COLOUR}},
 				{depthStencil = vk.ClearDepthStencilValue{depth = 1, stencil = 0}},
 			},
 		),
@@ -2721,8 +2664,8 @@ recordCommandBuffer :: proc(
 	viewport: vk.Viewport = {
 		x        = 0,
 		y        = 0,
-		width    = f32(RENDER_WIDTH),
-		height   = f32(RENDER_HEIGHT),
+		width    = RENDER_SIZE.x,
+		height   = RENDER_SIZE.y,
 		minDepth = 0,
 		maxDepth = 1,
 	}
@@ -2730,7 +2673,7 @@ recordCommandBuffer :: proc(
 
 	scissor: vk.Rect2D = {
 		offset = {0, 0},
-		extent = {RENDER_WIDTH, RENDER_HEIGHT},
+		extent = {u32(RENDER_SIZE.x), u32(RENDER_SIZE.y)},
 	}
 	vk.CmdSetScissor(commandBuffer, 0, 1, &scissor)
 
@@ -2782,7 +2725,7 @@ recordCommandBuffer :: proc(
 		commandBuffer,
 		graphicsContext^.colourImage.image,
 		graphicsContext^.swapchainImages[imageIndex],
-		vk.Extent2D{RENDER_WIDTH, RENDER_HEIGHT},
+		vk.Extent2D{u32(RENDER_SIZE.x), u32(RENDER_SIZE.y)},
 		graphicsContext^.swapchainExtent,
 	)
 
@@ -3161,15 +3104,12 @@ clanupVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 		vk.DestroyFence(graphicsContext^.device, graphicsContext^.inFlightFrames[index], nil)
 	}
 	cleanupSwapchain(graphicsContext)
-	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.multisamplerImage.view, nil)
-	vk.DestroyImage(graphicsContext^.device, graphicsContext^.multisamplerImage.image, nil)
-	vk.FreeMemory(graphicsContext^.device, graphicsContext^.multisamplerImage.memory, nil)
-	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.depthImage.view, nil)
-	vk.DestroyImage(graphicsContext^.device, graphicsContext^.depthImage.image, nil)
-	vk.FreeMemory(graphicsContext^.device, graphicsContext^.depthImage.memory, nil)
 	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.colourImage.view, nil)
 	vk.DestroyImage(graphicsContext^.device, graphicsContext^.colourImage.image, nil)
 	vk.FreeMemory(graphicsContext^.device, graphicsContext^.colourImage.memory, nil)
+	vk.DestroyImageView(graphicsContext^.device, graphicsContext^.depthImage.view, nil)
+	vk.DestroyImage(graphicsContext^.device, graphicsContext^.depthImage.image, nil)
+	vk.FreeMemory(graphicsContext^.device, graphicsContext^.depthImage.memory, nil)
 	vk.DestroyCommandPool(graphicsContext^.device, graphicsContext^.commandPool, nil)
 	vk.DestroyDevice(graphicsContext^.device, nil)
 	when ODIN_DEBUG {
