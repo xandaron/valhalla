@@ -152,6 +152,7 @@ calcFrameRate :: proc(window: glfw.WindowHandle) {
 }
 
 keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
+	context = runtime.default_context()
 	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, glfw.TRUE)
 	}
@@ -198,7 +199,6 @@ keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods:
 		}
 	}
 	if key == glfw.KEY_C && action == glfw.PRESS {
-		context = runtime.default_context()
 		camera := (^EngineState)(glfw.GetWindowUserPointer(window))^.camera
 		log(
 			.DEBUG,
