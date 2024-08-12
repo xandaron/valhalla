@@ -137,6 +137,10 @@ main :: proc() {
 		lastFrameTime = t.now()
 		calcFrameRate(window)
 	}
+
+	when ODIN_DEBUG {
+		printMemoryInfo()
+	}
 }
 
 calcFrameRate :: proc(window: glfw.WindowHandle) {

@@ -4343,12 +4343,15 @@ Panic :: struct {
 }
 
 when ODIN_OS == .Windows {
-	foreign import ufbx_lib "ufbx.lib"
+	foreign import ufbx "ufbx.lib"
+}
+else when ODIN_OS == .Linux {
+	foreign import ufbx "ufbx.a"
 }
 
 @(default_calling_convention = "c")
 @(link_prefix = "ufbx_")
-foreign ufbx_lib {
+foreign ufbx {
 	// Practically always `true` (see below), if not you need to be careful with threads.
 	//
 	// Guaranteed to be `true` in _any_ of the following conditions:

@@ -12,6 +12,8 @@ import dt "core:time/datetime"
 
 import vk "vendor:vulkan"
 
+memTracker: mem.Tracking_Allocator
+
 MessageFlag :: enum {
 	NONE,
 	MESSAGE,
@@ -22,15 +24,16 @@ MessageFlag :: enum {
 }
 
 @(private = "file")
-fileLogging: bool = true
+fileLogging := true
 
 @(private = "file")
-logPath: string = getDateTimeToString()
+logPath := getDateTimeToString()
 
 @(init)
 initDebuger :: proc() {
-	debugMemory()
-
+	when ODIN_DEBUG {
+		debugMemory()
+	}
 	fmt.println("Debugging:")
 
 	if fileLogging {
@@ -77,8 +80,7 @@ getDateTimeToString :: proc() -> string {
 }
 
 log :: proc(flag: MessageFlag, message: string) {
-	str: string = fmt.aprintfln(strings.concatenate({"[{}] ", message}), messageFlagToString(flag))
-	defer delete(str)
+	str := fmt.aprintfln(strings.concatenate({"[{}] ", message}), messageFlagToString(flag))
 	fmt.print(str)
 	if fileLogging {
 		fileHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_APPEND))
@@ -108,27 +110,25 @@ messageFlagToString :: proc(flag: MessageFlag) -> string {
 
 @(private = "file")
 debugMemory :: proc() {
-	track: mem.Tracking_Allocator
-	mem.tracking_allocator_init(&track, context.allocator)
-	context.allocator = mem.tracking_allocator(&track)
-
-	defer {
-		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-			for _, entry in track.allocation_map {
-				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-			}
-		}
-		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
-			for entry in track.bad_free_array {
-				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
-			}
-		}
-		mem.tracking_allocator_destroy(&track)
-	}
+	mem.tracking_allocator_init(&memTracker, context.allocator)
+	context.allocator = mem.tracking_allocator(&memTracker)
 }
 
+printMemoryInfo :: proc() {
+	if len(memTracker.allocation_map) > 0 {
+		log(.WARNING, fmt.aprintf("=== %v allocations not freed: ===\n", len(memTracker.allocation_map)))
+		for _, entry in memTracker.allocation_map {
+			log(.WARNING, fmt.aprintf("- %v bytes @ %v\n", entry.size, entry.location))
+		}
+	}
+	if len(memTracker.bad_free_array) > 0 {
+		fmt.eprintf("=== %v incorrect frees: ===\n", len(memTracker.bad_free_array))
+		for entry in memTracker.bad_free_array {
+			log(.WARNING, fmt.aprintf("- %p @ %v\n", entry.memory, entry.location))
+		}
+	}
+	mem.tracking_allocator_destroy(&memTracker)
+}
 
 //########################################################//
 //                          GLFW                          //
@@ -145,23 +145,43 @@ glfwErrorCallback :: proc "c" (code: i32, desc: cstring) {
 //                         Vulkan                         //
 //########################################################//
 
-
-vkDebugCallback :: proc "std" (
-	messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
-	messageType: vk.DebugUtilsMessageTypeFlagsEXT,
-	pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
-	pUserData: rawptr,
-) -> b32 {
-	context = runtime.default_context()
-	log(
-		vkDecodeSeverity(messageSeverity),
-		fmt.aprintf(
-			"Vulkan validation layer ({}):\n{}\n",
-			vkDecodeMessageTypeFlag(messageType),
-			pCallbackData.pMessage,
-		),
-	)
-	return false
+when ODIN_OS == .Windows {
+	vkDebugCallback :: proc "std" (
+		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
+		messageType: vk.DebugUtilsMessageTypeFlagsEXT,
+		pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
+		pUserData: rawptr,
+	) -> b32 {
+		context = runtime.default_context()
+		log(
+			vkDecodeSeverity(messageSeverity),
+			fmt.aprintf(
+				"Vulkan validation layer ({}):\n{}\n",
+				vkDecodeMessageTypeFlag(messageType),
+				pCallbackData.pMessage,
+			),
+		)
+		return false
+	}
+}
+else {
+	vkDebugCallback :: proc "cdecl" (
+		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
+		messageType: vk.DebugUtilsMessageTypeFlagsEXT,
+		pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
+		pUserData: rawptr,
+	) -> b32 {
+		context = runtime.default_context()
+		log(
+			vkDecodeSeverity(messageSeverity),
+			fmt.aprintf(
+				"Vulkan validation layer ({}):\n{}\n",
+				vkDecodeMessageTypeFlag(messageType),
+				pCallbackData.pMessage,
+			),
+		)
+		return false
+	}
 }
 
 vkDecodeSeverity :: proc(messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT) -> MessageFlag {
