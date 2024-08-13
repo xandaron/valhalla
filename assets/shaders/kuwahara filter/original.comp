@@ -1,0 +1,41 @@
+#version 450
+
+layout (binding = 0, rgba8) uniform readonly image2D inImage;
+layout (binding = 1, rgba8) uniform writeonly image2D outImage;
+
+// x * y * z <= 1024; must be true
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+int quadSize = 4;
+int quadArea = quadSize * quadSize;
+
+void main() {
+    int originX = int(gl_GlobalInvocationID.x);
+    int originY = int(gl_GlobalInvocationID.y);
+    vec3 outColour;
+    float lowestStd = 10.0;
+    for (int i = 0; i < 4; i++) {
+        int xsign = 1 - 2 * (i % 2);
+        int ysign = 1 - 2 * (i / 2);
+        vec3 averagedColour = vec3(0.0, 0.0, 0.0);
+        for (int x = 0; x < quadSize; x++) {
+            for (int y = 0; y < quadSize; y++) {
+                averagedColour += imageLoad(inImage, ivec2(originX + (x * xsign), originY + (y * ysign))).xyz;
+            }
+        }
+        averagedColour /= quadArea;
+        float total = 0;
+        for (int x = 0; x < quadSize; x++) {
+            for (int y = 0; y < quadSize; y++) {
+                total += pow(length(imageLoad(inImage, ivec2(originX + (x * xsign), originY + (y * ysign))).xyz - averagedColour.xyz), 2.0);
+            }
+        }
+        float std = sqrt(total / quadArea);
+        if (std < lowestStd) {
+            lowestStd = std;
+            outColour = averagedColour;
+        }
+    }
+
+    imageStore(outImage, ivec2(originX, originY), vec4(outColour, 1.0));
+}

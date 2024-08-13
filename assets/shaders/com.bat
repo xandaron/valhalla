@@ -1,3 +1,3 @@
-glslc.exe shader.vert -o shader_vert.spv
-glslc.exe shader.frag -o shader_frag.spv
-glslc.exe post.comp -o post_comp.spv
+glslc.exe %~dp0main.vert -o %~dp0main_vert.spv
+glslc.exe %~dp0main.frag -o %~dp0main_frag.spv
+glslc.exe %~dp0post.comp -o %~dp0post_comp.spv

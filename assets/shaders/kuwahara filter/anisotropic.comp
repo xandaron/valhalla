@@ -8,21 +8,21 @@ layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 vec4 eigenVector(ivec2 i) {
     vec3 Sx = (
-        1.0 * imageLoad(inImage, i + ivec2(-1, -1)).rgb +
-        2.0 * imageLoad(inImage, i + ivec2(-1,  0)).rgb +
-        1.0 * imageLoad(inImage, i + ivec2(-1,  1)).rgb +
-        -1.0 * imageLoad(inImage, i + ivec2(1, -1)).rgb +
-        -2.0 * imageLoad(inImage, i + ivec2(1,  0)).rgb +
-        -1.0 * imageLoad(inImage, i + ivec2(1,  1)).rgb
+        1.0 * imageLoad(inImage, i.uv + ivec2(-1, -1)).rgb +
+        2.0 * imageLoad(inImage, i.uv + ivec2(-1,  0)).rgb +
+        1.0 * imageLoad(inImage, i.uv + ivec2(-1,  1)).rgb +
+        -1.0 * imageLoad(inImage, i.uv + ivec2(1, -1)).rgb +
+        -2.0 * imageLoad(inImage, i.uv + ivec2(1,  0)).rgb +
+        -1.0 * imageLoad(inImage, i.uv + ivec2(1,  1)).rgb
     ) / 4.0;
 
     vec3 Sy = (
-        1.0 * imageLoad(inImage, i + ivec2(-1, -1)).rgb +
-        2.0 * imageLoad(inImage, i + ivec2( 0, -1)).rgb +
-        1.0 * imageLoad(inImage, i + ivec2( 1, -1)).rgb +
-        -1.0 * imageLoad(inImage, i + ivec2(-1, 1)).rgb +
-        -2.0 * imageLoad(inImage, i + ivec2( 0, 1)).rgb +
-        -1.0 * imageLoad(inImage, i + ivec2( 1, 1)).rgb
+        1.0 * imageLoad(inImage, i.uv + ivec2(-1, -1)).rgb +
+        2.0 * imageLoad(inImage, i.uv + ivec2( 0, -1)).rgb +
+        1.0 * imageLoad(inImage, i.uv + ivec2( 1, -1)).rgb +
+        -1.0 * imageLoad(inImage, i.uv + ivec2(-1, 1)).rgb +
+        -2.0 * imageLoad(inImage, i.uv + ivec2( 0, 1)).rgb +
+        -1.0 * imageLoad(inImage, i.uv + ivec2( 1, 1)).rgb
     ) / 4.0;
 
     return vec4(dot(Sx, Sx), dot(Sy, Sy), dot(Sx, Sy), 1.0);
@@ -38,7 +38,7 @@ float sinZeroCross = sin(zeroCross);
 float eta = (zeta + cos(zeroCross)) / (sinZeroCross * sinZeroCross);
 
 void main() {
-    vec4 t = eigenVector(ivec2(gl_GlobalInvocationID.xy));
+    vec4 t = eigenVector(gl_GlobalInvocationID.xy);
 
     float a = float(radius) * clamp((alpha + t.w) / alpha, 0.1, 2.0);
     float b = float(radius) * clamp(alpha / (alpha + t.w), 0.1, 2.0);
@@ -46,15 +46,15 @@ void main() {
     float cos_phi = cos(t.z);
     float sin_phi = sin(t.z);
 
-    mat2 R = mat2(
+    mat2 R = {
         cos_phi, -sin_phi,
         sin_phi, cos_phi
-    );
+    };
 
-    mat2 S = mat2(
+    mat2 S = {
         0.5 / a, 0.0,
         0.0, 0.5 / b
-    );
+    };
 
     mat2 SR = S * R;
 

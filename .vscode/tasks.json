@@ -9,8 +9,13 @@
             "command": "cmd",
             "args": [
                 "/C",
-                "if not exist .\\build mkdir .\\build"
+                "if not exist ./build mkdir ./build"
             ]
+        },
+        {
+            "label": "compile_shaders",
+            "type": "shell",
+            "command": "./assets/shaders/com.bat"
         },
         {
             "label": "build",
@@ -22,6 +27,7 @@
             "label": "Build",
             "dependsOn": [
                 "mkdir",
+                "compile_shaders",
                 "build"
             ]
         }
