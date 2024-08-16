@@ -4344,8 +4344,7 @@ Panic :: struct {
 
 when ODIN_OS == .Windows {
 	foreign import ufbx "ufbx.lib"
-}
-else when ODIN_OS == .Linux {
+} else {
 	foreign import ufbx "ufbx.a"
 }
 
