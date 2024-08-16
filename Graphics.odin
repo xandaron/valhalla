@@ -488,7 +488,7 @@ findQueueFamilies :: proc(
 			foundPresentFamily = true
 		}
 
-		if foundGraphicsFamily && foundPresentFamily {
+		if foundGraphicsFamily && foundPresentFamily && foundComputeFamily {
 			return
 		}
 	}
@@ -689,6 +689,19 @@ createLogicalDevice :: proc(graphicsContext: ^GraphicsContext) {
 			pNext            = nil,
 			flags            = {},
 			queueFamilyIndex = graphicsContext^.queueFamilies.presentFamily,
+			queueCount       = 1,
+			pQueuePriorities = &queuePriority,
+		}
+		append(&queueCreateInfos, queueCreateInfo)
+	}
+
+	if graphicsContext^.queueFamilies.graphicsFamily !=
+	   graphicsContext^.queueFamilies.computeFamily {
+		queueCreateInfo = {
+			sType            = .DEVICE_QUEUE_CREATE_INFO,
+			pNext            = nil,
+			flags            = {},
+			queueFamilyIndex = graphicsContext^.queueFamilies.computeFamily,
 			queueCount       = 1,
 			pQueuePriorities = &queuePriority,
 		}

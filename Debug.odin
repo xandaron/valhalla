@@ -145,6 +145,7 @@ glfwErrorCallback :: proc "c" (code: i32, desc: cstring) {
 //                         Vulkan                         //
 //########################################################//
 
+// There has to be a better way of doing this
 when ODIN_OS == .Windows {
 	vkDebugCallback :: proc "std" (
 		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
@@ -201,13 +202,13 @@ vkDecodeSeverity :: proc(messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT) 
 }
 
 vkDecodeMessageTypeFlag :: proc(messageType: vk.DebugUtilsMessageTypeFlagsEXT) -> string {
-	if vk.DebugUtilsMessageTypeFlagEXT.GENERAL in messageType {
+	if .GENERAL in messageType {
 		return "General"
 	}
-	if vk.DebugUtilsMessageTypeFlagEXT.VALIDATION in messageType {
+	if .VALIDATION in messageType {
 		return "Validation"
 	}
-	if vk.DebugUtilsMessageTypeFlagEXT.PERFORMANCE in messageType {
+	if .PERFORMANCE in messageType {
 		return "Performance"
 	}
 	return "Unknown"
