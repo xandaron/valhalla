@@ -15,7 +15,7 @@
         {
             "label": "compile_shaders",
             "type": "shell",
-            "command": "./assets/shaders/com.bat"
+            "command": "./assets/shaders/compile.bat"
         },
         {
             "label": "build",

@@ -3,7 +3,7 @@
 layout (binding = 0, rgba8) uniform readonly image2D inImage;
 layout (binding = 1, rgba8) uniform writeonly image2D outImage;
 
-float sharpness = 2.0;
+float sharpness = 1.0;
 
 float centre = sharpness * 4.0 + 1.0;
 float neighbour = -sharpness;
