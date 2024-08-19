@@ -34,13 +34,13 @@ main :: proc() {
 	when ODIN_DEBUG {
 		logPath := createLogPath()
 		if logHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_CREATE)); err == 0 {
-			logger = log.create_file_logger(logHandle)
+			logger = log.create_multi_logger(log.create_console_logger(), log.create_file_logger(logHandle))
 		} else {
-			logger = log.create_console_logger()
+			logger = log.create_multi_logger(log.create_console_logger())
 			log.logf(.Warning, "Log file could not be created! Filename: {}", logPath)
 		}
 		context.logger = logger
-		defer log.destroy_console_logger(context.logger)
+		defer log.destroy_multi_logger(context.logger)
 
 		tracker: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&tracker, context.allocator)
