@@ -26,7 +26,7 @@ createLogPath :: proc() -> string {
 	minutes := math.floor(seconds / t.SECONDS_PER_MINUTE)
 	seconds -= minutes * t.SECONDS_PER_MINUTE
 
-	str: string = fmt.aprintf(
+	str: string = fmt.tprintf(
 		"./logs/{:4i}{:2i}{:2i}{:2.0f}{:2.0f}{:2.0f}.log",
 		dateTime.year,
 		dateTime.month,
@@ -67,8 +67,8 @@ when ODIN_OS == .Windows {
 		context.logger = logger
 		log.logf(
 			vkDecodeSeverity(messageSeverity),
-			"[{}]: Vulkan validation layer ({}):\n{}\n",
-			vkDecodeSeverityString(messageSeverity),
+			"Vulkan validation layer ({}):\n{}\n",
+			vkDecodeMessageTypeFlag(messageType),
 			pCallbackData.pMessage,
 		)
 		return false
@@ -84,8 +84,8 @@ when ODIN_OS == .Windows {
 		context.logger = logger
 		log.logf(
 			vkDecodeSeverity(messageSeverity),
-			"[{}]: Vulkan validation layer ({}):\n{}\n",
-			vkDecodeSeverityString(messageSeverity),
+			"Vulkan validation layer ({}):\n{}\n",
+			vkDecodeMessageTypeFlag(messageType),
 			pCallbackData.pMessage,
 		)
 		return false

@@ -34,7 +34,10 @@ main :: proc() {
 	when ODIN_DEBUG {
 		logPath := createLogPath()
 		if logHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_CREATE)); err == 0 {
-			logger = log.create_multi_logger(log.create_console_logger(), log.create_file_logger(logHandle))
+			logger = log.create_multi_logger(
+				log.create_console_logger(),
+				log.create_file_logger(logHandle),
+			)
 		} else {
 			logger = log.create_multi_logger(log.create_console_logger())
 			log.logf(.Warning, "Log file could not be created! Filename: {}", logPath)
@@ -170,19 +173,22 @@ main :: proc() {
 		drawFrame(&engineState.graphicsContext, engineState.camera)
 		lastFrameTime = t.now()
 		calcFrameRate(window)
+		free_all(context.temp_allocator)
 	}
 }
 
 calcFrameRate :: proc(window: glfw.WindowHandle) {
 	frameCount += 1
 	if timeDelta := t.duration_seconds(t.since(fpsTimer)); timeDelta >= 1 {
-		title := fmt.aprintf("{:.2f}", (f64)(frameCount) / timeDelta)
-		titleCstring := strings.clone_to_cstring(title)
-		glfw.SetWindowTitle(window, titleCstring)
+		glfw.SetWindowTitle(
+			window,
+			strings.clone_to_cstring(
+				fmt.tprintf("{:.2f}", (f64)(frameCount) / timeDelta),
+				context.temp_allocator,
+			),
+		)
 		frameCount = 0
 		fpsTimer = t.now()
-		delete(titleCstring)
-		delete(title)
 	}
 }
 

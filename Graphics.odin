@@ -1,7 +1,6 @@
 package Valhalla
 
 import "core:c"
-import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:os"
@@ -228,6 +227,8 @@ GraphicsContext :: struct {
 	computeQueue:           vk.Queue,
 
 	// Swapchain
+	swapchainImageCount:    u32,
+	swapchainTransform:     vk.SurfaceTransformFlagsKHR,
 	swapchain:              vk.SwapchainKHR,
 	swapchainFormat:        vk.SurfaceFormatKHR,
 	swapchainMode:          vk.PresentModeKHR,
@@ -307,6 +308,12 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 	createLogicalDevice(graphicsContext)
 
 	// Swapchain
+	getSwapchainInfo(graphicsContext)
+	graphicsContext^.swapchainImages = make([]vk.Image, graphicsContext^.swapchainImageCount)
+	graphicsContext^.swapchainImageViews = make(
+		[]vk.ImageView,
+		graphicsContext^.swapchainImageCount,
+	)
 	createSwapchain(graphicsContext)
 
 	// Commands
@@ -326,11 +333,23 @@ initVkGraphics :: proc(graphicsContext: ^GraphicsContext) {
 	graphicsContext^.descriptorPools = make([]vk.DescriptorPool, 2)
 	graphicsContext^.descriptorSetLayouts = make([]vk.DescriptorSetLayout, 2)
 	graphicsContext^.descriptorSets = make([][]vk.DescriptorSet, 2)
+	graphicsContext^.descriptorSets[PipelineType.MAIN] = make(
+		[]vk.DescriptorSet,
+		MAX_FRAMES_IN_FLIGHT,
+	)
+	graphicsContext^.descriptorSets[PipelineType.POST] = make(
+		[]vk.DescriptorSet,
+		MAX_FRAMES_IN_FLIGHT,
+	)
 	createMainDescriptorSets(graphicsContext)
 	createPostDescriptorSets(graphicsContext)
 
 	// Pipeline
 	createRenderPass(graphicsContext)
+	graphicsContext^.swapchainFrameBuffers = make(
+		[]vk.Framebuffer,
+		u32(len(graphicsContext^.swapchainImageViews)),
+	)
 	createFramebuffers(graphicsContext)
 	graphicsContext^.pipelineLayouts = make([]vk.PipelineLayout, 2)
 	graphicsContext^.pipelines = make([]vk.Pipeline, 2)
@@ -827,6 +846,18 @@ createLogicalDevice :: proc(graphicsContext: ^GraphicsContext) {
 // ###################################################################
 
 @(private = "file")
+getSwapchainInfo :: proc(graphicsContext: ^GraphicsContext) {
+	swapchainSupport := querySwapchainSupport(graphicsContext^.physicalDevice, graphicsContext)
+	delete(swapchainSupport.formats)
+	delete(swapchainSupport.modes)
+
+	ideal := swapchainSupport.capabilities.minImageCount + 1
+	max := swapchainSupport.capabilities.maxImageCount
+	graphicsContext^.swapchainImageCount = max if max > 0 && ideal > max else ideal
+	graphicsContext^.swapchainTransform = swapchainSupport.capabilities.currentTransform
+}
+
+@(private = "file")
 createSwapchain :: proc(graphicsContext: ^GraphicsContext) {
 	chooseFormat :: proc(formats: []vk.SurfaceFormatKHR) -> vk.SurfaceFormatKHR {
 		for format in formats {
@@ -876,10 +907,6 @@ createSwapchain :: proc(graphicsContext: ^GraphicsContext) {
 	delete(swapchainSupport.formats)
 	delete(swapchainSupport.modes)
 
-	ideal := swapchainSupport.capabilities.minImageCount + 1
-	max := swapchainSupport.capabilities.maxImageCount
-	imageCount := max if max > 0 && ideal > max else ideal
-
 	oneQueueFamily :=
 		graphicsContext^.queueFamilies.graphicsFamily ==
 			graphicsContext^.queueFamilies.presentFamily &&
@@ -890,7 +917,7 @@ createSwapchain :: proc(graphicsContext: ^GraphicsContext) {
 		pNext                 = nil,
 		flags                 = {},
 		surface               = graphicsContext^.surface,
-		minImageCount         = imageCount,
+		minImageCount         = graphicsContext^.swapchainImageCount,
 		imageFormat           = graphicsContext^.swapchainFormat.format,
 		imageColorSpace       = graphicsContext^.swapchainFormat.colorSpace,
 		imageExtent           = graphicsContext^.swapchainExtent,
@@ -899,7 +926,7 @@ createSwapchain :: proc(graphicsContext: ^GraphicsContext) {
 		imageSharingMode      = oneQueueFamily ? .EXCLUSIVE : .CONCURRENT,
 		queueFamilyIndexCount = oneQueueFamily ? 0 : 2,
 		pQueueFamilyIndices   = oneQueueFamily ? nil : raw_data([]u32{graphicsContext^.queueFamilies.graphicsFamily, graphicsContext^.queueFamilies.presentFamily, graphicsContext^.queueFamilies.computeFamily}),
-		preTransform          = swapchainSupport.capabilities.currentTransform,
+		preTransform          = graphicsContext^.swapchainTransform,
 		compositeAlpha        = {.OPAQUE},
 		presentMode           = graphicsContext^.swapchainMode,
 		clipped               = true,
@@ -917,21 +944,14 @@ createSwapchain :: proc(graphicsContext: ^GraphicsContext) {
 		panic("Failed to create swapchain!")
 	}
 
-	vk.GetSwapchainImagesKHR(graphicsContext^.device, graphicsContext^.swapchain, &imageCount, nil)
-	graphicsContext^.swapchainImages = make([]vk.Image, imageCount)
 	vk.GetSwapchainImagesKHR(
 		graphicsContext^.device,
 		graphicsContext^.swapchain,
-		&imageCount,
+		&graphicsContext^.swapchainImageCount,
 		raw_data(graphicsContext^.swapchainImages),
 	)
 
-	graphicsContext^.swapchainImageViews = make(
-		[]vk.ImageView,
-		len(graphicsContext^.swapchainImages),
-	)
-
-	for index in 0 ..< len(graphicsContext^.swapchainImages) {
+	for index in 0 ..< graphicsContext^.swapchainImageCount {
 		graphicsContext^.swapchainImageViews[index] = createImageView(
 			graphicsContext,
 			graphicsContext^.swapchainImages[index],
@@ -1413,7 +1433,6 @@ transitionImageLayout :: proc(
 	graphicsContext: ^GraphicsContext,
 	commandBuffer: vk.CommandBuffer,
 	image: vk.Image,
-	format: vk.Format,
 	oldLayout, newLayout: vk.ImageLayout,
 	layerCount: u32,
 ) {
@@ -1703,10 +1722,7 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 		scene := fbx.load_file(filename, &opts, &err)
 		defer fbx.free_scene(scene)
 		if scene == nil {
-			log.log(
-				.Error,
-				fmt.aprintf("Failed to load FBX file! Reason\n{}", err.description.data),
-			)
+			log.logf(.Error, "Failed to load FBX file! Reason\n{}", err.description.data)
 			panic("Failed to load FBX file!")
 		}
 
@@ -1900,7 +1916,6 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texture: ^Image, texture
 		graphicsContext,
 		commandBuffer,
 		texture^.image,
-		.R8G8B8A8_SRGB,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
 		u32(textureCount),
@@ -1920,7 +1935,6 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texture: ^Image, texture
 		graphicsContext,
 		commandBuffer,
 		texture^.image,
-		texture^.format,
 		.TRANSFER_DST_OPTIMAL,
 		.SHADER_READ_ONLY_OPTIMAL,
 		u32(textureCount),
@@ -2145,11 +2159,6 @@ createMainDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 		pSetLayouts        = raw_data(layouts),
 	}
 
-	graphicsContext^.descriptorSets[PipelineType.MAIN] = make(
-		[]vk.DescriptorSet,
-		MAX_FRAMES_IN_FLIGHT,
-	)
-
 	if vk.AllocateDescriptorSets(
 		   graphicsContext^.device,
 		   &allocInfo,
@@ -2316,10 +2325,6 @@ createPostDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 		pSetLayouts        = raw_data(layouts),
 	}
 
-	graphicsContext^.descriptorSets[PipelineType.POST] = make(
-		[]vk.DescriptorSet,
-		MAX_FRAMES_IN_FLIGHT,
-	)
 	if vk.AllocateDescriptorSets(
 		   graphicsContext^.device,
 		   &allocInfo,
@@ -2648,7 +2653,6 @@ createRenderPass :: proc(graphicsContext: ^GraphicsContext) {
 @(private = "file")
 createFramebuffers :: proc(graphicsContext: ^GraphicsContext) {
 	imageViewCount := u32(len(graphicsContext^.swapchainImageViews))
-	graphicsContext^.swapchainFrameBuffers = make([]vk.Framebuffer, imageViewCount)
 
 	frameBufferInfo: vk.FramebufferCreateInfo = {
 		sType           = .FRAMEBUFFER_CREATE_INFO,
@@ -3051,17 +3055,6 @@ recordGraphicsBuffer :: proc(
 
 	vk.CmdEndRenderPass(commandBuffer)
 
-
-	transitionImageLayout(
-		graphicsContext,
-		commandBuffer,
-		graphicsContext^.colourImage.image,
-		graphicsContext^.colourImage.format,
-		.UNDEFINED,
-		.TRANSFER_SRC_OPTIMAL,
-		1,
-	)
-
 	if vk.EndCommandBuffer(commandBuffer) != .SUCCESS {
 		log.log(.Error, "Failed to record command buffer!")
 		panic("Failed to record command buffer!")
@@ -3085,12 +3078,20 @@ recordComputeBuffer :: proc(
 		log.log(.Error, "Failed to start recording compute commands!")
 		panic("Failed to start recording compute commands!")
 	}
+	
+	transitionImageLayout(
+		graphicsContext,
+		commandBuffer,
+		graphicsContext^.colourImage.image,
+		.UNDEFINED,
+		.TRANSFER_SRC_OPTIMAL,
+		1,
+	)
 
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
 		graphicsContext^.inImage.image,
-		graphicsContext^.inImage.format,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
 		1,
@@ -3108,7 +3109,6 @@ recordComputeBuffer :: proc(
 		graphicsContext,
 		commandBuffer,
 		graphicsContext^.inImage.image,
-		graphicsContext^.inImage.format,
 		.TRANSFER_DST_OPTIMAL,
 		.GENERAL,
 		1,
@@ -3118,7 +3118,6 @@ recordComputeBuffer :: proc(
 		graphicsContext,
 		commandBuffer,
 		graphicsContext^.outImage.image,
-		graphicsContext^.outImage.format,
 		.TRANSFER_SRC_OPTIMAL,
 		.GENERAL,
 		1,
@@ -3148,7 +3147,6 @@ recordComputeBuffer :: proc(
 		graphicsContext,
 		commandBuffer,
 		graphicsContext^.outImage.image,
-		graphicsContext^.outImage.format,
 		.UNDEFINED,
 		.TRANSFER_SRC_OPTIMAL,
 		1,
@@ -3158,7 +3156,6 @@ recordComputeBuffer :: proc(
 		graphicsContext,
 		commandBuffer,
 		graphicsContext^.swapchainImages[imageIndex],
-		graphicsContext^.swapchainFormat.format,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
 		1,
@@ -3181,7 +3178,6 @@ recordComputeBuffer :: proc(
 		graphicsContext,
 		commandBuffer,
 		graphicsContext^.swapchainImages[imageIndex],
-		graphicsContext^.swapchainFormat.format,
 		.UNDEFINED,
 		.PRESENT_SRC_KHR,
 		1,
