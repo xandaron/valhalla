@@ -6,6 +6,7 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 import t "core:time"
+import "core:mem"
 
 import "vendor:glfw"
 
@@ -29,6 +30,28 @@ EngineState :: struct {
 }
 
 main :: proc() {
+	when ODIN_DEBUG {
+		tracker: mem.Tracking_Allocator
+		mem.tracking_allocator_init(&tracker, context.allocator)
+		context.allocator = mem.tracking_allocator(&tracker)
+
+		defer {
+			if len(tracker.allocation_map) > 0 {
+				log(.WARNING, fmt.aprintf("=== %v allocations not freed: ===\n", len(tracker.allocation_map)))
+				for _, entry in tracker.allocation_map {
+					log(.WARNING, fmt.aprintf("- %v bytes @ %v\n", entry.size, entry.location))
+				}
+			}
+			if len(tracker.bad_free_array) > 0 {
+				fmt.eprintf("=== %v incorrect frees: ===\n", len(tracker.bad_free_array))
+				for entry in tracker.bad_free_array {
+					log(.WARNING, fmt.aprintf("- %p @ %v\n", entry.memory, entry.location))
+				}
+			}
+			mem.tracking_allocator_destroy(&tracker)
+		}
+	}
+
 	glfw.SetErrorCallback(glfwErrorCallback)
 
 	if !glfw.Init() {
@@ -137,19 +160,17 @@ main :: proc() {
 		lastFrameTime = t.now()
 		calcFrameRate(window)
 	}
-
-	when ODIN_DEBUG {
-		printMemoryInfo()
-	}
 }
 
 calcFrameRate :: proc(window: glfw.WindowHandle) {
 	frameCount += 1
 	if timeDelta := t.duration_seconds(t.since(fpsTimer)); timeDelta >= 1 {
+		title := strings.clone_to_cstring(fmt.aprintf("{:.2f}", (f64)(frameCount) / timeDelta))
 		glfw.SetWindowTitle(
 			window,
-			strings.clone_to_cstring(fmt.aprintf("{:.2f}", (f64)(frameCount) / timeDelta)),
+			title,
 		)
+		delete(title)
 		frameCount = 0
 		fpsTimer = t.now()
 	}

@@ -6,126 +6,19 @@ layout (binding = 1, rgba8) uniform writeonly image2D outImage;
 // x * y * z <= 1024; must be true
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-vec4 eigenVector(ivec2 i) {
-    vec3 Sx = (
-        1.0 * imageLoad(inImage, i + ivec2(-1, -1)).rgb +
-        2.0 * imageLoad(inImage, i + ivec2(-1,  0)).rgb +
-        1.0 * imageLoad(inImage, i + ivec2(-1,  1)).rgb +
-        -1.0 * imageLoad(inImage, i + ivec2(1, -1)).rgb +
-        -2.0 * imageLoad(inImage, i + ivec2(1,  0)).rgb +
-        -1.0 * imageLoad(inImage, i + ivec2(1,  1)).rgb
-    ) / 4.0;
+float sharpness = 0.5;
 
-    vec3 Sy = (
-        1.0 * imageLoad(inImage, i + ivec2(-1, -1)).rgb +
-        2.0 * imageLoad(inImage, i + ivec2( 0, -1)).rgb +
-        1.0 * imageLoad(inImage, i + ivec2( 1, -1)).rgb +
-        -1.0 * imageLoad(inImage, i + ivec2(-1, 1)).rgb +
-        -2.0 * imageLoad(inImage, i + ivec2( 0, 1)).rgb +
-        -1.0 * imageLoad(inImage, i + ivec2( 1, 1)).rgb
-    ) / 4.0;
+float centre = sharpness * 4.0 + 1.0;
+float neighbour = -sharpness;
 
-    return vec4(dot(Sx, Sx), dot(Sy, Sy), dot(Sx, Sy), 1.0);
-}
-
-int radius = 3;
-
-float alpha = 1.0;
-
-float zeta = 2.0 / radius;
-float zeroCross = 5.0;
-float sinZeroCross = sin(zeroCross);
-float eta = (zeta + cos(zeroCross)) / (sinZeroCross * sinZeroCross);
-
+// TODO: Should check if x, y is at the edge of the image and not sharpen if so
 void main() {
-    vec4 t = eigenVector(ivec2(gl_GlobalInvocationID.xy));
-
-    float a = float(radius) * clamp((alpha + t.w) / alpha, 0.1, 2.0);
-    float b = float(radius) * clamp(alpha / (alpha + t.w), 0.1, 2.0);
-
-    float cos_phi = cos(t.z);
-    float sin_phi = sin(t.z);
-
-    mat2 R = mat2(
-        cos_phi, -sin_phi,
-        sin_phi, cos_phi
-    );
-
-    mat2 S = mat2(
-        0.5 / a, 0.0,
-        0.0, 0.5 / b
-    );
-
-    mat2 SR = S * R;
-
-    int max_x = int(sqrt(a * a * cos_phi * cos_phi + b * b * sin_phi * sin_phi));
-    int max_y = int(sqrt(a * a * sin_phi * sin_phi + b * b * cos_phi * cos_phi));
-
-    vec4[8] m;
-    vec3[8] s;
-
-    for (int i = 0; i < 8; i++) {
-        m[i] = vec4(0.0, 0.0, 0.0, 0.0);
-        s[i] = vec3(0.0, 0.0, 0.0);
-    }
-
-    uint originX = gl_GlobalInvocationID.x;
-    uint originY = gl_GlobalInvocationID.y;
-
-    for (int x = -max_x; x <= max_x; x++) {
-        for (int y = -max_y; y <= max_y; y++) {
-            vec2 v = vec2(x, y);
-            vec3 colour = imageLoad(inImage, ivec2(originX + x, originY + y)).xyz;
-            float[8] weights;
-            float sum = 0.0;
-            float vxx = zeta - eta * v.x * v.x;
-            float vyy = zeta - eta * v.y * v.y;
-            float z = max(0, v.y + vxx);
-            weights[0] = z * z;
-            sum += weights[0];
-            z = max(0, -v.x + vyy);
-            weights[2] = z * z;
-            sum += weights[2];
-            z = max(0, -v.y + vxx); 
-            weights[4] = z * z;
-            sum += weights[4];
-            z = max(0, v.x + vyy); 
-            weights[6] = z * z;
-            sum += weights[6];
-            v = sqrt(2.0) / 2.0 * vec2(v.x - v.y, v.x + v.y);
-            vxx = zeta - eta * v.x * v.x;
-            vyy = zeta - eta * v.y * v.y;
-            z = max(0, v.y + vxx); 
-            weights[1] = z * z;
-            sum += weights[1];
-            z = max(0, -v.x + vyy); 
-            weights[3] = z * z;
-            sum += weights[3];
-            z = max(0, -v.y + vxx); 
-            weights[5] = z * z;
-            sum += weights[5];
-            z = max(0, v.x + vyy); 
-            weights[7] = z * z;
-            sum += weights[7];
-
-            for (int k = 0; k < 8; k++) {
-                float wk = weights[k] * exp(-3.125 * dot(v,v)) / sum;
-                m[k] += vec4(colour * wk, wk);
-                s[k] += colour * colour * wk;
-            }
-        }
-    }
-
-    vec4 outColour = vec4(0.0, 0.0, 0.0, 0.0);
-    for (int k = 0; k < 8; k++) {
-        m[k].xyz /= m[k].w;
-        s[k] = abs(s[k] / m[k].w - m[k].xyz * m[k].xyz);
-
-        float sigma2 = s[k].x + s[k].y + s[k].z;
-        float w = 1.0 / (1.0 + sigma2);
-
-        outColour += vec4(m[k].xyz * w, w);
-    }
-
-    imageStore(outImage, ivec2(originX, originY), vec4(outColour.xyz / outColour.w, 1.0));
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+    vec4 outColour = imageLoad(inImage, ivec2(x, y)) * centre
+        + (imageLoad(inImage, ivec2(x - 1, y))
+        + imageLoad(inImage, ivec2(x + 1, y))
+        + imageLoad(inImage, ivec2(x, y - 1))
+        + imageLoad(inImage, ivec2(x, y + 1))) * neighbour;
+    imageStore(outImage, ivec2(x, y), outColour);
 }

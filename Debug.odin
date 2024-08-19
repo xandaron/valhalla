@@ -4,15 +4,11 @@ import "base:runtime"
 
 import "core:fmt"
 import "core:math"
-import "core:mem"
 import "core:os"
-import "core:strings"
 import t "core:time"
 import dt "core:time/datetime"
 
 import vk "vendor:vulkan"
-
-memTracker: mem.Tracking_Allocator
 
 MessageFlag :: enum {
 	NONE,
@@ -31,9 +27,6 @@ logPath := getDateTimeToString()
 
 @(init)
 initDebuger :: proc() {
-	when ODIN_DEBUG {
-		debugMemory()
-	}
 	fmt.println("Debugging:")
 
 	if fileLogging {
@@ -52,7 +45,7 @@ initDebuger :: proc() {
 
 @(private = "file")
 getDateTimeToString :: proc() -> string {
-	//To-Do: There has to be a better way of doing this.
+	//TODO: There has to be a better way of doing this.
 	now := t.now()
 	year, month, day := t.date(now)
 	dateTime: dt.DateTime = {
@@ -67,20 +60,19 @@ getDateTimeToString :: proc() -> string {
 	seconds -= minutes * t.SECONDS_PER_MINUTE
 
 	str: string = fmt.aprintf(
-		"./logs/{:4i}{:2i}{:2i}{:2.0f}{:2.0f}{:2.0f}{}",
+		"./logs/{:4i}{:2i}{:2i}{:2.0f}{:2.0f}{:2.0f}.log",
 		dateTime.year,
 		dateTime.month,
 		dateTime.day,
 		hours,
 		minutes,
 		seconds,
-		".log",
 	)
 	return str
 }
 
 log :: proc(flag: MessageFlag, message: string) {
-	str := fmt.aprintfln(strings.concatenate({"[{}] ", message}), messageFlagToString(flag))
+	str := fmt.aprintfln("[{}] {}", messageFlagToString(flag), message)
 	fmt.print(str)
 	if fileLogging {
 		fileHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_APPEND))
@@ -108,27 +100,6 @@ messageFlagToString :: proc(flag: MessageFlag) -> string {
 	return "UNKNOWN"
 }
 
-@(private = "file")
-debugMemory :: proc() {
-	mem.tracking_allocator_init(&memTracker, context.allocator)
-	context.allocator = mem.tracking_allocator(&memTracker)
-}
-
-printMemoryInfo :: proc() {
-	if len(memTracker.allocation_map) > 0 {
-		log(.WARNING, fmt.aprintf("=== %v allocations not freed: ===\n", len(memTracker.allocation_map)))
-		for _, entry in memTracker.allocation_map {
-			log(.WARNING, fmt.aprintf("- %v bytes @ %v\n", entry.size, entry.location))
-		}
-	}
-	if len(memTracker.bad_free_array) > 0 {
-		fmt.eprintf("=== %v incorrect frees: ===\n", len(memTracker.bad_free_array))
-		for entry in memTracker.bad_free_array {
-			log(.WARNING, fmt.aprintf("- %p @ %v\n", entry.memory, entry.location))
-		}
-	}
-	mem.tracking_allocator_destroy(&memTracker)
-}
 
 //########################################################//
 //                          GLFW                          //
