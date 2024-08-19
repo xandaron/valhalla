@@ -3,48 +3,15 @@ package Valhalla
 import "base:runtime"
 
 import "core:fmt"
+import "core:log"
 import "core:math"
 import "core:os"
 import t "core:time"
 import dt "core:time/datetime"
-
 import vk "vendor:vulkan"
 
-MessageFlag :: enum {
-	NONE,
-	MESSAGE,
-	DEBUG,
-	WARNING,
-	ERROR,
-	UNKNOWN,
-}
 
-@(private = "file")
-fileLogging := true
-
-@(private = "file")
-logPath := getDateTimeToString()
-
-@(init)
-initDebuger :: proc() {
-	fmt.println("Debugging:")
-
-	if fileLogging {
-		logPath = getDateTimeToString()
-
-		fileHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_CREATE))
-		if (err != 0) {
-			fmt.printfln("Log file could not be created! Filename: {}", logPath)
-			return
-		}
-		os.close(fileHandle)
-
-		log(.MESSAGE, fmt.aprintf("Created log file! Dir: {}", logPath))
-	}
-}
-
-@(private = "file")
-getDateTimeToString :: proc() -> string {
+createLogPath :: proc() -> string {
 	//TODO: There has to be a better way of doing this.
 	now := t.now()
 	year, month, day := t.date(now)
@@ -71,35 +38,6 @@ getDateTimeToString :: proc() -> string {
 	return str
 }
 
-log :: proc(flag: MessageFlag, message: string) {
-	str := fmt.aprintfln("[{}] {}", messageFlagToString(flag), message)
-	fmt.print(str)
-	if fileLogging {
-		fileHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_APPEND))
-		defer os.close(fileHandle)
-		if (err != 0) {
-			fmt.println("Log file could not be opened!!!")
-			return
-		}
-		os.write_string(fileHandle, str)
-	}
-}
-
-@(private = "file")
-messageFlagToString :: proc(flag: MessageFlag) -> string {
-	#partial switch flag {
-	case .MESSAGE:
-		return "MESSAGE"
-	case .DEBUG:
-		return "DEBUG"
-	case .WARNING:
-		return "WARNING"
-	case .ERROR:
-		return "ERROR"
-	}
-	return "UNKNOWN"
-}
-
 
 //########################################################//
 //                          GLFW                          //
@@ -108,7 +46,8 @@ messageFlagToString :: proc(flag: MessageFlag) -> string {
 
 glfwErrorCallback :: proc "c" (code: i32, desc: cstring) {
 	context = runtime.default_context()
-	log(.ERROR, string(desc))
+	context.logger = logger
+	log.logf(.Error, "[GLFW Error]: {}", string(desc))
 }
 
 
@@ -116,7 +55,7 @@ glfwErrorCallback :: proc "c" (code: i32, desc: cstring) {
 //                         Vulkan                         //
 //########################################################//
 
-// There has to be a better way of doing this
+// TODO: There has to be a better way of doing this.
 when ODIN_OS == .Windows {
 	vkDebugCallback :: proc "std" (
 		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
@@ -125,18 +64,16 @@ when ODIN_OS == .Windows {
 		pUserData: rawptr,
 	) -> b32 {
 		context = runtime.default_context()
-		log(
+		context.logger = logger
+		log.logf(
 			vkDecodeSeverity(messageSeverity),
-			fmt.aprintf(
-				"Vulkan validation layer ({}):\n{}\n",
-				vkDecodeMessageTypeFlag(messageType),
-				pCallbackData.pMessage,
-			),
+			"[{}]: Vulkan validation layer ({}):\n{}\n",
+			vkDecodeSeverityString(messageSeverity),
+			pCallbackData.pMessage,
 		)
 		return false
 	}
-}
-else {
+} else {
 	vkDebugCallback :: proc "cdecl" (
 		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
 		messageType: vk.DebugUtilsMessageTypeFlagsEXT,
@@ -144,32 +81,49 @@ else {
 		pUserData: rawptr,
 	) -> b32 {
 		context = runtime.default_context()
-		log(
+		context.logger = logger
+		log.logf(
 			vkDecodeSeverity(messageSeverity),
-			fmt.aprintf(
-				"Vulkan validation layer ({}):\n{}\n",
-				vkDecodeMessageTypeFlag(messageType),
-				pCallbackData.pMessage,
-			),
+			"[{}]: Vulkan validation layer ({}):\n{}\n",
+			vkDecodeSeverityString(messageSeverity),
+			pCallbackData.pMessage,
 		)
 		return false
 	}
 }
 
-vkDecodeSeverity :: proc(messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT) -> MessageFlag {
+vkDecodeSeverity :: proc(
+	messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
+) -> runtime.Logger_Level {
 	if vk.DebugUtilsMessageSeverityFlagEXT.VERBOSE in messageSeverity {
-		return .MESSAGE
+		return .Info
 	}
 	if vk.DebugUtilsMessageSeverityFlagEXT.INFO in messageSeverity {
-		return .DEBUG
+		return .Debug
 	}
 	if vk.DebugUtilsMessageSeverityFlagEXT.WARNING in messageSeverity {
-		return .WARNING
+		return .Warning
 	}
 	if vk.DebugUtilsMessageSeverityFlagEXT.ERROR in messageSeverity {
-		return .ERROR
+		return .Error
 	}
-	return .UNKNOWN
+	panic("Unknown severity type!")
+}
+
+vkDecodeSeverityString :: proc(messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT) -> string {
+	if vk.DebugUtilsMessageSeverityFlagEXT.VERBOSE in messageSeverity {
+		return "Info"
+	}
+	if vk.DebugUtilsMessageSeverityFlagEXT.INFO in messageSeverity {
+		return "Debug"
+	}
+	if vk.DebugUtilsMessageSeverityFlagEXT.WARNING in messageSeverity {
+		return "Warning"
+	}
+	if vk.DebugUtilsMessageSeverityFlagEXT.ERROR in messageSeverity {
+		return "Error"
+	}
+	panic("Unknown severity type!")
 }
 
 vkDecodeMessageTypeFlag :: proc(messageType: vk.DebugUtilsMessageTypeFlagsEXT) -> string {
@@ -193,8 +147,8 @@ vkSetupDebugMessenger :: proc(graphicsContext: ^GraphicsContext) {
 		   nil,
 		   &graphicsContext^.debugMessenger,
 	   ) !=
-	   vk.Result.SUCCESS {
-		log(.WARNING, "Failed to create vulkan debug callback.")
+	   .SUCCESS {
+		log.log(.Warning, "Failed to create vulkan debug callback!")
 	}
 }
 

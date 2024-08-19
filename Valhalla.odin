@@ -1,13 +1,12 @@
 package Valhalla
 
 import "base:runtime"
-
 import "core:fmt"
+import "core:log"
+import "core:mem"
 import "core:os"
 import "core:strings"
 import t "core:time"
-import "core:mem"
-
 import "vendor:glfw"
 
 APP_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
@@ -24,6 +23,8 @@ cameraSpeed: f64 = 1
 cameraMoveSpeed: f32 = 0.0001
 cameraMove: Vec3 = {0, 0, 0}
 
+logger: runtime.Logger
+
 EngineState :: struct {
 	camera:          Camera,
 	graphicsContext: GraphicsContext,
@@ -31,21 +32,31 @@ EngineState :: struct {
 
 main :: proc() {
 	when ODIN_DEBUG {
+		logPath := createLogPath()
+		if logHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_CREATE)); err == 0 {
+			logger = log.create_file_logger(logHandle)
+		} else {
+			logger = log.create_console_logger()
+			log.logf(.Warning, "Log file could not be created! Filename: {}", logPath)
+		}
+		context.logger = logger
+		defer log.destroy_console_logger(context.logger)
+
 		tracker: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&tracker, context.allocator)
 		context.allocator = mem.tracking_allocator(&tracker)
 
 		defer {
 			if len(tracker.allocation_map) > 0 {
-				log(.WARNING, fmt.aprintf("=== %v allocations not freed: ===\n", len(tracker.allocation_map)))
+				log.logf(.Debug, "=== %v allocations not freed: ===", len(tracker.allocation_map))
 				for _, entry in tracker.allocation_map {
-					log(.WARNING, fmt.aprintf("- %v bytes @ %v\n", entry.size, entry.location))
+					log.logf(.Debug, "- %v bytes @ %v", entry.size, entry.location)
 				}
 			}
 			if len(tracker.bad_free_array) > 0 {
-				fmt.eprintf("=== %v incorrect frees: ===\n", len(tracker.bad_free_array))
+				log.logf(.Debug, "=== %v incorrect frees: ===", len(tracker.bad_free_array))
 				for entry in tracker.bad_free_array {
-					log(.WARNING, fmt.aprintf("- %p @ %v\n", entry.memory, entry.location))
+					log.logf(.Debug, "- %p @ %v", entry.memory, entry.location)
 				}
 			}
 			mem.tracking_allocator_destroy(&tracker)
@@ -55,8 +66,8 @@ main :: proc() {
 	glfw.SetErrorCallback(glfwErrorCallback)
 
 	if !glfw.Init() {
-		log(.ERROR, "Failed to initalize glfw, quitting application.")
-		panic("Failed to initalize glfw, quitting application.")
+		log.log(.Fatal, "Failed to initalize glfw, quitting application.")
+		return
 	}
 	defer glfw.Terminate()
 
@@ -66,10 +77,10 @@ main :: proc() {
 	height: i32 = 600
 	name: cstring : "New Innsmouth"
 	monitor: glfw.MonitorHandle = nil
-	window: glfw.WindowHandle = glfw.CreateWindow(width, height, name, monitor, nil)
+	window := glfw.CreateWindow(width, height, name, monitor, nil)
 	if window == nil {
-		log(.ERROR, "Failed to create window, quitting application.")
-		panic("Failed to create window, quitting application.")
+		log.log(.Fatal, "Failed to create window, quitting application.")
+		return
 	}
 	defer glfw.DestroyWindow(window)
 
@@ -165,14 +176,13 @@ main :: proc() {
 calcFrameRate :: proc(window: glfw.WindowHandle) {
 	frameCount += 1
 	if timeDelta := t.duration_seconds(t.since(fpsTimer)); timeDelta >= 1 {
-		title := strings.clone_to_cstring(fmt.aprintf("{:.2f}", (f64)(frameCount) / timeDelta))
-		glfw.SetWindowTitle(
-			window,
-			title,
-		)
-		delete(title)
+		title := fmt.aprintf("{:.2f}", (f64)(frameCount) / timeDelta)
+		titleCstring := strings.clone_to_cstring(title)
+		glfw.SetWindowTitle(window, titleCstring)
 		frameCount = 0
 		fpsTimer = t.now()
+		delete(titleCstring)
+		delete(title)
 	}
 }
 
@@ -225,20 +235,18 @@ keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods:
 	}
 	if key == glfw.KEY_C && action == glfw.PRESS {
 		camera := (^EngineState)(glfw.GetWindowUserPointer(window))^.camera
-		log(
-			.DEBUG,
-			fmt.aprintf(
-				"eye: ({}, {}, {}), center: ({}, {}, {}), up: ({}, {}, {})",
-				camera.eye.x,
-				camera.eye.y,
-				camera.eye.z,
-				camera.center.x,
-				camera.center.y,
-				camera.center.z,
-				camera.up.x,
-				camera.up.y,
-				camera.up.z,
-			),
+		log.logf(
+			.Debug,
+			"eye: ({}, {}, {}), center: ({}, {}, {}), up: ({}, {}, {})",
+			camera.eye.x,
+			camera.eye.y,
+			camera.eye.z,
+			camera.center.x,
+			camera.center.y,
+			camera.center.z,
+			camera.up.x,
+			camera.up.y,
+			camera.up.z,
 		)
 	}
 }

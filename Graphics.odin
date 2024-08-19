@@ -2,15 +2,14 @@ package Valhalla
 
 import "core:c"
 import "core:fmt"
+import "core:log"
 import "core:mem"
 import "core:os"
 import t "core:time"
-
+import fbx "ufbx"
 import "vendor:glfw"
 import img "vendor:stb/image"
 import vk "vendor:vulkan"
-
-import fbx "ufbx"
 
 // ###################################################################
 // #                          Constants                              #
@@ -367,7 +366,7 @@ createInstance :: proc(graphicsContext: ^GraphicsContext) {
 				continue instance_extension_outer_loop
 			}
 		}
-		log(.ERROR, fmt.aprintf("Failed to find required extension: {}", name))
+		log.logf(.Error, "Failed to find required extension: {}", name)
 		panic("Failed to find required extension")
 	}
 
@@ -380,7 +379,7 @@ createInstance :: proc(graphicsContext: ^GraphicsContext) {
 					continue instance_extension2_outer_loop
 				}
 			}
-			log(.WARNING, fmt.aprintf("Failed to find requested extension: {}", name))
+			log.logf(.Warning, "Failed to find requested extension: {}", name)
 		}
 	}
 
@@ -411,7 +410,7 @@ createInstance :: proc(graphicsContext: ^GraphicsContext) {
 					continue instance_layers_outer_loop
 				}
 			}
-			log(.WARNING, fmt.aprintf("Failed to find requested layer: {}", name))
+			log.logf(.Warning, "Failed to find requested layer: {}", name)
 		}
 		instanceInfo.enabledLayerCount = u32(len(supportedLayers))
 		instanceInfo.ppEnabledLayerNames = raw_data(supportedLayers)
@@ -421,7 +420,7 @@ createInstance :: proc(graphicsContext: ^GraphicsContext) {
 	}
 
 	if vk.CreateInstance(&instanceInfo, nil, &graphicsContext^.instance) != .SUCCESS {
-		log(.ERROR, "Failed to create vulkan instance.")
+		log.log(.Error, "Failed to create vulkan instance.")
 		panic("Failed to create vulkan instance.")
 	}
 
@@ -438,7 +437,7 @@ createSurface :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.surface,
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create surface!")
+		log.log(.Error, "Failed to create surface!")
 		panic("Failed to create surface!")
 	}
 }
@@ -634,7 +633,7 @@ pickPhysicalDevice :: proc(graphicsContext: ^GraphicsContext) {
 	vk.EnumeratePhysicalDevices(graphicsContext^.instance, &deviceCount, nil)
 
 	if deviceCount == 0 {
-		log(.ERROR, "No devices with Vulkan support!")
+		log.log(.Error, "No devices with Vulkan support!")
 		panic("No devices with Vulkan support!")
 	}
 
@@ -662,7 +661,7 @@ pickPhysicalDevice :: proc(graphicsContext: ^GraphicsContext) {
 	}
 
 	if graphicsContext^.physicalDevice == nil {
-		log(.ERROR, "No suitable physical device found!")
+		log.log(.Error, "No suitable physical device found!")
 		panic("No suitable physical device found!")
 	}
 }
@@ -796,7 +795,7 @@ createLogicalDevice :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.device,
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create logical device!")
+		log.log(.Error, "Failed to create logical device!")
 		panic("Failed to create logical device!")
 	}
 
@@ -899,15 +898,7 @@ createSwapchain :: proc(graphicsContext: ^GraphicsContext) {
 		imageUsage            = {.TRANSFER_DST, .COLOR_ATTACHMENT},
 		imageSharingMode      = oneQueueFamily ? .EXCLUSIVE : .CONCURRENT,
 		queueFamilyIndexCount = oneQueueFamily ? 0 : 2,
-		pQueueFamilyIndices   = oneQueueFamily \
-		? nil \
-		: raw_data(
-			[]u32 {
-				graphicsContext^.queueFamilies.graphicsFamily,
-				graphicsContext^.queueFamilies.presentFamily,
-				graphicsContext^.queueFamilies.computeFamily,
-			},
-		),
+		pQueueFamilyIndices   = oneQueueFamily ? nil : raw_data([]u32{graphicsContext^.queueFamilies.graphicsFamily, graphicsContext^.queueFamilies.presentFamily, graphicsContext^.queueFamilies.computeFamily}),
 		preTransform          = swapchainSupport.capabilities.currentTransform,
 		compositeAlpha        = {.OPAQUE},
 		presentMode           = graphicsContext^.swapchainMode,
@@ -922,7 +913,7 @@ createSwapchain :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.swapchain,
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create swapchain!")
+		log.log(.Error, "Failed to create swapchain!")
 		panic("Failed to create swapchain!")
 	}
 
@@ -989,7 +980,7 @@ createCommandBuffers :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.graphicsCommandPool,
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create command pool!")
+		log.log(.Error, "Failed to create command pool!")
 		panic("Failed to create command pool!")
 	}
 
@@ -1007,7 +998,7 @@ createCommandBuffers :: proc(graphicsContext: ^GraphicsContext) {
 		   raw_data(graphicsContext^.graphicsCommandBuffers),
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to allocate command buffer!")
+		log.log(.Error, "Failed to allocate command buffer!")
 		panic("Failed to allocate command buffer!")
 	}
 
@@ -1024,7 +1015,7 @@ createCommandBuffers :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.computeCommandPool,
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create command pool!")
+		log.log(.Error, "Failed to create command pool!")
 		panic("Failed to create command pool!")
 	}
 
@@ -1042,7 +1033,7 @@ createCommandBuffers :: proc(graphicsContext: ^GraphicsContext) {
 		   raw_data(graphicsContext^.computeCommandBuffers),
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to allocate command buffer!")
+		log.log(.Error, "Failed to allocate command buffer!")
 		panic("Failed to allocate command buffer!")
 	}
 }
@@ -1126,7 +1117,7 @@ createBuffer :: proc(
 		pQueueFamilyIndices   = nil,
 	}
 	if vk.CreateBuffer(graphicsContext^.device, &bufferInfo, nil, buffer) != .SUCCESS {
-		log(.ERROR, "Failed to create buffer!")
+		log.log(.Error, "Failed to create buffer!")
 		panic("Failed to create buffer!")
 	}
 
@@ -1143,7 +1134,7 @@ createBuffer :: proc(
 		),
 	}
 	if vk.AllocateMemory(graphicsContext^.device, &allocInfo, nil, bufferMemory) != .SUCCESS {
-		log(.ERROR, "Failed to allocate buffer memory!")
+		log.log(.Error, "Failed to allocate buffer memory!")
 		panic("Failed to allocate buffer memory!")
 	}
 	vk.BindBufferMemory(graphicsContext^.device, buffer^, bufferMemory^, 0)
@@ -1320,7 +1311,7 @@ findMemoryType :: proc(
 			return i
 		}
 	}
-	log(.ERROR, "Failed to find suitable memory type!")
+	log.log(.Error, "Failed to find suitable memory type!")
 	panic("Failed to find suitable memory type!")
 }
 
@@ -1358,7 +1349,7 @@ createImage :: proc(
 	}
 
 	if vk.CreateImage(graphicsContext^.device, &imageInfo, nil, &image^.image) != .SUCCESS {
-		log(.ERROR, "Failed to create texture!")
+		log.log(.Error, "Failed to create texture!")
 		panic("Failed to create texture!")
 	}
 
@@ -1375,11 +1366,11 @@ createImage :: proc(
 		),
 	}
 	if vk.AllocateMemory(graphicsContext^.device, &allocInfo, nil, &image.memory) != .SUCCESS {
-		log(.ERROR, "Failed to allocate image memory!")
+		log.log(.Error, "Failed to allocate image memory!")
 		panic("Failed to allocate image memory!")
 	}
 	if vk.BindImageMemory(graphicsContext^.device, image.image, image.memory, 0) != .SUCCESS {
-		log(.ERROR, "Failed to bind image memory!")
+		log.log(.Error, "Failed to bind image memory!")
 		panic("Failed to bind image memory!")
 	}
 }
@@ -1412,7 +1403,7 @@ createImageView :: proc(
 		},
 	}
 	if vk.CreateImageView(graphicsContext^.device, &viewInfo, nil, &imageView) != .SUCCESS {
-		log(.ERROR, "Failed to create image view!")
+		log.log(.Error, "Failed to create image view!")
 		panic("Failed to create image view!")
 	}
 	return imageView
@@ -1456,7 +1447,7 @@ transitionImageLayout :: proc(
 		barrier.srcAccessMask = {.TRANSFER_WRITE}
 		sourceStage = {.TRANSFER}
 	case:
-		log(.ERROR, "Unsupported image layout transition!")
+		log.log(.Error, "Unsupported image layout transition!")
 		panic("Unsupported image layout transition!")
 	}
 
@@ -1484,7 +1475,7 @@ transitionImageLayout :: proc(
 		barrier.dstAccessMask = {.SHADER_READ}
 		destinationStage = {.COMPUTE_SHADER}
 	case:
-		log(.ERROR, "Unsupported image layout transition!")
+		log.log(.Error, "Unsupported image layout transition!")
 		panic("Unsupported image layout transition!")
 	}
 	vk.CmdPipelineBarrier(
@@ -1712,7 +1703,10 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 		scene := fbx.load_file(filename, &opts, &err)
 		defer fbx.free_scene(scene)
 		if scene == nil {
-			log(.ERROR, fmt.aprintf("Failed to load FBX file! Reason\n{}", err.description.data))
+			log.log(
+				.Error,
+				fmt.aprintf("Failed to load FBX file! Reason\n{}", err.description.data),
+			)
 			panic("Failed to load FBX file!")
 		}
 
@@ -1861,12 +1855,12 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texture: ^Image, texture
 		pixels := img.load(path, &width, &height, nil, 4)
 		defer img.image_free(pixels)
 		if pixels == nil {
-			log(.ERROR, "Failed to load texture!")
+			log.log(.Error, "Failed to load texture!")
 			panic("Failed to load texture!")
 		}
 
 		if textureWidth != width || textureHeight != height {
-			log(.ERROR, "Image of wrong dims!")
+			log.log(.Error, "Image of wrong dims!")
 			panic("Image of wrong dims!")
 		}
 
@@ -1970,7 +1964,7 @@ createSampler :: proc(
 		unnormalizedCoordinates = false,
 	}
 	if vk.CreateSampler(graphicsContext^.device, &samplerInfo, nil, &sampler) != .SUCCESS {
-		log(.ERROR, "Failed to create texture sampler!")
+		log.log(.Error, "Failed to create texture sampler!")
 		panic("Failed to create texture sampler!")
 	}
 	return
@@ -2082,7 +2076,7 @@ createMainDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.descriptorPools[PipelineType.MAIN],
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create descriptor pool!")
+		log.log(.Error, "Failed to create descriptor pool!")
 		panic("Failed to create descriptor pool!")
 	}
 
@@ -2132,7 +2126,7 @@ createMainDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.descriptorSetLayouts[PipelineType.MAIN],
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create descriptor set layout!")
+		log.log(.Error, "Failed to create descriptor set layout!")
 		panic("Failed to create descriptor set layout!")
 	}
 
@@ -2162,7 +2156,7 @@ createMainDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 		   raw_data(graphicsContext^.descriptorSets[PipelineType.MAIN]),
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to allocate descriptor sets!")
+		log.log(.Error, "Failed to allocate descriptor sets!")
 		panic("Failed to allocate descriptor sets!")
 	}
 
@@ -2270,7 +2264,7 @@ createPostDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.descriptorPools[PipelineType.POST],
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create descriptor pool!")
+		log.log(.Error, "Failed to create descriptor pool!")
 		panic("Failed to create descriptor pool!")
 	}
 
@@ -2304,7 +2298,7 @@ createPostDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.descriptorSetLayouts[PipelineType.POST],
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create compute descriptor set layout!")
+		log.log(.Error, "Failed to create compute descriptor set layout!")
 		panic("Failed to create compute descriptor set layout!")
 	}
 
@@ -2332,7 +2326,7 @@ createPostDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 		   raw_data(graphicsContext^.descriptorSets[PipelineType.POST]),
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to allocate compute descriptor sets!")
+		log.log(.Error, "Failed to allocate compute descriptor sets!")
 		panic("Failed to allocate compute descriptor sets!")
 	}
 
@@ -2487,7 +2481,7 @@ createSyncObjects :: proc(graphicsContext: ^GraphicsContext) {
 				&graphicsContext^.inFlightFrames[index],
 			)
 		if result != .SUCCESS {
-			log(.ERROR, "Failed to create sync objects!")
+			log.log(.Error, "Failed to create sync objects!")
 			panic("Failed to create sync objects!")
 		}
 	}
@@ -2514,7 +2508,7 @@ createRenderPass :: proc(graphicsContext: ^GraphicsContext) {
 				return format
 			}
 		}
-		log(.ERROR, "Failed to find supported format!")
+		log.log(.Error, "Failed to find supported format!")
 		panic("Failed to find supported format!")
 	}
 
@@ -2646,7 +2640,7 @@ createRenderPass :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.renderPass,
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Unable to create render pass!")
+		log.log(.Error, "Unable to create render pass!")
 		panic("Unable to create render pass!")
 	}
 }
@@ -2678,7 +2672,7 @@ createFramebuffers :: proc(graphicsContext: ^GraphicsContext) {
 			   &graphicsContext^.swapchainFrameBuffers[index],
 		   ) !=
 		   .SUCCESS {
-			log(.ERROR, "Failed to create frame buffer!")
+			log.log(.Error, "Failed to create frame buffer!")
 			panic("Failed to create frame buffer!")
 		}
 	}
@@ -2694,13 +2688,13 @@ createShaderModule :: proc(
 	loadShaderFile :: proc(filepath: string) -> (data: []byte) {
 		fileHandle, err := os.open(filepath, mode = (os.O_RDONLY | os.O_APPEND))
 		if err != 0 {
-			log(.ERROR, "Shader file couldn't be opened!")
+			log.log(.Error, "Shader file couldn't be opened!")
 			panic("Shader file couldn't be opened!")
 		}
 		defer os.close(fileHandle)
 		success: bool
 		if data, success = os.read_entire_file_from_handle(fileHandle); !success {
-			log(.ERROR, "Shader file couldn't be read!")
+			log.log(.Error, "Shader file couldn't be read!")
 			panic("Shader file couldn't be read!")
 		}
 		return
@@ -2716,7 +2710,7 @@ createShaderModule :: proc(
 	}
 	if vk.CreateShaderModule(graphicsContext^.device, &createInfo, nil, &shaderModule) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create shader module")
+		log.log(.Error, "Failed to create shader module")
 		panic("Failed to create shader module")
 	}
 	delete(code)
@@ -2742,7 +2736,7 @@ createMainPipeline :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.pipelineLayouts[PipelineType.MAIN],
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create pipeline layout!")
+		log.log(.Error, "Failed to create pipeline layout!")
 		panic("Failed to create pipeline layout!")
 	}
 
@@ -2840,7 +2834,7 @@ createMainPipeline :: proc(graphicsContext: ^GraphicsContext) {
 	}
 
 	dynamicStates: []vk.DynamicState = {.VIEWPORT, .SCISSOR}
-	
+
 	dynamicStateInfo: vk.PipelineDynamicStateCreateInfo = {
 		sType             = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
 		pNext             = nil,
@@ -2903,7 +2897,7 @@ createMainPipeline :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.pipelines[PipelineType.MAIN],
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create pipeline!")
+		log.log(.Error, "Failed to create pipeline!")
 		panic("Failed to create pipeline!")
 	}
 }
@@ -2927,7 +2921,7 @@ createPostPipeline :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.pipelineLayouts[PipelineType.POST],
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create postprocess pipeline layout!")
+		log.log(.Error, "Failed to create postprocess pipeline layout!")
 		panic("Failed to create postprocess pipeline layout!")
 	}
 
@@ -2963,7 +2957,7 @@ createPostPipeline :: proc(graphicsContext: ^GraphicsContext) {
 		   &graphicsContext^.pipelines[PipelineType.POST],
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to create postprocess pipeline!")
+		log.log(.Error, "Failed to create postprocess pipeline!")
 		panic("Failed to create postprocess pipeline!")
 	}
 
@@ -2987,7 +2981,7 @@ recordGraphicsBuffer :: proc(
 		pInheritanceInfo = nil,
 	}
 	if vk.BeginCommandBuffer(commandBuffer, &beginInfo) != .SUCCESS {
-		log(.ERROR, "Failed to being recording command buffer!")
+		log.log(.Error, "Failed to being recording command buffer!")
 		panic("Failed to being recording command buffer!")
 	}
 
@@ -3057,7 +3051,7 @@ recordGraphicsBuffer :: proc(
 
 	vk.CmdEndRenderPass(commandBuffer)
 
-	
+
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
@@ -3069,7 +3063,7 @@ recordGraphicsBuffer :: proc(
 	)
 
 	if vk.EndCommandBuffer(commandBuffer) != .SUCCESS {
-		log(.ERROR, "Failed to record command buffer!")
+		log.log(.Error, "Failed to record command buffer!")
 		panic("Failed to record command buffer!")
 	}
 }
@@ -3086,9 +3080,9 @@ recordComputeBuffer :: proc(
 		flags            = {},
 		pInheritanceInfo = nil,
 	}
-	
+
 	if vk.BeginCommandBuffer(commandBuffer, &beginInfo) != .SUCCESS {
-		log(.ERROR, "Failed to start recording compute commands!")
+		log.log(.Error, "Failed to start recording compute commands!")
 		panic("Failed to start recording compute commands!")
 	}
 
@@ -3194,7 +3188,7 @@ recordComputeBuffer :: proc(
 	)
 
 	if vk.EndCommandBuffer(commandBuffer) != .SUCCESS {
-		log(.ERROR, "Failed to record compute command buffer!")
+		log.log(.Error, "Failed to record compute command buffer!")
 		panic("Failed to record compute command buffer!")
 	}
 }
@@ -3220,7 +3214,7 @@ updateViewProjectionUniform :: proc(graphicsContext: ^GraphicsContext, camera: C
 			10000,
 		)
 	} else {
-		log(.ERROR, "Undefined camera mode!")
+		log.log(.Error, "Undefined camera mode!")
 		panic("Undefined camera mode!")
 	}
 	viewProjection: ViewProjectionUniform = {
@@ -3410,7 +3404,7 @@ drawFrame :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 		recreateSwapchain(graphicsContext)
 		return
 	} else if result != .SUCCESS && result != .SUBOPTIMAL_KHR {
-		log(.ERROR, "Failed to aquire swapchain image!")
+		log.log(.Error, "Failed to aquire swapchain image!")
 		panic("Failed to aquire swapchain image!")
 	}
 	vk.ResetFences(
@@ -3453,7 +3447,7 @@ drawFrame :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 	}
 
 	if vk.QueueSubmit(graphicsContext^.graphicsQueue, 1, &submitInfo, 0) != .SUCCESS {
-		log(.ERROR, "Failed to submit draw command buffer!")
+		log.log(.Error, "Failed to submit draw command buffer!")
 		panic("Failed to submit draw command buffer!")
 	}
 
@@ -3476,7 +3470,7 @@ drawFrame :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 		   graphicsContext^.inFlightFrames[graphicsContext^.currentFrame],
 	   ) !=
 	   .SUCCESS {
-		log(.ERROR, "Failed to submit compute command buffer!")
+		log.log(.Error, "Failed to submit compute command buffer!")
 		panic("Failed to submit compute command buffer!")
 	}
 
@@ -3498,7 +3492,7 @@ drawFrame :: proc(graphicsContext: ^GraphicsContext, camera: Camera) {
 		graphicsContext^.framebufferResized = false
 		recreateSwapchain(graphicsContext)
 	} else if result != .SUCCESS {
-		log(.ERROR, "Failed to present swapchain image!")
+		log.log(.Error, "Failed to present swapchain image!")
 		panic("Failed to present swapchain image!")
 	}
 
