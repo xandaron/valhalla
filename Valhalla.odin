@@ -20,7 +20,7 @@ mouseSensitivity: f64 = 1
 scrollDelta: f64Vec2 = {0, 0}
 
 cameraSpeed: f64 = 1
-cameraMoveSpeed: f32 = 0.0001
+cameraMoveSpeed: f32 = 0.001
 cameraMove: Vec3 = {0, 0, 0}
 
 logger: runtime.Logger
@@ -194,6 +194,7 @@ calcFrameRate :: proc(window: glfw.WindowHandle) {
 
 keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	context = runtime.default_context()
+	context.logger = logger
 	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, glfw.TRUE)
 	}

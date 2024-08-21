@@ -6,19 +6,8 @@ layout (binding = 1, rgba8) uniform writeonly image2D outImage;
 // x * y * z <= 1024; must be true
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-float sharpness = 0.5;
-
-float centre = sharpness * 4.0 + 1.0;
-float neighbour = -sharpness;
-
-// TODO: Should check if x, y is at the edge of the image and not sharpen if so
 void main() {
     uint x = gl_GlobalInvocationID.x;
     uint y = gl_GlobalInvocationID.y;
-    vec4 outColour = imageLoad(inImage, ivec2(x, y)) * centre
-        + (imageLoad(inImage, ivec2(x - 1, y))
-        + imageLoad(inImage, ivec2(x + 1, y))
-        + imageLoad(inImage, ivec2(x, y - 1))
-        + imageLoad(inImage, ivec2(x, y + 1))) * neighbour;
-    imageStore(outImage, ivec2(x, y), outColour);
+    imageStore(outImage, ivec2(x, y), imageLoad(inImage, ivec2(x, y)));
 }
