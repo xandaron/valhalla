@@ -3566,6 +3566,10 @@ cleanupAssets :: proc(graphicsContext: ^GraphicsContext) {
 	vk.DestroyImage(graphicsContext.device, graphicsContext.albidos.image, nil)
 	vk.FreeMemory(graphicsContext.device, graphicsContext.albidos.memory, nil)
 	vk.DestroySampler(graphicsContext.device, graphicsContext.albidos.sampler, nil)
+	vk.DestroyImageView(graphicsContext.device, graphicsContext.normals.view, nil)
+	vk.DestroyImage(graphicsContext.device, graphicsContext.normals.image, nil)
+	vk.FreeMemory(graphicsContext.device, graphicsContext.normals.memory, nil)
+	vk.DestroySampler(graphicsContext.device, graphicsContext.normals.sampler, nil)
 
 	for model in graphicsContext.models {
 		delete(model.vertices)
