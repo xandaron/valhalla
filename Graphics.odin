@@ -44,11 +44,17 @@ vertexInputAttributeDescriptions: []vk.VertexInputAttributeDescription = {
 	{
 		location = 2,
 		binding = 0,
+		format = .R32G32B32_SFLOAT,
+		offset = u32(offset_of(Vertex, normal)),
+	},
+	{
+		location = 3,
+		binding = 0,
 		format = .R32G32B32A32_UINT,
 		offset = u32(offset_of(Vertex, bones)),
 	},
 	{
-		location = 3,
+		location = 4,
 		binding = 0,
 		format = .R32G32B32A32_SFLOAT,
 		offset = u32(offset_of(Vertex, weights)),
@@ -87,6 +93,7 @@ CLEAR_COLOUR: Vec4 : {255.0 / 255.0, 120.0 / 255.0, 0.0 / 255.0, 255.0 / 255.0}
 Vertex :: struct {
 	position: Vec3,
 	texCoord: Vec2,
+	normal:   Vec3,
 	bones:    [4]u32,
 	weights:  Vec4,
 }
@@ -1657,10 +1664,12 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 				vertexIndex := mesh.vertex_position.indices.data[index]
 				pos := mesh.vertex_position.values.data[vertexIndex]
 				uv := mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[index]]
+				norm := mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[index]]
 
 				vertex: Vertex = {
 					position = {f32(pos.x), f32(pos.y), f32(pos.z)},
 					texCoord = {f32(uv.x), 1 - f32(uv.y)},
+					normal   = {f32(norm.x), f32(norm.y), f32(norm.z)},
 					weights  = {1, 0, 0, 0},
 					bones    = {0, 0, 0, 0},
 				}
@@ -1959,6 +1968,17 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texture: ^Image, texture
 		{.COLOR},
 		1,
 	)
+
+	properties: vk.PhysicalDeviceProperties
+	vk.GetPhysicalDeviceProperties(graphicsContext.physicalDevice, &properties)
+	texture.sampler = createSampler(
+		graphicsContext,
+		.LINEAR,
+		.LINEAR,
+		.CLAMP_TO_EDGE,
+		false,
+		properties.limits.maxSamplerAnisotropy,
+	)
 }
 
 @(private = "file")
@@ -2011,18 +2031,7 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 	createIndexBuffer(graphicsContext)
 
 	loadTextures(graphicsContext, &graphicsContext.albidos, {TEXTURE_PATH})
-	loadTextures(graphicsContext, &graphicsContext.albidos, {TEXTURE_PATH})
-
-	properties: vk.PhysicalDeviceProperties
-	vk.GetPhysicalDeviceProperties(graphicsContext.physicalDevice, &properties)
-	graphicsContext.albidos.sampler = createSampler(
-		graphicsContext,
-		.LINEAR,
-		.LINEAR,
-		.CLAMP_TO_EDGE,
-		false,
-		properties.limits.maxSamplerAnisotropy,
-	)
+	loadTextures(graphicsContext, &graphicsContext.normals, {NORMALS_PATH})
 
 	now := t.now()
 	graphicsContext.instances = make([]Instance, 1)
@@ -2057,7 +2066,7 @@ createMainDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 	poolSizes: []vk.DescriptorPoolSize = {
 		{type = .UNIFORM_BUFFER, descriptorCount = 1},
 		{type = .STORAGE_BUFFER, descriptorCount = 2},
-		{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = 1},
+		{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = 2},
 	}
 
 	poolInfo: vk.DescriptorPoolCreateInfo = {
@@ -2104,6 +2113,13 @@ createMainDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 		},
 		{
 			binding = 3,
+			descriptorType = .COMBINED_IMAGE_SAMPLER,
+			descriptorCount = 1,
+			stageFlags = {.FRAGMENT},
+			pImmutableSamplers = nil,
+		},
+		{
+			binding = 4,
 			descriptorType = .COMBINED_IMAGE_SAMPLER,
 			descriptorCount = 1,
 			stageFlags = {.FRAGMENT},
@@ -2158,6 +2174,12 @@ createMainDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 	textureInfo: vk.DescriptorImageInfo = {
 		sampler     = graphicsContext.albidos.sampler,
 		imageView   = graphicsContext.albidos.view,
+		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+	}
+
+	normalInfo: vk.DescriptorImageInfo = {
+		sampler     = graphicsContext.normals.sampler,
+		imageView   = graphicsContext.normals.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
 
@@ -2226,6 +2248,18 @@ createMainDescriptorSets :: proc(graphicsContext: ^GraphicsContext) {
 				descriptorCount = 1,
 				descriptorType = .COMBINED_IMAGE_SAMPLER,
 				pImageInfo = &textureInfo,
+				pBufferInfo = nil,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = graphicsContext.descriptorSets[PipelineType.MAIN][index],
+				dstBinding = 4,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .COMBINED_IMAGE_SAMPLER,
+				pImageInfo = &normalInfo,
 				pBufferInfo = nil,
 				pTexelBufferView = nil,
 			},
