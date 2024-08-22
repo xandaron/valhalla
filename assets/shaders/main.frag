@@ -11,12 +11,12 @@ layout(location = 0) out vec3 outColour;
 
 struct Light {
     vec3 position;
-    float intensity;
+    vec3 colourIntensity;
 };
 
 Light[] lights = {
-    Light(vec3(10, 10, 10), 2000),
-    Light(vec3(-10,-10,-10), 700)
+    Light(vec3(1, 1, 1), vec3(1, 1, 1)),
+    Light(vec3(-1,-1,-1), vec3(3, 0, 0))
 };
 
 void main() {
@@ -27,7 +27,7 @@ void main() {
         float lightDistance = length(relativePosition);
         vec3 negativeLightDirection = normalize(relativePosition);
         float lambertainCoefficient = clamp(dot(normal, negativeLightDirection), 0, 1);
-        cumulativeColour += texture(albidoArray, inUV).xyz * lambertainCoefficient * lights[i].intensity / (lightDistance * lightDistance);
+        cumulativeColour += texture(albidoArray, inUV).xyz * lambertainCoefficient * lights[i].colourIntensity / (lightDistance * lightDistance);
     }
     outColour = cumulativeColour;
 }
