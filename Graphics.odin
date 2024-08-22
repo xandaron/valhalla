@@ -1852,8 +1852,8 @@ loadModels :: proc(graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
 		loadFBX(graphicsContext, &graphicsContext.models[index], path)
 		append(&vertices, ..graphicsContext.models[index].vertices)
 		append(&indices, ..graphicsContext.models[index].indices)
-		vertexCount += u32(len(graphicsContext.models[index].vertices))
-		indexCount += graphicsContext.models[index].indexCount
+		vertexCount = u32(len(vertices))
+		indexCount = u32(len(indices))
 	}
 	graphicsContext.vertices = vertices[:]
 	graphicsContext.indices = indices[:]
@@ -1966,7 +1966,7 @@ loadTextures :: proc(graphicsContext: ^GraphicsContext, texture: ^Image, texture
 		.D2_ARRAY,
 		texture.format,
 		{.COLOR},
-		1,
+		u32(textureCount),
 	)
 
 	properties: vk.PhysicalDeviceProperties
@@ -2035,21 +2035,20 @@ loadAssets :: proc(graphicsContext: ^GraphicsContext) {
 
 	now := t.now()
 	graphicsContext.instances = make([]Instance, 1)
-	for &instance, index in graphicsContext.instances {
-		instance = {
-			modelID       = 0,
-			animID        = 0,
-			textureID     = 0,
-			position      = {0, 0, 0},
-			rotation      = quatFromY(f32(radians(180.0))),
-			scale         = {0.003, 0.003, 0.003},
-			animStartTime = now,
-		}
-		graphicsContext.boneCount += len(graphicsContext.models[instance.modelID].skeleton)
-		instance.positionKeys = make([]u32, len(graphicsContext.models[instance.modelID].skeleton))
-		instance.rotationKeys = make([]u32, len(graphicsContext.models[instance.modelID].skeleton))
-		instance.scaleKeys = make([]u32, len(graphicsContext.models[instance.modelID].skeleton))
+	graphicsContext.instances[0] = {
+		modelID       = 0,
+		animID        = 0,
+		textureID     = 0,
+		position      = {0, 0, 0},
+		rotation      = quatFromY(f32(radians(180.0))),
+		scale         = {0.003, 0.003, 0.003},
+		animStartTime = now,
 	}
+	skeletonLength := len(graphicsContext.models[graphicsContext.instances[0].modelID].skeleton)
+	graphicsContext.boneCount += skeletonLength
+	graphicsContext.instances[0].positionKeys = make([]u32, skeletonLength)
+	graphicsContext.instances[0].rotationKeys = make([]u32, skeletonLength)
+	graphicsContext.instances[0].scaleKeys = make([]u32, skeletonLength)
 
 	createInstanceBuffer(graphicsContext)
 	createBoneBuffer(graphicsContext)
@@ -3061,6 +3060,7 @@ recordGraphicsBuffer :: proc(
 	vk.CmdBindIndexBuffer(commandBuffer, graphicsContext.indexBuffer.buffer, 0, .UINT32)
 
 	vk.CmdBindPipeline(commandBuffer, .GRAPHICS, graphicsContext.pipelines[PipelineType.MAIN])
+	instance: u32 = 0
 	for &model in graphicsContext.models {
 		vk.CmdDrawIndexed(
 			commandBuffer,
@@ -3068,8 +3068,9 @@ recordGraphicsBuffer :: proc(
 			1,
 			model.indexOffset,
 			i32(model.vertexOffset),
-			0,
+			instance,
 		)
+		instance += 1
 	}
 
 	vk.CmdEndRenderPass(commandBuffer)
@@ -3271,6 +3272,7 @@ updateInstanceBuffer :: proc(graphicsContext: ^GraphicsContext) {
 
 		skeleton := &model^.skeleton
 		animation := model^.animations[instance.animID]
+		// now = instance.animStartTime
 		timeSinceAnimStart := t.duration_seconds(t.diff(instance.animStartTime, now))
 		timeStamp :=
 			timeSinceAnimStart -

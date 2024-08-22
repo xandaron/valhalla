@@ -26,9 +26,9 @@ layout(location = 2) in vec3 inNormal;
 layout(location = 3) in uvec4 inBones;
 layout(location = 4) in vec4 inWeights;
 
-layout(location = 0) out vec3 fragTexCoord;
-layout(location = 1) out vec3 outNormal;
-// layout(location = 2) out vec4 fragColour;
+layout(location = 0) out vec3 outPosition;
+layout(location = 1) out vec3 outUV;
+layout(location = 2) out vec3 outNormal;
 
 void main() {
     mat4 boneTransform = mat4(0.0);
@@ -37,8 +37,9 @@ void main() {
         boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[id]] * inWeights[id];
     }
     mat4 vertexTransform = instanceBuffer.instanceInfo[gl_InstanceIndex].model * boneTransform;
-    gl_Position = viewProjectionUniform.viewProjection * vertexTransform * vec4(inPosition, 1.0);
-    fragTexCoord = vec3(inUV.xy, instanceBuffer.instanceInfo[gl_InstanceIndex].samplerOffset);
-    outNormal = mat3(vertexTransform) * inNormal, 0.0;
-    // fragColour = vec4(1.0, 1.0, 1.0, 1.0);
+    vec4 vertexPosition = vertexTransform * vec4(inPosition, 1.0);
+    gl_Position = viewProjectionUniform.viewProjection * vertexPosition;
+    outPosition = vertexPosition.xyz;
+    outUV = vec3(inUV.xy, instanceBuffer.instanceInfo[gl_InstanceIndex].samplerOffset);
+    outNormal = normalize(mat3(vertexTransform) * inNormal);
 }
