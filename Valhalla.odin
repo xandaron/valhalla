@@ -6,13 +6,13 @@ import "core:log"
 import "core:mem"
 import "core:os"
 import "core:strings"
-import t "core:time"
+import "core:time"
 import "vendor:glfw"
 
 APP_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 
 frameCount: u16 = 0
-fpsTimer: t.Time = t.now()
+fpsTimer: time.Time = time.now()
 
 mouseMode: bool = false
 mousePos, mouseDelta: f64Vec2 = {0, 0}, {0, 0}
@@ -20,7 +20,7 @@ mouseSensitivity: f64 = 1
 scrollDelta: f64Vec2 = {0, 0}
 
 cameraSpeed: f64 = 1
-cameraMoveSpeed: f32 = 0.001
+cameraMoveSpeed: f32 = 0.0003
 cameraMove: Vec3 = {0, 0, 0}
 
 logger: runtime.Logger
@@ -108,7 +108,7 @@ main :: proc() {
 	initVkGraphics(&engineState.graphicsContext)
 	defer clanupVkGraphics(&engineState.graphicsContext)
 
-	lastFrameTime := t.now()
+	lastFrameTime := time.now()
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents()
 
@@ -171,7 +171,7 @@ main :: proc() {
 		}
 
 		drawFrame(&engineState.graphicsContext, engineState.camera)
-		lastFrameTime = t.now()
+		lastFrameTime = time.now()
 		calcFrameRate(window)
 		free_all(context.temp_allocator)
 	}
@@ -179,7 +179,7 @@ main :: proc() {
 
 calcFrameRate :: proc(window: glfw.WindowHandle) {
 	frameCount += 1
-	if timeDelta := t.duration_seconds(t.since(fpsTimer)); timeDelta >= 1 {
+	if timeDelta := time.duration_seconds(time.since(fpsTimer)); timeDelta >= 1 {
 		glfw.SetWindowTitle(
 			window,
 			strings.clone_to_cstring(
@@ -188,7 +188,7 @@ calcFrameRate :: proc(window: glfw.WindowHandle) {
 			),
 		)
 		frameCount = 0
-		fpsTimer = t.now()
+		fpsTimer = time.now()
 	}
 }
 

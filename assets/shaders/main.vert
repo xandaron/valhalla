@@ -33,11 +33,15 @@ layout(location = 2) out vec3 outNormal;
 void main() {
     mat4 boneTransform = mat4(0.0);
     uint boneOffset = instanceBuffer.instanceInfo[gl_InstanceIndex].boneOffset;
-    for (int id = 0; id < 4; id++) {
-        boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[id]] * inWeights[id];
-    }
+    
+    boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[0]] * inWeights[0];
+    boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[1]] * inWeights[1];
+    boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[2]] * inWeights[2];
+    boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[3]] * inWeights[3];
+
     mat4 vertexTransform = instanceBuffer.instanceInfo[gl_InstanceIndex].model * boneTransform;
     vec4 vertexPosition = vertexTransform * vec4(inPosition, 1.0);
+
     gl_Position = viewProjectionUniform.viewProjection * vertexPosition;
     outPosition = vertexPosition.xyz;
     outUV = vec3(inUV.xy, instanceBuffer.instanceInfo[gl_InstanceIndex].samplerOffset);
