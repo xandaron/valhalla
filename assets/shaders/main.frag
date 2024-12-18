@@ -15,8 +15,14 @@ struct Light {
 };
 
 Light[] lights = {
+    Light(vec3(-1, -1, -1), vec3(1, 1, 1)),
+    Light(vec3(-1, -1, 1), vec3(1, 1, 1)),
+    Light(vec3(-1, 1, -1), vec3(1, 1, 1)),
+    Light(vec3(1, -1, -1), vec3(1, 1, 1)),
+    Light(vec3(1, 1, -1), vec3(1, 1, 1)),
+    Light(vec3(1, -1, 1), vec3(1, 1, 1)),
+    Light(vec3(-1, 1, 1), vec3(1, 1, 1)),
     Light(vec3(1, 1, 1), vec3(1, 1, 1)),
-    Light(vec3(-1,-1,-1), vec3(3, 0, 0))
 };
 
 void main() {
