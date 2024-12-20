@@ -377,6 +377,7 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	createRenderPass(graphicsContext)
 	createFramebuffers(graphicsContext)
 	createDescriptorSets(graphicsContext)
+	createComputeDescriptorSets(graphicsContext)
 	createMainPipeline(graphicsContext)
 	createPostPipeline(graphicsContext)
 	createLightPipeline(graphicsContext)
@@ -957,6 +958,7 @@ recreateSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	createSwapchain(graphicsContext)
 	createFramebuffers(graphicsContext)
 	createStorageImage(graphicsContext)
+	createComputeDescriptorSets(graphicsContext)
 	createPostPipeline(graphicsContext)
 }
 
@@ -2317,139 +2319,6 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 	}
 
-	// POST
-	{
-		poolSizes: []vk.DescriptorPoolSize = {{type = .STORAGE_IMAGE, descriptorCount = 2}}
-		poolInfo: vk.DescriptorPoolCreateInfo = {
-			sType         = .DESCRIPTOR_POOL_CREATE_INFO,
-			pNext         = nil,
-			flags         = {},
-			maxSets       = MAX_FRAMES_IN_FLIGHT,
-			poolSizeCount = u32(len(poolSizes)),
-			pPoolSizes    = raw_data(poolSizes),
-		}
-
-		if vk.CreateDescriptorPool(
-			   device,
-			   &poolInfo,
-			   nil,
-			   &pipelines[PipelineIndex.POST].descriptorPool,
-		   ) !=
-		   .SUCCESS {
-			log.log(.Error, "Failed to create descriptor pool!")
-			panic("Failed to create descriptor pool!")
-		}
-
-		layoutBindings: []vk.DescriptorSetLayoutBinding = {
-			{
-				binding = 0,
-				descriptorType = .STORAGE_IMAGE,
-				descriptorCount = 1,
-				stageFlags = {.COMPUTE},
-				pImmutableSamplers = nil,
-			},
-			{
-				binding = 1,
-				descriptorType = .STORAGE_IMAGE,
-				descriptorCount = 1,
-				stageFlags = {.COMPUTE},
-				pImmutableSamplers = nil,
-			},
-		}
-
-		layoutInfo: vk.DescriptorSetLayoutCreateInfo = {
-			sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			pNext        = nil,
-			flags        = {},
-			bindingCount = u32(len(layoutBindings)),
-			pBindings    = raw_data(layoutBindings),
-		}
-
-		if vk.CreateDescriptorSetLayout(
-			   device,
-			   &layoutInfo,
-			   nil,
-			   &pipelines[PipelineIndex.POST].descriptorSetLayout,
-		   ) !=
-		   .SUCCESS {
-			log.log(.Error, "Failed to create compute descriptor set layout!")
-			panic("Failed to create compute descriptor set layout!")
-		}
-
-		layouts := make([]vk.DescriptorSetLayout, MAX_FRAMES_IN_FLIGHT)
-		defer delete(layouts)
-		for &layout in layouts {
-			layout = pipelines[PipelineIndex.POST].descriptorSetLayout
-		}
-
-		allocInfo: vk.DescriptorSetAllocateInfo = {
-			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-			pNext              = nil,
-			descriptorPool     = pipelines[PipelineIndex.POST].descriptorPool,
-			descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
-			pSetLayouts        = raw_data(layouts),
-		}
-
-		if vk.AllocateDescriptorSets(
-			   device,
-			   &allocInfo,
-			   raw_data(pipelines[PipelineIndex.POST].descriptorSets[:]),
-		   ) !=
-		   .SUCCESS {
-			log.log(.Error, "Failed to allocate compute descriptor sets!")
-			panic("Failed to allocate compute descriptor sets!")
-		}
-
-		inImageInfo: vk.DescriptorImageInfo = {
-			sampler     = inImage.sampler,
-			imageView   = inImage.view,
-			imageLayout = .GENERAL,
-		}
-
-		outImageInfo: vk.DescriptorImageInfo = {
-			sampler     = outImage.sampler,
-			imageView   = outImage.view,
-			imageLayout = .GENERAL,
-		}
-
-		for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-			descriptorWrite: []vk.WriteDescriptorSet = {
-				{
-					sType = .WRITE_DESCRIPTOR_SET,
-					pNext = nil,
-					dstSet = pipelines[PipelineIndex.POST].descriptorSets[index],
-					dstBinding = 0,
-					dstArrayElement = 0,
-					descriptorCount = 1,
-					descriptorType = .STORAGE_IMAGE,
-					pImageInfo = &inImageInfo,
-					pBufferInfo = nil,
-					pTexelBufferView = nil,
-				},
-				{
-					sType = .WRITE_DESCRIPTOR_SET,
-					pNext = nil,
-					dstSet = pipelines[PipelineIndex.POST].descriptorSets[index],
-					dstBinding = 1,
-					dstArrayElement = 0,
-					descriptorCount = 1,
-					descriptorType = .STORAGE_IMAGE,
-					pImageInfo = &outImageInfo,
-					pBufferInfo = nil,
-					pTexelBufferView = nil,
-				},
-			}
-
-			vk.UpdateDescriptorSets(
-				device,
-				u32(len(descriptorWrite)),
-				raw_data(descriptorWrite),
-				0,
-				nil,
-			)
-		}
-	}
-
 	// LIGHT
 	{
 		poolSizes: []vk.DescriptorPoolSize = {{type = .STORAGE_BUFFER, descriptorCount = 3}}
@@ -2596,6 +2465,142 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 					descriptorType = .STORAGE_BUFFER,
 					pImageInfo = nil,
 					pBufferInfo = &lightBufferInfo,
+					pTexelBufferView = nil,
+				},
+			}
+
+			vk.UpdateDescriptorSets(
+				device,
+				u32(len(descriptorWrite)),
+				raw_data(descriptorWrite),
+				0,
+				nil,
+			)
+		}
+	}
+}
+
+@(private = "file")
+createComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
+	// POST PROCESSING
+	{
+		poolSizes: []vk.DescriptorPoolSize = {{type = .STORAGE_IMAGE, descriptorCount = 2}}
+		poolInfo: vk.DescriptorPoolCreateInfo = {
+			sType         = .DESCRIPTOR_POOL_CREATE_INFO,
+			pNext         = nil,
+			flags         = {},
+			maxSets       = MAX_FRAMES_IN_FLIGHT,
+			poolSizeCount = u32(len(poolSizes)),
+			pPoolSizes    = raw_data(poolSizes),
+		}
+
+		if vk.CreateDescriptorPool(
+			   device,
+			   &poolInfo,
+			   nil,
+			   &pipelines[PipelineIndex.POST].descriptorPool,
+		   ) !=
+		   .SUCCESS {
+			log.log(.Error, "Failed to create descriptor pool!")
+			panic("Failed to create descriptor pool!")
+		}
+
+		layoutBindings: []vk.DescriptorSetLayoutBinding = {
+			{
+				binding = 0,
+				descriptorType = .STORAGE_IMAGE,
+				descriptorCount = 1,
+				stageFlags = {.COMPUTE},
+				pImmutableSamplers = nil,
+			},
+			{
+				binding = 1,
+				descriptorType = .STORAGE_IMAGE,
+				descriptorCount = 1,
+				stageFlags = {.COMPUTE},
+				pImmutableSamplers = nil,
+			},
+		}
+
+		layoutInfo: vk.DescriptorSetLayoutCreateInfo = {
+			sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			pNext        = nil,
+			flags        = {},
+			bindingCount = u32(len(layoutBindings)),
+			pBindings    = raw_data(layoutBindings),
+		}
+
+		if vk.CreateDescriptorSetLayout(
+			   device,
+			   &layoutInfo,
+			   nil,
+			   &pipelines[PipelineIndex.POST].descriptorSetLayout,
+		   ) !=
+		   .SUCCESS {
+			log.log(.Error, "Failed to create compute descriptor set layout!")
+			panic("Failed to create compute descriptor set layout!")
+		}
+
+		layouts := make([]vk.DescriptorSetLayout, MAX_FRAMES_IN_FLIGHT)
+		defer delete(layouts)
+		for &layout in layouts {
+			layout = pipelines[PipelineIndex.POST].descriptorSetLayout
+		}
+
+		allocInfo: vk.DescriptorSetAllocateInfo = {
+			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
+			pNext              = nil,
+			descriptorPool     = pipelines[PipelineIndex.POST].descriptorPool,
+			descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
+			pSetLayouts        = raw_data(layouts),
+		}
+
+		if vk.AllocateDescriptorSets(
+			   device,
+			   &allocInfo,
+			   raw_data(pipelines[PipelineIndex.POST].descriptorSets[:]),
+		   ) !=
+		   .SUCCESS {
+			log.log(.Error, "Failed to allocate compute descriptor sets!")
+			panic("Failed to allocate compute descriptor sets!")
+		}
+
+		inImageInfo: vk.DescriptorImageInfo = {
+			sampler     = inImage.sampler,
+			imageView   = inImage.view,
+			imageLayout = .GENERAL,
+		}
+
+		outImageInfo: vk.DescriptorImageInfo = {
+			sampler     = outImage.sampler,
+			imageView   = outImage.view,
+			imageLayout = .GENERAL,
+		}
+
+		for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+			descriptorWrite: []vk.WriteDescriptorSet = {
+				{
+					sType = .WRITE_DESCRIPTOR_SET,
+					pNext = nil,
+					dstSet = pipelines[PipelineIndex.POST].descriptorSets[index],
+					dstBinding = 0,
+					dstArrayElement = 0,
+					descriptorCount = 1,
+					descriptorType = .STORAGE_IMAGE,
+					pImageInfo = &inImageInfo,
+					pBufferInfo = nil,
+					pTexelBufferView = nil,
+				},
+				{
+					sType = .WRITE_DESCRIPTOR_SET,
+					pNext = nil,
+					dstSet = pipelines[PipelineIndex.POST].descriptorSets[index],
+					dstBinding = 1,
+					dstArrayElement = 0,
+					descriptorCount = 1,
+					descriptorType = .STORAGE_IMAGE,
+					pImageInfo = &outImageInfo,
+					pBufferInfo = nil,
 					pTexelBufferView = nil,
 				},
 			}
@@ -4118,6 +4123,9 @@ cleanupSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.DestroyImageView(device, outImage.view, nil)
 	vk.DestroyImage(device, outImage.image, nil)
 	vk.FreeMemory(device, outImage.memory, nil)
+	
+	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.POST].descriptorPool, nil)
+	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.POST].descriptorSetLayout, nil)
 
 	vk.DestroyPipeline(device, pipelines[PipelineIndex.POST].pipeline, nil)
 	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.POST].layout, nil)
@@ -4194,9 +4202,6 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	cleanupSwapchain(graphicsContext)
 	delete(swapchainImages)
 	delete(swapchainImageViews)
-
-	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.POST].descriptorPool, nil)
-	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.POST].descriptorSetLayout, nil)
 
 	// MAIN
 	vk.DestroyImageView(device, pipelines[PipelineIndex.MAIN].colour.view, nil)
