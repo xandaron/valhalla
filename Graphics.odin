@@ -956,7 +956,6 @@ recreateSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	cleanupSwapchain(graphicsContext)
 
 	createSwapchain(graphicsContext)
-	createFramebuffers(graphicsContext)
 	createStorageImage(graphicsContext)
 	createComputeDescriptorSets(graphicsContext)
 	createPostPipeline(graphicsContext)
