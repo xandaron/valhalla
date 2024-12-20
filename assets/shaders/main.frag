@@ -20,14 +20,14 @@ layout(location = 2) in vec3 inNormal;
 
 layout(location = 0) out vec4 outColour;
 
-#define ambientLight 0.3
+#define ambientLight 0.0
 
 float textureProj(vec4 shadowCoord) {
     float dist = texture(shadowMap, shadowCoord.st).r;
     if (dist > shadowCoord.z) {
         return 1.0;
     }
-    return ambientLight;
+    return 0.0;
 }
 
 const mat4 biasMat = mat4( 
@@ -38,7 +38,7 @@ const mat4 biasMat = mat4(
 );
 
 void main() {
-    vec3 cumulativeColour = vec3(0.0);
+    vec3 cumulativeColour = vec3(ambientLight);
     
     vec3 normal = outerProduct(inNormal, vec3(0.0, 0.0, 1.0)) * (texture(normalArray, inUV).xyz - 0.5) * 2.0;
     vec3 relativePosition = lightBuffer.lights[0].position.xyz - inPosition.xyz;
