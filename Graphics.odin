@@ -1416,6 +1416,7 @@ createImageView :: proc(
 	return imageView
 }
 
+@(private = "file")
 transitionImageLayout :: proc(
 	using graphicsContext: ^GraphicsContext,
 	commandBuffer: vk.CommandBuffer,
@@ -1498,6 +1499,7 @@ transitionImageLayout :: proc(
 	)
 }
 
+@(private = "file")
 copyBufferToImage :: proc(
 	using graphicsContext: ^GraphicsContext,
 	commandBuffer: vk.CommandBuffer,
@@ -1521,6 +1523,7 @@ copyBufferToImage :: proc(
 	vk.CmdCopyBufferToImage(commandBuffer, buffer, image, .TRANSFER_DST_OPTIMAL, 1, &region)
 }
 
+@(private = "file")
 copyBufferToTextureArray :: proc(
 	using graphicsContext: ^GraphicsContext,
 	commandBuffer: vk.CommandBuffer,
@@ -1557,6 +1560,7 @@ copyBufferToTextureArray :: proc(
 	)
 }
 
+@(private = "file")
 copyImage :: proc(
 	commandBuffer: vk.CommandBuffer,
 	extent: vk.Extent3D,
@@ -1573,6 +1577,7 @@ copyImage :: proc(
 	vk.CmdCopyImage(commandBuffer, srcImage, srcLayout, dstImage, dstLayout, 1, &region)
 }
 
+@(private = "file")
 upscaleImage :: proc(
 	commandBuffer: vk.CommandBuffer,
 	src, dst: vk.Image,
