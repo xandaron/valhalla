@@ -1,39 +1,53 @@
 #version 450
 
-layout(binding = 3) uniform sampler2DArray albidoArray;
-layout(binding = 4) uniform sampler2DArray normalArray;
+struct Light {
+    mat4 mvp;
+    vec4 position;
+    vec4 colourIntensity;
+};
 
-layout(location = 0) in vec3 inPosition;
+layout(binding = 3) readonly buffer LightBuffer {
+    Light[] lights;
+} lightBuffer;
+
+layout(binding = 4) uniform sampler2DArray albidoArray;
+layout(binding = 5) uniform sampler2DArray normalArray;
+layout(binding = 6) uniform sampler2D shadowMap;
+
+layout(location = 0) in vec4 inPosition;
 layout(location = 1) in vec3 inUV;
 layout(location = 2) in vec3 inNormal;
 
-layout(location = 0) out vec3 outColour;
+layout(location = 0) out vec4 outColour;
 
-struct Light {
-    vec3 position;
-    vec3 colourIntensity;
-};
+#define ambientLight 0.3
 
-Light[] lights = {
-    Light(vec3(-1, -1, -1), vec3(1, 1, 1)),
-    Light(vec3(-1, -1, 1), vec3(1, 1, 1)),
-    Light(vec3(-1, 1, -1), vec3(1, 1, 1)),
-    Light(vec3(1, -1, -1), vec3(1, 1, 1)),
-    Light(vec3(1, 1, -1), vec3(1, 1, 1)),
-    Light(vec3(1, -1, 1), vec3(1, 1, 1)),
-    Light(vec3(-1, 1, 1), vec3(1, 1, 1)),
-    Light(vec3(1, 1, 1), vec3(1, 1, 1)),
-};
+float textureProj(vec4 shadowCoord) {
+    float dist = texture(shadowMap, shadowCoord.st).r;
+    if (dist > shadowCoord.z) {
+        return 1.0;
+    }
+    return ambientLight;
+}
+
+const mat4 biasMat = mat4( 
+	0.5, 0.0, 0.0, 0.0,
+	0.0, 0.5, 0.0, 0.0,
+	0.0, 0.0, 1.0, 0.0,
+	0.5, 0.5, 0.0, 1.0 
+);
 
 void main() {
     vec3 cumulativeColour = vec3(0.0);
-    for (int i = 0; i < lights.length(); i++) {
-        vec3 normal = outerProduct(inNormal, vec3(0, 0, 1)) * (texture(normalArray, inUV).xyz - 0.5) * 2;
-        vec3 relativePosition = lights[i].position - inPosition;
-        float lightDistance = length(relativePosition);
-        vec3 negativeLightDirection = normalize(relativePosition);
-        float lambertainCoefficient = clamp(dot(normal, negativeLightDirection), 0, 1);
-        cumulativeColour += texture(albidoArray, inUV).xyz * lambertainCoefficient * lights[i].colourIntensity / (lightDistance * lightDistance);
-    }
-    outColour = cumulativeColour;
+    
+    vec3 normal = outerProduct(inNormal, vec3(0.0, 0.0, 1.0)) * (texture(normalArray, inUV).xyz - 0.5) * 2.0;
+    vec3 relativePosition = lightBuffer.lights[0].position.xyz - inPosition.xyz;
+    float lightSquareDistance = dot(relativePosition, relativePosition);
+    vec3 negativeLightDirection = normalize(relativePosition);
+    float lambertainCoefficient = clamp(dot(normal, negativeLightDirection), 0.0, 1.0);
+
+    vec4 vertexPos = biasMat * lightBuffer.lights[0].mvp * inPosition;
+
+    float shadow = textureProj(vertexPos / vertexPos.w);
+    outColour = texture(albidoArray, inUV) * shadow * lambertainCoefficient * lightBuffer.lights[0].colourIntensity / lightSquareDistance;
 }

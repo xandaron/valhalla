@@ -85,6 +85,12 @@ SHADOW_RESOLUTION: Vec2 : {2048, 2048}
 @(private = "file")
 CLEAR_COLOUR: Vec4 : {0.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0}
 
+@(private = "file")
+DEPTH_BIAS_CONSTANT: f32 = 1.25
+
+@(private = "file")
+DEPTH_BIAS_SLOPE: f32 = 1.75
+
 // ###################################################################
 // #                         Data Structures                         #
 // ###################################################################
@@ -159,11 +165,18 @@ Image :: struct {
 }
 
 @(private = "file")
-PointLight :: struct #align (16) {
+PointLight :: struct {
 	position:        Vec3,
 	direction:       Vec3,
-	fov:             f32,
 	colourIntensity: Vec3,
+	fov:             f32,
+}
+
+@(private = "file")
+Light :: struct #align (16) {
+	mvp:             Mat4,
+	position:        Vec4,
+	colourIntensity: Vec4,
 }
 
 @(private = "file")
@@ -182,9 +195,9 @@ Instance :: struct {
 
 @(private = "file")
 PipelineIndex :: enum {
-	MAIN   = 0,
-	POST   = 1,
-	SHADOW = 2,
+	MAIN  = 0,
+	POST  = 1,
+	LIGHT = 2,
 }
 
 @(private = "file")
@@ -224,22 +237,21 @@ Buffer :: struct {
 
 @(private = "file")
 RenderPass :: struct {
-	width, height:    u32,
-	frameBuffers:     []vk.Framebuffer,
-	colour:           Image,
-	depth:            Image,
-	vulkanRenderPass: vk.RenderPass,
-	descriptor:       vk.DescriptorImageInfo,
+	frameBuffers: []vk.Framebuffer,
+	colour:       Image,
+	depth:        Image,
+	renderPass:   vk.RenderPass,
+	descriptor:   vk.DescriptorImageInfo,
 }
 
 @(private = "file")
 Pipeline :: struct {
-	using renderPass:    RenderPass,
-	descriptorPool:      vk.DescriptorPool,
-	descriptorSets:      [MAX_FRAMES_IN_FLIGHT]vk.DescriptorSet,
-	pipeline:            vk.Pipeline,
-	descriptorSetLayout: vk.DescriptorSetLayout,
-	layout:              vk.PipelineLayout,
+	using renderPassData: RenderPass,
+	descriptorPool:       vk.DescriptorPool,
+	descriptorSets:       [MAX_FRAMES_IN_FLIGHT]vk.DescriptorSet,
+	pipeline:             vk.Pipeline,
+	descriptorSetLayout:  vk.DescriptorSetLayout,
+	layout:               vk.PipelineLayout,
 }
 
 CameraMode :: enum {
@@ -274,7 +286,6 @@ GraphicsContext :: struct {
 	swapchainExtent:        vk.Extent2D,
 	swapchainImages:        []vk.Image,
 	swapchainImageViews:    []vk.ImageView,
-
 	pipelines:              []Pipeline,
 
 	// Frame Resources
@@ -287,7 +298,8 @@ GraphicsContext :: struct {
 
 	// Commands
 	graphicsCommandPool:    vk.CommandPool,
-	graphicsCommandBuffers: []vk.CommandBuffer,
+	shadowCommandBuffers:   []vk.CommandBuffer,
+	mainCommandBuffers:     []vk.CommandBuffer,
 	computeCommandPool:     vk.CommandPool,
 	computeCommandBuffers:  []vk.CommandBuffer,
 
@@ -301,7 +313,7 @@ GraphicsContext :: struct {
 
 	// Scene
 	instances:              []Instance,
-	lights:                 []PointLight,
+	pointLights:            []PointLight,
 
 	// Buffers
 	// TODO: Vertex and Index buffers should be one buffer
@@ -361,12 +373,13 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	createSyncObjects(graphicsContext)
 
 	// Pipeline
-	pipelines = make([]Pipeline, 2)
-	createDescriptorSets(graphicsContext)
+	pipelines = make([]Pipeline, len(PipelineIndex))
 	createRenderPass(graphicsContext)
 	createFramebuffers(graphicsContext)
+	createDescriptorSets(graphicsContext)
 	createMainPipeline(graphicsContext)
 	createPostPipeline(graphicsContext)
+	createLightPipeline(graphicsContext)
 }
 
 @(private = "file")
@@ -461,13 +474,7 @@ createInstance :: proc(using graphicsContext: ^GraphicsContext) {
 
 @(private = "file")
 createSurface :: proc(using graphicsContext: ^GraphicsContext) {
-	if glfw.CreateWindowSurface(
-		   instance,
-		   window,
-		   nil,
-		   &surface,
-	   ) !=
-	   .SUCCESS {
+	if glfw.CreateWindowSurface(instance, window, nil, &surface) != .SUCCESS {
 		log.log(.Error, "Failed to create surface!")
 		panic("Failed to create surface!")
 	}
@@ -699,10 +706,7 @@ pickPhysicalDevice :: proc(graphicsContext: ^GraphicsContext) {
 
 @(private = "file")
 createLogicalDevice :: proc(using graphicsContext: ^GraphicsContext) {
-	queueFamilies, _ = findQueueFamilies(
-		physicalDevice,
-		graphicsContext,
-	)
+	queueFamilies, _ = findQueueFamilies(physicalDevice, graphicsContext)
 
 	queuePriority: f32 = 1.0
 	queueCreateInfos: [dynamic]vk.DeviceQueueCreateInfo
@@ -817,13 +821,7 @@ createLogicalDevice :: proc(using graphicsContext: ^GraphicsContext) {
 		createInfo.ppEnabledLayerNames = raw_data(requestedLayers[:])
 	}
 
-	if vk.CreateDevice(
-		   physicalDevice,
-		   &createInfo,
-		   nil,
-		   &device,
-	   ) !=
-	   .SUCCESS {
+	if vk.CreateDevice(physicalDevice, &createInfo, nil, &device) != .SUCCESS {
 		log.log(.Error, "Failed to create logical device!")
 		panic("Failed to create logical device!")
 	}
@@ -831,24 +829,9 @@ createLogicalDevice :: proc(using graphicsContext: ^GraphicsContext) {
 	// load_proc_addresses_device :: proc(device: Device)
 	vk.load_proc_addresses(device)
 
-	vk.GetDeviceQueue(
-		device,
-		queueFamilies.graphicsFamily,
-		0,
-		&graphicsQueue,
-	)
-	vk.GetDeviceQueue(
-		device,
-		queueFamilies.presentFamily,
-		0,
-		&presentQueue,
-	)
-	vk.GetDeviceQueue(
-		device,
-		queueFamilies.computeFamily,
-		0,
-		&computeQueue,
-	)
+	vk.GetDeviceQueue(device, queueFamilies.graphicsFamily, 0, &graphicsQueue)
+	vk.GetDeviceQueue(device, queueFamilies.presentFamily, 0, &presentQueue)
+	vk.GetDeviceQueue(device, queueFamilies.computeFamily, 0, &computeQueue)
 }
 
 // ###################################################################
@@ -941,23 +924,12 @@ createSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 		oldSwapchain          = {},
 	}
 
-	if vk.CreateSwapchainKHR(
-		   device,
-		   &createInfo,
-		   nil,
-		   &swapchain,
-	   ) !=
-	   .SUCCESS {
+	if vk.CreateSwapchainKHR(device, &createInfo, nil, &swapchain) != .SUCCESS {
 		log.log(.Error, "Failed to create swapchain!")
 		panic("Failed to create swapchain!")
 	}
 
-	vk.GetSwapchainImagesKHR(
-		device,
-		swapchain,
-		&swapchainImageCount,
-		raw_data(swapchainImages),
-	)
+	vk.GetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, raw_data(swapchainImages))
 
 	for index in 0 ..< swapchainImageCount {
 		swapchainImageViews[index] = createImageView(
@@ -1000,18 +972,12 @@ createCommandBuffers :: proc(using graphicsContext: ^GraphicsContext) {
 		flags            = {.RESET_COMMAND_BUFFER},
 		queueFamilyIndex = queueFamilies.graphicsFamily,
 	}
-	if vk.CreateCommandPool(
-		   device,
-		   &poolInfo,
-		   nil,
-		   &graphicsCommandPool,
-	   ) !=
-	   .SUCCESS {
+	if vk.CreateCommandPool(device, &poolInfo, nil, &graphicsCommandPool) != .SUCCESS {
 		log.log(.Error, "Failed to create command pool!")
 		panic("Failed to create command pool!")
 	}
 
-	graphicsCommandBuffers = make([]vk.CommandBuffer, MAX_FRAMES_IN_FLIGHT)
+	shadowCommandBuffers = make([]vk.CommandBuffer, MAX_FRAMES_IN_FLIGHT)
 	allocInfo: vk.CommandBufferAllocateInfo = {
 		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
 		pNext              = nil,
@@ -1019,12 +985,20 @@ createCommandBuffers :: proc(using graphicsContext: ^GraphicsContext) {
 		level              = .PRIMARY,
 		commandBufferCount = MAX_FRAMES_IN_FLIGHT,
 	}
-	if vk.AllocateCommandBuffers(
-		   device,
-		   &allocInfo,
-		   raw_data(graphicsCommandBuffers),
-	   ) !=
-	   .SUCCESS {
+	if vk.AllocateCommandBuffers(device, &allocInfo, raw_data(shadowCommandBuffers)) != .SUCCESS {
+		log.log(.Error, "Failed to allocate shadow command buffer!")
+		panic("Failed to allocate shadow command buffer!")
+	}
+
+	mainCommandBuffers = make([]vk.CommandBuffer, MAX_FRAMES_IN_FLIGHT)
+	allocInfo = {
+		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+		pNext              = nil,
+		commandPool        = graphicsCommandPool,
+		level              = .PRIMARY,
+		commandBufferCount = MAX_FRAMES_IN_FLIGHT,
+	}
+	if vk.AllocateCommandBuffers(device, &allocInfo, raw_data(mainCommandBuffers)) != .SUCCESS {
 		log.log(.Error, "Failed to allocate command buffer!")
 		panic("Failed to allocate command buffer!")
 	}
@@ -1035,13 +1009,7 @@ createCommandBuffers :: proc(using graphicsContext: ^GraphicsContext) {
 		flags            = {.RESET_COMMAND_BUFFER},
 		queueFamilyIndex = queueFamilies.computeFamily,
 	}
-	if vk.CreateCommandPool(
-		   device,
-		   &poolInfo,
-		   nil,
-		   &computeCommandPool,
-	   ) !=
-	   .SUCCESS {
+	if vk.CreateCommandPool(device, &poolInfo, nil, &computeCommandPool) != .SUCCESS {
 		log.log(.Error, "Failed to create command pool!")
 		panic("Failed to create command pool!")
 	}
@@ -1054,12 +1022,7 @@ createCommandBuffers :: proc(using graphicsContext: ^GraphicsContext) {
 		level              = .PRIMARY,
 		commandBufferCount = MAX_FRAMES_IN_FLIGHT,
 	}
-	if vk.AllocateCommandBuffers(
-		   device,
-		   &allocInfo,
-		   raw_data(computeCommandBuffers),
-	   ) !=
-	   .SUCCESS {
+	if vk.AllocateCommandBuffers(device, &allocInfo, raw_data(computeCommandBuffers)) != .SUCCESS {
 		log.log(.Error, "Failed to allocate command buffer!")
 		panic("Failed to allocate command buffer!")
 	}
@@ -1205,14 +1168,7 @@ loadBufferToGPU :: proc(
 	)
 
 	data: rawptr
-	vk.MapMemory(
-		device,
-		stagingBufferMemory,
-		0,
-		(vk.DeviceSize)(bufferSize),
-		{},
-		&data,
-	)
+	vk.MapMemory(device, stagingBufferMemory, 0, (vk.DeviceSize)(bufferSize), {}, &data)
 	mem.copy(data, srcData, bufferSize)
 	vk.UnmapMemory(device, stagingBufferMemory)
 
@@ -1325,7 +1281,7 @@ createLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		createBuffer(
 			graphicsContext,
-			size_of(Mat4) * len(lightsBuffers),
+			size_of(Light) * len(pointLights),
 			{.STORAGE_BUFFER},
 			{.HOST_VISIBLE, .HOST_COHERENT},
 			&lightsBuffers[i].buffer,
@@ -1335,7 +1291,7 @@ createLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 			device,
 			lightsBuffers[i].memory,
 			0,
-			vk.DeviceSize(size_of(Mat4) * len(lightsBuffers)),
+			vk.DeviceSize(size_of(Light) * len(pointLights)),
 			{},
 			&lightsBuffers[i].mapped,
 		)
@@ -1882,7 +1838,11 @@ loadModels :: proc(using graphicsContext: ^GraphicsContext, modelPaths: []cstrin
 }
 
 @(private = "file")
-loadTextures :: proc(using graphicsContext: ^GraphicsContext, texture: ^Image, texturePaths: []cstring) {
+loadTextures :: proc(
+	using graphicsContext: ^GraphicsContext,
+	texture: ^Image,
+	texturePaths: []cstring,
+) {
 	textureWidth, textureHeight: i32
 	pixels := img.load(texturePaths[0], &textureWidth, &textureHeight, nil, 4)
 	if pixels == nil {
@@ -2031,7 +1991,7 @@ createSampler :: proc(
 		compareOp               = .ALWAYS,
 		minLod                  = 0,
 		maxLod                  = vk.LOD_CLAMP_NONE,
-		borderColor             = .INT_OPAQUE_BLACK,
+		borderColor             = .INT_OPAQUE_WHITE,
 		unnormalizedCoordinates = false,
 	}
 	if vk.CreateSampler(device, &samplerInfo, nil, &sampler) != .SUCCESS {
@@ -2072,6 +2032,14 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 	instances[0].rotationKeys = make([]u32, skeletonLength)
 	instances[0].scaleKeys = make([]u32, skeletonLength)
 
+	pointLights = make([]PointLight, 1)
+	pointLights[0] = {
+		position        = Vec3{-1, 1, -1},
+		direction       = normalize(Vec3{0, 0, 0} - Vec3{-1, 1, -1}),
+		colourIntensity = 3 * Vec3{1, 1, 1},
+		fov             = 45,
+	}
+
 	createInstanceBuffer(graphicsContext)
 	createBoneBuffer(graphicsContext)
 	createLightBuffer(graphicsContext)
@@ -2089,8 +2057,8 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 	{
 		poolSizes: []vk.DescriptorPoolSize = {
 			{type = .UNIFORM_BUFFER, descriptorCount = 1},
-			{type = .STORAGE_BUFFER, descriptorCount = 2},
-			{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = 2},
+			{type = .STORAGE_BUFFER, descriptorCount = 3},
+			{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = 3},
 		}
 
 		poolInfo: vk.DescriptorPoolCreateInfo = {
@@ -2103,12 +2071,12 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 
 		if vk.CreateDescriptorPool(
-			device,
-			&poolInfo,
-			nil,
-			&pipelines[PipelineIndex.MAIN].descriptorPool,
-		) !=
-		.SUCCESS {
+			   device,
+			   &poolInfo,
+			   nil,
+			   &pipelines[PipelineIndex.MAIN].descriptorPool,
+		   ) !=
+		   .SUCCESS {
 			log.log(.Error, "Failed to create descriptor pool!")
 			panic("Failed to create descriptor pool!")
 		}
@@ -2137,13 +2105,27 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 			},
 			{
 				binding = 3,
+				descriptorType = .STORAGE_BUFFER,
+				descriptorCount = 1,
+				stageFlags = {.VERTEX, .FRAGMENT},
+				pImmutableSamplers = nil,
+			},
+			{
+				binding = 4,
 				descriptorType = .COMBINED_IMAGE_SAMPLER,
 				descriptorCount = 1,
 				stageFlags = {.FRAGMENT},
 				pImmutableSamplers = nil,
 			},
 			{
-				binding = 4,
+				binding = 5,
+				descriptorType = .COMBINED_IMAGE_SAMPLER,
+				descriptorCount = 1,
+				stageFlags = {.FRAGMENT},
+				pImmutableSamplers = nil,
+			},
+			{
+				binding = 6,
 				descriptorType = .COMBINED_IMAGE_SAMPLER,
 				descriptorCount = 1,
 				stageFlags = {.FRAGMENT},
@@ -2160,12 +2142,12 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 
 		if vk.CreateDescriptorSetLayout(
-			device,
-			&layoutInfo,
-			nil,
-			&pipelines[PipelineIndex.MAIN].descriptorSetLayout,
-		) !=
-		.SUCCESS {
+			   device,
+			   &layoutInfo,
+			   nil,
+			   &pipelines[PipelineIndex.MAIN].descriptorSetLayout,
+		   ) !=
+		   .SUCCESS {
 			log.log(.Error, "Failed to create descriptor set layout!")
 			panic("Failed to create descriptor set layout!")
 		}
@@ -2186,11 +2168,11 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 
 		if vk.AllocateDescriptorSets(
-			device,
-			&allocInfo,
-			raw_data(pipelines[PipelineIndex.MAIN].descriptorSets[:]),
-		) !=
-		.SUCCESS {
+			   device,
+			   &allocInfo,
+			   raw_data(pipelines[PipelineIndex.MAIN].descriptorSets[:]),
+		   ) !=
+		   .SUCCESS {
 			log.log(.Error, "Failed to allocate descriptor sets!")
 			panic("Failed to allocate descriptor sets!")
 		}
@@ -2205,6 +2187,12 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 			sampler     = normals.sampler,
 			imageView   = normals.view,
 			imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+		}
+
+		shadowInfo: vk.DescriptorImageInfo = {
+			sampler     = pipelines[PipelineIndex.LIGHT].depth.sampler,
+			imageView   = pipelines[PipelineIndex.LIGHT].depth.view,
+			imageLayout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL,
 		}
 
 		for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
@@ -2224,6 +2212,12 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 				buffer = boneBuffers[index].buffer,
 				offset = 0,
 				range  = vk.DeviceSize(boneCount * size_of(Mat4)),
+			}
+
+			lightsBufferInfo: vk.DescriptorBufferInfo = {
+				buffer = lightsBuffers[index].buffer,
+				offset = 0,
+				range  = vk.DeviceSize(len(pointLights) * size_of(Light)),
 			}
 
 			descriptorWrite: []vk.WriteDescriptorSet = {
@@ -2270,9 +2264,9 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 					dstBinding = 3,
 					dstArrayElement = 0,
 					descriptorCount = 1,
-					descriptorType = .COMBINED_IMAGE_SAMPLER,
-					pImageInfo = &textureInfo,
-					pBufferInfo = nil,
+					descriptorType = .STORAGE_BUFFER,
+					pImageInfo = nil,
+					pBufferInfo = &lightsBufferInfo,
 					pTexelBufferView = nil,
 				},
 				{
@@ -2283,11 +2277,36 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 					dstArrayElement = 0,
 					descriptorCount = 1,
 					descriptorType = .COMBINED_IMAGE_SAMPLER,
+					pImageInfo = &textureInfo,
+					pBufferInfo = nil,
+					pTexelBufferView = nil,
+				},
+				{
+					sType = .WRITE_DESCRIPTOR_SET,
+					pNext = nil,
+					dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+					dstBinding = 5,
+					dstArrayElement = 0,
+					descriptorCount = 1,
+					descriptorType = .COMBINED_IMAGE_SAMPLER,
 					pImageInfo = &normalInfo,
 					pBufferInfo = nil,
 					pTexelBufferView = nil,
 				},
+				{
+					sType = .WRITE_DESCRIPTOR_SET,
+					pNext = nil,
+					dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+					dstBinding = 6,
+					dstArrayElement = 0,
+					descriptorCount = 1,
+					descriptorType = .COMBINED_IMAGE_SAMPLER,
+					pImageInfo = &shadowInfo,
+					pBufferInfo = nil,
+					pTexelBufferView = nil,
+				},
 			}
+
 			vk.UpdateDescriptorSets(
 				device,
 				u32(len(descriptorWrite)),
@@ -2311,12 +2330,12 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 
 		if vk.CreateDescriptorPool(
-			device,
-			&poolInfo,
-			nil,
-			&pipelines[PipelineIndex.POST].descriptorPool,
-		) !=
-		.SUCCESS {
+			   device,
+			   &poolInfo,
+			   nil,
+			   &pipelines[PipelineIndex.POST].descriptorPool,
+		   ) !=
+		   .SUCCESS {
 			log.log(.Error, "Failed to create descriptor pool!")
 			panic("Failed to create descriptor pool!")
 		}
@@ -2337,6 +2356,7 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 				pImmutableSamplers = nil,
 			},
 		}
+
 		layoutInfo: vk.DescriptorSetLayoutCreateInfo = {
 			sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 			pNext        = nil,
@@ -2344,13 +2364,14 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 			bindingCount = u32(len(layoutBindings)),
 			pBindings    = raw_data(layoutBindings),
 		}
+
 		if vk.CreateDescriptorSetLayout(
-			device,
-			&layoutInfo,
-			nil,
-			&pipelines[PipelineIndex.POST].descriptorSetLayout,
-		) !=
-		.SUCCESS {
+			   device,
+			   &layoutInfo,
+			   nil,
+			   &pipelines[PipelineIndex.POST].descriptorSetLayout,
+		   ) !=
+		   .SUCCESS {
 			log.log(.Error, "Failed to create compute descriptor set layout!")
 			panic("Failed to create compute descriptor set layout!")
 		}
@@ -2370,11 +2391,11 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 
 		if vk.AllocateDescriptorSets(
-			device,
-			&allocInfo,
-			raw_data(pipelines[PipelineIndex.POST].descriptorSets[:]),
-		) !=
-		.SUCCESS {
+			   device,
+			   &allocInfo,
+			   raw_data(pipelines[PipelineIndex.POST].descriptorSets[:]),
+		   ) !=
+		   .SUCCESS {
 			log.log(.Error, "Failed to allocate compute descriptor sets!")
 			panic("Failed to allocate compute descriptor sets!")
 		}
@@ -2384,6 +2405,7 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 			imageView   = inImage.view,
 			imageLayout = .GENERAL,
 		}
+
 		outImageInfo: vk.DescriptorImageInfo = {
 			sampler     = outImage.sampler,
 			imageView   = outImage.view,
@@ -2414,6 +2436,166 @@ createDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 					descriptorType = .STORAGE_IMAGE,
 					pImageInfo = &outImageInfo,
 					pBufferInfo = nil,
+					pTexelBufferView = nil,
+				},
+			}
+
+			vk.UpdateDescriptorSets(
+				device,
+				u32(len(descriptorWrite)),
+				raw_data(descriptorWrite),
+				0,
+				nil,
+			)
+		}
+	}
+
+	// LIGHT
+	{
+		poolSizes: []vk.DescriptorPoolSize = {{type = .STORAGE_BUFFER, descriptorCount = 3}}
+
+		poolInfo: vk.DescriptorPoolCreateInfo = {
+			sType         = .DESCRIPTOR_POOL_CREATE_INFO,
+			pNext         = nil,
+			flags         = {},
+			maxSets       = MAX_FRAMES_IN_FLIGHT,
+			poolSizeCount = u32(len(poolSizes)),
+			pPoolSizes    = raw_data(poolSizes),
+		}
+
+		if vk.CreateDescriptorPool(
+			   device,
+			   &poolInfo,
+			   nil,
+			   &pipelines[PipelineIndex.LIGHT].descriptorPool,
+		   ) !=
+		   .SUCCESS {
+			log.log(.Error, "Failed to create descriptor pool!")
+			panic("Failed to create descriptor pool!")
+		}
+
+		layoutBindings: []vk.DescriptorSetLayoutBinding = {
+			{
+				binding = 0,
+				descriptorType = .STORAGE_BUFFER,
+				descriptorCount = 1,
+				stageFlags = {.VERTEX},
+				pImmutableSamplers = nil,
+			},
+			{
+				binding = 1,
+				descriptorType = .STORAGE_BUFFER,
+				descriptorCount = 1,
+				stageFlags = {.VERTEX},
+				pImmutableSamplers = nil,
+			},
+			{
+				binding = 2,
+				descriptorType = .STORAGE_BUFFER,
+				descriptorCount = 1,
+				stageFlags = {.VERTEX},
+				pImmutableSamplers = nil,
+			},
+		}
+
+		layoutInfo: vk.DescriptorSetLayoutCreateInfo = {
+			sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			pNext        = nil,
+			flags        = {},
+			bindingCount = u32(len(layoutBindings)),
+			pBindings    = raw_data(layoutBindings),
+		}
+
+		if vk.CreateDescriptorSetLayout(
+			   device,
+			   &layoutInfo,
+			   nil,
+			   &pipelines[PipelineIndex.LIGHT].descriptorSetLayout,
+		   ) !=
+		   .SUCCESS {
+			log.log(.Error, "Failed to create descriptor set layout!")
+			panic("Failed to create descriptor set layout!")
+		}
+
+		layouts := make([]vk.DescriptorSetLayout, MAX_FRAMES_IN_FLIGHT)
+		defer delete(layouts)
+
+		for &layout in layouts {
+			layout = pipelines[PipelineIndex.LIGHT].descriptorSetLayout
+		}
+
+		allocInfo: vk.DescriptorSetAllocateInfo = {
+			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
+			pNext              = nil,
+			descriptorPool     = pipelines[PipelineIndex.LIGHT].descriptorPool,
+			descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
+			pSetLayouts        = raw_data(layouts),
+		}
+
+		if vk.AllocateDescriptorSets(
+			   device,
+			   &allocInfo,
+			   raw_data(pipelines[PipelineIndex.LIGHT].descriptorSets[:]),
+		   ) !=
+		   .SUCCESS {
+			log.log(.Error, "Failed to allocate descriptor sets!")
+			panic("Failed to allocate descriptor sets!")
+		}
+
+		for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+			instanceBufferInfo: vk.DescriptorBufferInfo = {
+				buffer = instanceBuffers[index].buffer,
+				offset = 0,
+				range  = vk.DeviceSize(len(instances) * size_of(InstanceInfo)),
+			}
+
+			boneBufferInfo: vk.DescriptorBufferInfo = {
+				buffer = boneBuffers[index].buffer,
+				offset = 0,
+				range  = vk.DeviceSize(boneCount * size_of(Mat4)),
+			}
+
+			lightBufferInfo: vk.DescriptorBufferInfo = {
+				buffer = lightsBuffers[index].buffer,
+				offset = 0,
+				range  = vk.DeviceSize(size_of(Light) * len(pointLights)),
+			}
+
+			descriptorWrite: []vk.WriteDescriptorSet = {
+				{
+					sType = .WRITE_DESCRIPTOR_SET,
+					pNext = nil,
+					dstSet = pipelines[PipelineIndex.LIGHT].descriptorSets[index],
+					dstBinding = 0,
+					dstArrayElement = 0,
+					descriptorCount = 1,
+					descriptorType = .STORAGE_BUFFER,
+					pImageInfo = nil,
+					pBufferInfo = &instanceBufferInfo,
+					pTexelBufferView = nil,
+				},
+				{
+					sType = .WRITE_DESCRIPTOR_SET,
+					pNext = nil,
+					dstSet = pipelines[PipelineIndex.LIGHT].descriptorSets[index],
+					dstBinding = 1,
+					dstArrayElement = 0,
+					descriptorCount = 1,
+					descriptorType = .STORAGE_BUFFER,
+					pImageInfo = nil,
+					pBufferInfo = &boneBufferInfo,
+					pTexelBufferView = nil,
+				},
+				{
+					sType = .WRITE_DESCRIPTOR_SET,
+					pNext = nil,
+					dstSet = pipelines[PipelineIndex.LIGHT].descriptorSets[index],
+					dstBinding = 2,
+					dstArrayElement = 0,
+					descriptorCount = 1,
+					descriptorType = .STORAGE_BUFFER,
+					pImageInfo = nil,
+					pBufferInfo = &lightBufferInfo,
 					pTexelBufferView = nil,
 				},
 			}
@@ -2506,30 +2688,10 @@ createSyncObjects :: proc(using graphicsContext: ^GraphicsContext) {
 
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		result :=
-			vk.CreateSemaphore(
-				device,
-				&semaphoreInfo,
-				nil,
-				&imagesAvailable[index],
-			) |
-			vk.CreateSemaphore(
-				device,
-				&semaphoreInfo,
-				nil,
-				&rendersFinished[index],
-			) |
-			vk.CreateSemaphore(
-				device,
-				&semaphoreInfo,
-				nil,
-				&computeFinished[index],
-			) |
-			vk.CreateFence(
-				device,
-				&fenceInfo,
-				nil,
-				&inFlightFrames[index],
-			)
+			vk.CreateSemaphore(device, &semaphoreInfo, nil, &imagesAvailable[index]) |
+			vk.CreateSemaphore(device, &semaphoreInfo, nil, &rendersFinished[index]) |
+			vk.CreateSemaphore(device, &semaphoreInfo, nil, &computeFinished[index]) |
+			vk.CreateFence(device, &fenceInfo, nil, &inFlightFrames[index])
 		if result != .SUCCESS {
 			log.log(.Error, "Failed to create sync objects!")
 			panic("Failed to create sync objects!")
@@ -2563,162 +2725,330 @@ findSupportedDepthFormat :: proc(
 
 @(private = "file")
 createRenderPass :: proc(using graphicsContext: ^GraphicsContext) {
-	pipelines[PipelineIndex.MAIN].colour.format = swapchainFormat.format
-	createImage(
-		graphicsContext,
-		&pipelines[PipelineIndex.MAIN].colour,
-		{},
-		.D2,
-		u32(RENDER_SIZE.x),
-		u32(RENDER_SIZE.y),
-		1,
-		{._1},
-		.OPTIMAL,
-		{.COLOR_ATTACHMENT, .TRANSFER_SRC},
-		{.DEVICE_LOCAL},
-		.EXCLUSIVE,
-		0,
-		nil,
-	)
-	pipelines[PipelineIndex.MAIN].colour.view = createImageView(
-		graphicsContext,
-		pipelines[PipelineIndex.MAIN].colour.image,
-		.D2,
-		pipelines[PipelineIndex.MAIN].colour.format,
-		{.COLOR},
-		1,
-	)
+	// MAIN
+	{
+		pipelines[PipelineIndex.MAIN].colour.format = swapchainFormat.format
 
-	pipelines[PipelineIndex.MAIN].depth.format = findSupportedDepthFormat(
-		graphicsContext,
-		{.D32_SFLOAT, .D32_SFLOAT_S8_UINT, .D24_UNORM_S8_UINT},
-		.OPTIMAL,
-		{.DEPTH_STENCIL_ATTACHMENT},
-	)
-	createImage(
-		graphicsContext,
-		&pipelines[PipelineIndex.MAIN].depth,
-		{},
-		.D2,
-		u32(RENDER_SIZE.x),
-		u32(RENDER_SIZE.y),
-		1,
-		{._1},
-		.OPTIMAL,
-		{.DEPTH_STENCIL_ATTACHMENT},
-		{.DEVICE_LOCAL},
-		.EXCLUSIVE,
-		0,
-		nil,
-	)
-	pipelines[PipelineIndex.MAIN].depth.view = createImageView(
-		graphicsContext,
-		pipelines[PipelineIndex.MAIN].depth.image,
-		.D2,
-		pipelines[PipelineIndex.MAIN].depth.format,
-		{.DEPTH},
-		1,
-	)
+		createImage(
+			graphicsContext,
+			&pipelines[PipelineIndex.MAIN].colour,
+			{},
+			.D2,
+			u32(RENDER_SIZE.x),
+			u32(RENDER_SIZE.y),
+			1,
+			{._1},
+			.OPTIMAL,
+			{.COLOR_ATTACHMENT, .TRANSFER_SRC},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
 
-	attachments: []vk.AttachmentDescription = {
-		{
+		pipelines[PipelineIndex.MAIN].colour.view = createImageView(
+			graphicsContext,
+			pipelines[PipelineIndex.MAIN].colour.image,
+			.D2,
+			pipelines[PipelineIndex.MAIN].colour.format,
+			{.COLOR},
+			1,
+		)
+
+		pipelines[PipelineIndex.MAIN].depth.format = findSupportedDepthFormat(
+			graphicsContext,
+			{.D32_SFLOAT, .D32_SFLOAT_S8_UINT, .D24_UNORM_S8_UINT},
+			.OPTIMAL,
+			{.DEPTH_STENCIL_ATTACHMENT},
+		)
+
+		createImage(
+			graphicsContext,
+			&pipelines[PipelineIndex.MAIN].depth,
+			{},
+			.D2,
+			u32(RENDER_SIZE.x),
+			u32(RENDER_SIZE.y),
+			1,
+			{._1},
+			.OPTIMAL,
+			{.DEPTH_STENCIL_ATTACHMENT},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
+
+		pipelines[PipelineIndex.MAIN].depth.view = createImageView(
+			graphicsContext,
+			pipelines[PipelineIndex.MAIN].depth.image,
+			.D2,
+			pipelines[PipelineIndex.MAIN].depth.format,
+			{.DEPTH},
+			1,
+		)
+
+		attachments: []vk.AttachmentDescription = {
+			{
+				flags = {},
+				format = pipelines[PipelineIndex.MAIN].colour.format,
+				samples = {._1},
+				loadOp = .CLEAR,
+				storeOp = .STORE,
+				stencilLoadOp = .DONT_CARE,
+				stencilStoreOp = .DONT_CARE,
+				initialLayout = .UNDEFINED,
+				finalLayout = .COLOR_ATTACHMENT_OPTIMAL,
+			},
+			{
+				flags = {},
+				format = pipelines[PipelineIndex.MAIN].depth.format,
+				samples = {._1},
+				loadOp = .CLEAR,
+				storeOp = .DONT_CARE,
+				stencilLoadOp = .DONT_CARE,
+				stencilStoreOp = .DONT_CARE,
+				initialLayout = .UNDEFINED,
+				finalLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			},
+		}
+
+		colourAttachmentRef: vk.AttachmentReference = {
+			attachment = 0,
+			layout     = .COLOR_ATTACHMENT_OPTIMAL,
+		}
+
+		depthAttachmentRef: vk.AttachmentReference = {
+			attachment = 1,
+			layout     = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		}
+
+		subpass: vk.SubpassDescription = {
+			flags                   = {},
+			pipelineBindPoint       = .GRAPHICS,
+			inputAttachmentCount    = 0,
+			pInputAttachments       = nil,
+			colorAttachmentCount    = 1,
+			pColorAttachments       = &colourAttachmentRef,
+			pResolveAttachments     = nil,
+			pDepthStencilAttachment = &depthAttachmentRef,
+			preserveAttachmentCount = 0,
+			pPreserveAttachments    = nil,
+		}
+
+		renderPassInfo: vk.RenderPassCreateInfo = {
+			sType           = .RENDER_PASS_CREATE_INFO,
+			pNext           = nil,
+			flags           = {},
+			attachmentCount = u32(len(attachments)),
+			pAttachments    = raw_data(attachments),
+			subpassCount    = 1,
+			pSubpasses      = &subpass,
+			dependencyCount = 0,
+			pDependencies   = nil,
+		}
+
+		if vk.CreateRenderPass(
+			   device,
+			   &renderPassInfo,
+			   nil,
+			   &pipelines[PipelineIndex.MAIN].renderPass,
+		   ) !=
+		   .SUCCESS {
+			log.log(.Error, "Unable to create render pass!")
+			panic("Unable to create render pass!")
+		}
+	}
+
+	// LIGHT
+	{
+		pipelines[PipelineIndex.LIGHT].depth.format = findSupportedDepthFormat(
+			graphicsContext,
+			{.D16_UNORM, .D32_SFLOAT, .D32_SFLOAT_S8_UINT, .D24_UNORM_S8_UINT},
+			.OPTIMAL,
+			{.DEPTH_STENCIL_ATTACHMENT},
+		)
+
+		createImage(
+			graphicsContext,
+			&pipelines[PipelineIndex.LIGHT].depth,
+			{},
+			.D2,
+			u32(SHADOW_RESOLUTION.x),
+			u32(SHADOW_RESOLUTION.y),
+			1,
+			{._1},
+			.OPTIMAL,
+			{.DEPTH_STENCIL_ATTACHMENT, .SAMPLED},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
+
+		pipelines[PipelineIndex.LIGHT].depth.view = createImageView(
+			graphicsContext,
+			pipelines[PipelineIndex.LIGHT].depth.image,
+			.D2,
+			pipelines[PipelineIndex.LIGHT].depth.format,
+			{.DEPTH},
+			1,
+		)
+
+		pipelines[PipelineIndex.LIGHT].depth.sampler = createSampler(
+			graphicsContext,
+			.LINEAR,
+			.LINEAR,
+			.CLAMP_TO_EDGE,
+			false,
+			1,
+		)
+
+		attachment: vk.AttachmentDescription = {
 			flags = {},
-			format = pipelines[PipelineIndex.MAIN].colour.format,
+			format = pipelines[PipelineIndex.LIGHT].depth.format,
 			samples = {._1},
 			loadOp = .CLEAR,
 			storeOp = .STORE,
 			stencilLoadOp = .DONT_CARE,
 			stencilStoreOp = .DONT_CARE,
 			initialLayout = .UNDEFINED,
-			finalLayout = .COLOR_ATTACHMENT_OPTIMAL,
-		},
-		{
-			flags = {},
-			format = pipelines[PipelineIndex.MAIN].depth.format,
-			samples = {._1},
-			loadOp = .CLEAR,
-			storeOp = .DONT_CARE,
-			stencilLoadOp = .DONT_CARE,
-			stencilStoreOp = .DONT_CARE,
-			initialLayout = .UNDEFINED,
-			finalLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-		},
-	}
+			finalLayout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+		}
 
-	colourAttachmentRef: vk.AttachmentReference = {
-		attachment = 0,
-		layout     = .COLOR_ATTACHMENT_OPTIMAL,
-	}
+		depthAttachmentRef: vk.AttachmentReference = {
+			attachment = 0,
+			layout     = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		}
 
-	depthAttachmentRef: vk.AttachmentReference = {
-		attachment = 1,
-		layout     = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-	}
+		subpass: vk.SubpassDescription = {
+			flags                   = {},
+			pipelineBindPoint       = .GRAPHICS,
+			inputAttachmentCount    = 0,
+			pInputAttachments       = nil,
+			colorAttachmentCount    = 0,
+			pColorAttachments       = nil,
+			pResolveAttachments     = nil,
+			pDepthStencilAttachment = &depthAttachmentRef,
+			preserveAttachmentCount = 0,
+			pPreserveAttachments    = nil,
+		}
 
-	subpass: vk.SubpassDescription = {
-		flags                   = {},
-		pipelineBindPoint       = .GRAPHICS,
-		inputAttachmentCount    = 0,
-		pInputAttachments       = nil,
-		colorAttachmentCount    = 1,
-		pColorAttachments       = &colourAttachmentRef,
-		pResolveAttachments     = nil,
-		pDepthStencilAttachment = &depthAttachmentRef,
-		preserveAttachmentCount = 0,
-		pPreserveAttachments    = nil,
-	}
+		dependencies: []vk.SubpassDependency = {
+			{
+				srcSubpass = vk.SUBPASS_EXTERNAL,
+				dstSubpass = 0,
+				srcStageMask = {.FRAGMENT_SHADER},
+				dstStageMask = {.EARLY_FRAGMENT_TESTS},
+				srcAccessMask = {.SHADER_READ},
+				dstAccessMask = {.DEPTH_STENCIL_ATTACHMENT_WRITE},
+				dependencyFlags = {.BY_REGION},
+			},
+			{
+				srcSubpass = 0,
+				dstSubpass = vk.SUBPASS_EXTERNAL,
+				srcStageMask = {.LATE_FRAGMENT_TESTS},
+				dstStageMask = {.FRAGMENT_SHADER},
+				srcAccessMask = {.DEPTH_STENCIL_ATTACHMENT_WRITE},
+				dstAccessMask = {.SHADER_READ},
+				dependencyFlags = {.BY_REGION},
+			},
+		}
 
-	renderPassInfo: vk.RenderPassCreateInfo = {
-		sType           = .RENDER_PASS_CREATE_INFO,
-		pNext           = nil,
-		flags           = {},
-		attachmentCount = u32(len(attachments)),
-		pAttachments    = raw_data(attachments),
-		subpassCount    = 1,
-		pSubpasses      = &subpass,
-		dependencyCount = 0,
-		pDependencies   = nil,
-	}
+		renderPassInfo: vk.RenderPassCreateInfo = {
+			sType           = .RENDER_PASS_CREATE_INFO,
+			pNext           = nil,
+			flags           = {},
+			attachmentCount = 1,
+			pAttachments    = &attachment,
+			subpassCount    = 1,
+			pSubpasses      = &subpass,
+			dependencyCount = u32(len(dependencies)),
+			pDependencies   = raw_data(dependencies),
+		}
 
-	if vk.CreateRenderPass(
-		   device,
-		   &renderPassInfo,
-		   nil,
-		   &pipelines[PipelineIndex.MAIN].vulkanRenderPass,
-	   ) !=
-	   .SUCCESS {
-		log.log(.Error, "Unable to create render pass!")
-		panic("Unable to create render pass!")
+		if vk.CreateRenderPass(
+			   device,
+			   &renderPassInfo,
+			   nil,
+			   &pipelines[PipelineIndex.LIGHT].renderPass,
+		   ) !=
+		   .SUCCESS {
+			log.log(.Error, "Unable to create render pass!")
+			panic("Unable to create render pass!")
+		}
 	}
 }
 
 @(private = "file")
 createFramebuffers :: proc(using graphicsContext: ^GraphicsContext) {
-	frameBufferInfo: vk.FramebufferCreateInfo = {
-		sType           = .FRAMEBUFFER_CREATE_INFO,
-		pNext           = nil,
-		flags           = {},
-		renderPass      = pipelines[PipelineIndex.MAIN].vulkanRenderPass,
-		attachmentCount = 2,
-		pAttachments    = raw_data(
-			[]vk.ImageView{pipelines[PipelineIndex.MAIN].colour.view, pipelines[PipelineIndex.MAIN].depth.view},
-		),
-		width           = u32(RENDER_SIZE.x),
-		height          = u32(RENDER_SIZE.y),
-		layers          = 1,
+	// MAIN
+	{
+		frameBufferInfo: vk.FramebufferCreateInfo = {
+			sType           = .FRAMEBUFFER_CREATE_INFO,
+			pNext           = nil,
+			flags           = {},
+			renderPass      = pipelines[PipelineIndex.MAIN].renderPass,
+			attachmentCount = 2,
+			pAttachments    = raw_data(
+				[]vk.ImageView {
+					pipelines[PipelineIndex.MAIN].colour.view,
+					pipelines[PipelineIndex.MAIN].depth.view,
+				},
+			),
+			width           = u32(RENDER_SIZE.x),
+			height          = u32(RENDER_SIZE.y),
+			layers          = 1,
+		}
+
+		pipelines[PipelineIndex.MAIN].frameBuffers = make(
+			[]vk.Framebuffer,
+			len(swapchainImageViews),
+		)
+		for index in 0 ..< len(swapchainImageViews) {
+			if vk.CreateFramebuffer(
+				   device,
+				   &frameBufferInfo,
+				   nil,
+				   &pipelines[PipelineIndex.MAIN].frameBuffers[index],
+			   ) !=
+			   .SUCCESS {
+				log.log(.Error, "Failed to create frame buffer!")
+				panic("Failed to create frame buffer!")
+			}
+		}
 	}
 
-	pipelines[PipelineIndex.MAIN].frameBuffers = make([]vk.Framebuffer, len(swapchainImageViews))
-	for index in 0 ..< len(swapchainImageViews) {
-		if vk.CreateFramebuffer(
-			   device,
-			   &frameBufferInfo,
-			   nil,
-			   &pipelines[PipelineIndex.MAIN].frameBuffers[index],
-		   ) !=
-		   .SUCCESS {
-			log.log(.Error, "Failed to create frame buffer!")
-			panic("Failed to create frame buffer!")
+	// LIGHTS
+	{
+		frameBufferInfo: vk.FramebufferCreateInfo = {
+			sType           = .FRAMEBUFFER_CREATE_INFO,
+			pNext           = nil,
+			flags           = {},
+			renderPass      = pipelines[PipelineIndex.LIGHT].renderPass,
+			attachmentCount = 1,
+			pAttachments    = &pipelines[PipelineIndex.LIGHT].depth.view,
+			width           = u32(SHADOW_RESOLUTION.x),
+			height          = u32(SHADOW_RESOLUTION.y),
+			layers          = 1,
+		}
+
+		pipelines[PipelineIndex.LIGHT].frameBuffers = make(
+			[]vk.Framebuffer,
+			len(swapchainImageViews),
+		)
+
+		for index in 0 ..< len(swapchainImageViews) {
+			if vk.CreateFramebuffer(
+				   device,
+				   &frameBufferInfo,
+				   nil,
+				   &pipelines[PipelineIndex.LIGHT].frameBuffers[index],
+			   ) !=
+			   .SUCCESS {
+				log.log(.Error, "Failed to create frame buffer!")
+				panic("Failed to create frame buffer!")
+			}
 		}
 	}
 }
@@ -2802,14 +3132,28 @@ createMainPipeline :: proc(using graphicsContext: ^GraphicsContext) {
 		primitiveRestartEnable = false,
 	}
 
+	viewport: vk.Viewport = {
+		x        = 0,
+		y        = 0,
+		width    = RENDER_SIZE.x,
+		height   = RENDER_SIZE.y,
+		minDepth = 0,
+		maxDepth = 1,
+	}
+
+	scissor: vk.Rect2D = {
+		offset = {0, 0},
+		extent = {u32(RENDER_SIZE.x), u32(RENDER_SIZE.y)},
+	}
+
 	viewportState: vk.PipelineViewportStateCreateInfo = {
 		sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 		pNext         = nil,
 		flags         = {},
 		viewportCount = 1,
-		pViewports    = nil,
+		pViewports    = &viewport,
 		scissorCount  = 1,
-		pScissors     = nil,
+		pScissors     = &scissor,
 	}
 
 	rasterizer: vk.PipelineRasterizationStateCreateInfo = {
@@ -2877,16 +3221,6 @@ createMainPipeline :: proc(using graphicsContext: ^GraphicsContext) {
 		blendConstants  = {0, 0, 0, 0},
 	}
 
-	dynamicStates: []vk.DynamicState = {.VIEWPORT, .SCISSOR}
-
-	dynamicStateInfo: vk.PipelineDynamicStateCreateInfo = {
-		sType             = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-		pNext             = nil,
-		flags             = {},
-		dynamicStateCount = u32(len(dynamicStates)),
-		pDynamicStates    = raw_data(dynamicStates),
-	}
-
 	shaderStages := [?]vk.ShaderStageFlag{.VERTEX, .FRAGMENT}
 
 	shaderFiles := [?]string{"./assets/shaders/main_vert.spv", "./assets/shaders/main_frag.spv"}
@@ -2924,9 +3258,9 @@ createMainPipeline :: proc(using graphicsContext: ^GraphicsContext) {
 		pMultisampleState   = &multisampling,
 		pDepthStencilState  = &depthStencil,
 		pColorBlendState    = &colourBlending,
-		pDynamicState       = &dynamicStateInfo,
+		pDynamicState       = nil,
 		layout              = pipelines[PipelineIndex.MAIN].layout,
-		renderPass          = pipelines[PipelineIndex.MAIN].vulkanRenderPass,
+		renderPass          = pipelines[PipelineIndex.MAIN].renderPass,
 		subpass             = 0,
 		basePipelineHandle  = {},
 		basePipelineIndex   = 0,
@@ -3008,12 +3342,200 @@ createPostPipeline :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.DestroyShaderModule(device, shaderStageInfo.module, nil)
 }
 
+@(private = "file")
+createLightPipeline :: proc(using graphicsContext: ^GraphicsContext) {
+	PipelineLayoutInfo: vk.PipelineLayoutCreateInfo = {
+		sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
+		pNext                  = nil,
+		flags                  = {},
+		setLayoutCount         = 1,
+		pSetLayouts            = &pipelines[PipelineIndex.LIGHT].descriptorSetLayout,
+		pushConstantRangeCount = 0,
+		pPushConstantRanges    = nil,
+	}
+
+	if vk.CreatePipelineLayout(
+		   device,
+		   &PipelineLayoutInfo,
+		   nil,
+		   &pipelines[PipelineIndex.LIGHT].layout,
+	   ) !=
+	   .SUCCESS {
+		log.log(.Error, "Failed to create pipeline layout!")
+		panic("Failed to create pipeline layout!")
+	}
+
+	vertexInputInfo: vk.PipelineVertexInputStateCreateInfo = {
+		sType                           = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		pNext                           = nil,
+		flags                           = {},
+		vertexBindingDescriptionCount   = 1,
+		pVertexBindingDescriptions      = &vertexBindingDescription,
+		vertexAttributeDescriptionCount = u32(len(vertexInputAttributeDescriptions)),
+		pVertexAttributeDescriptions    = raw_data(vertexInputAttributeDescriptions),
+	}
+
+	inputAssembly: vk.PipelineInputAssemblyStateCreateInfo = {
+		sType                  = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		pNext                  = nil,
+		flags                  = {},
+		topology               = .TRIANGLE_LIST,
+		primitiveRestartEnable = false,
+	}
+
+	viewport: vk.Viewport = {
+		x        = 0,
+		y        = 0,
+		width    = SHADOW_RESOLUTION.x,
+		height   = SHADOW_RESOLUTION.y,
+		minDepth = 0,
+		maxDepth = 1,
+	}
+
+	scissor: vk.Rect2D = {
+		offset = {0, 0},
+		extent = {u32(SHADOW_RESOLUTION.x), u32(SHADOW_RESOLUTION.y)},
+	}
+
+	viewportState: vk.PipelineViewportStateCreateInfo = {
+		sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+		pNext         = nil,
+		flags         = {},
+		viewportCount = 1,
+		pViewports    = &viewport,
+		scissorCount  = 1,
+		pScissors     = &scissor,
+	}
+
+	rasterizer: vk.PipelineRasterizationStateCreateInfo = {
+		sType                   = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		pNext                   = nil,
+		flags                   = {},
+		depthClampEnable        = false,
+		rasterizerDiscardEnable = false,
+		polygonMode             = .FILL,
+		cullMode                = {},
+		frontFace               = .CLOCKWISE,
+		depthBiasEnable         = true,
+		depthBiasConstantFactor = DEPTH_BIAS_CONSTANT,
+		depthBiasClamp          = 0.0,
+		depthBiasSlopeFactor    = DEPTH_BIAS_SLOPE,
+		lineWidth               = 1.0,
+	}
+
+	multisampling: vk.PipelineMultisampleStateCreateInfo = {
+		sType                 = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+		pNext                 = nil,
+		flags                 = {},
+		rasterizationSamples  = {._1},
+		sampleShadingEnable   = false,
+		minSampleShading      = 0.0,
+		pSampleMask           = nil,
+		alphaToCoverageEnable = false,
+		alphaToOneEnable      = false,
+	}
+
+	depthStencil: vk.PipelineDepthStencilStateCreateInfo = {
+		sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+		pNext = nil,
+		flags = {},
+		depthTestEnable = true,
+		depthWriteEnable = true,
+		depthCompareOp = .LESS_OR_EQUAL,
+		depthBoundsTestEnable = false,
+		stencilTestEnable = false,
+		front = {},
+		back = {
+			failOp = .KEEP,
+			passOp = .KEEP,
+			depthFailOp = .KEEP,
+			compareOp = .ALWAYS,
+			compareMask = 0,
+			writeMask = 0,
+			reference = 0,
+		},
+		minDepthBounds = 0,
+		maxDepthBounds = 1,
+	}
+
+	colourBlending: vk.PipelineColorBlendStateCreateInfo = {
+		sType           = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		pNext           = nil,
+		flags           = {},
+		logicOpEnable   = false,
+		logicOp         = .COPY,
+		attachmentCount = 0,
+		pAttachments    = nil,
+		blendConstants  = {0, 0, 0, 0},
+	}
+
+	shaderStages := [?]vk.ShaderStageFlag{.VERTEX, .FRAGMENT}
+
+	shaderFiles := [?]string {
+		"./assets/shaders/light_vert.spv", "./assets/shaders/light_frag.spv",
+	}
+
+	shaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, len(shaderFiles))
+	defer {
+		for stage in shaderStagesInfo {
+			vk.DestroyShaderModule(device, stage.module, nil)
+		}
+		delete(shaderStagesInfo)
+	}
+	for path, index in shaderFiles {
+		shaderStagesInfo[index] = {
+			sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+			pNext               = nil,
+			flags               = {},
+			stage               = {shaderStages[index]},
+			module              = createShaderModule(graphicsContext, path),
+			pName               = "main",
+			pSpecializationInfo = nil,
+		}
+	}
+
+	pipelineInfo: vk.GraphicsPipelineCreateInfo = {
+		sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
+		pNext               = nil,
+		flags               = {},
+		stageCount          = u32(len(shaderStagesInfo)),
+		pStages             = raw_data(shaderStagesInfo),
+		pVertexInputState   = &vertexInputInfo,
+		pInputAssemblyState = &inputAssembly,
+		pTessellationState  = nil,
+		pViewportState      = &viewportState,
+		pRasterizationState = &rasterizer,
+		pMultisampleState   = &multisampling,
+		pDepthStencilState  = &depthStencil,
+		pColorBlendState    = &colourBlending,
+		pDynamicState       = nil,
+		layout              = pipelines[PipelineIndex.LIGHT].layout,
+		renderPass          = pipelines[PipelineIndex.LIGHT].renderPass,
+		subpass             = 0,
+		basePipelineHandle  = {},
+		basePipelineIndex   = 0,
+	}
+
+	if vk.CreateGraphicsPipelines(
+		   device,
+		   0,
+		   1,
+		   &pipelineInfo,
+		   nil,
+		   &pipelines[PipelineIndex.LIGHT].pipeline,
+	   ) !=
+	   .SUCCESS {
+		log.log(.Error, "Failed to create pipeline!")
+		panic("Failed to create pipeline!")
+	}
+}
+
 // ###################################################################
 // #                           Render Loop                           #
 // ###################################################################
 
 @(private = "file")
-recordGraphicsBuffer :: proc(
+recordMainBuffer :: proc(
 	using graphicsContext: ^GraphicsContext,
 	commandBuffer: vk.CommandBuffer,
 	imageIndex: u32,
@@ -3029,70 +3551,109 @@ recordGraphicsBuffer :: proc(
 		panic("Failed to being recording command buffer!")
 	}
 
-	renderPassInfo: vk.RenderPassBeginInfo = {
-		sType = .RENDER_PASS_BEGIN_INFO,
-		pNext = nil,
-		renderPass = pipelines[PipelineIndex.MAIN].vulkanRenderPass,
-		framebuffer = pipelines[PipelineIndex.MAIN].frameBuffers[imageIndex],
-		renderArea = vk.Rect2D{offset = {0, 0}, extent = {u32(RENDER_SIZE.x), u32(RENDER_SIZE.y)}},
-		clearValueCount = 2,
-		pClearValues = raw_data(
-			[]vk.ClearValue {
-				{color = vk.ClearColorValue{float32 = CLEAR_COLOUR}},
-				{depthStencil = vk.ClearDepthStencilValue{depth = 1, stencil = 0}},
+	// SHADOW
+	{
+		renderPassInfo: vk.RenderPassBeginInfo = {
+			sType = .RENDER_PASS_BEGIN_INFO,
+			pNext = nil,
+			renderPass = pipelines[PipelineIndex.LIGHT].renderPass,
+			framebuffer = pipelines[PipelineIndex.LIGHT].frameBuffers[imageIndex],
+			renderArea = vk.Rect2D {
+				offset = {0, 0},
+				extent = {u32(SHADOW_RESOLUTION.x), u32(SHADOW_RESOLUTION.y)},
 			},
-		),
-	}
-	vk.CmdBeginRenderPass(commandBuffer, &renderPassInfo, .INLINE)
-
-	viewport: vk.Viewport = {
-		x        = 0,
-		y        = 0,
-		width    = RENDER_SIZE.x,
-		height   = RENDER_SIZE.y,
-		minDepth = 0,
-		maxDepth = 1,
-	}
-	vk.CmdSetViewport(commandBuffer, 0, 1, &viewport)
-
-	scissor: vk.Rect2D = {
-		offset = {0, 0},
-		extent = {u32(RENDER_SIZE.x), u32(RENDER_SIZE.y)},
-	}
-	vk.CmdSetScissor(commandBuffer, 0, 1, &scissor)
-
-	vk.CmdBindDescriptorSets(
-		commandBuffer,
-		.GRAPHICS,
-		pipelines[PipelineIndex.MAIN].layout,
-		0,
-		1,
-		&pipelines[PipelineIndex.MAIN].descriptorSets[currentFrame],
-		0,
-		nil,
-	)
-	vk.CmdBindPipeline(commandBuffer, .GRAPHICS, pipelines[PipelineIndex.MAIN].pipeline)
-
-	vk.CmdBindVertexBuffers(
-		commandBuffer,
-		0,
-		1,
-		&vertexBuffer.buffer,
-		raw_data([]vk.DeviceSize{0}),
-	)
-	vk.CmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, .UINT32)
-	for &inst, i in instances {
-		vk.CmdDrawIndexed(
+			clearValueCount = 1,
+			pClearValues = raw_data(
+				[]vk.ClearValue{{depthStencil = vk.ClearDepthStencilValue{depth = 1, stencil = 0}}},
+			),
+		}
+		vk.CmdBeginRenderPass(commandBuffer, &renderPassInfo, .INLINE)
+	
+		vk.CmdBindPipeline(commandBuffer, .GRAPHICS, pipelines[PipelineIndex.LIGHT].pipeline)
+		vk.CmdBindDescriptorSets(
 			commandBuffer,
-			models[inst.modelID].indexCount,
+			.GRAPHICS,
+			pipelines[PipelineIndex.LIGHT].layout,
+			0,
 			1,
-			models[inst.modelID].indexOffset,
-			i32(models[inst.modelID].vertexOffset),
-			u32(i),
+			&pipelines[PipelineIndex.LIGHT].descriptorSets[currentFrame],
+			0,
+			nil,
 		)
+	
+		vk.CmdBindVertexBuffers(
+			commandBuffer,
+			0,
+			1,
+			&vertexBuffer.buffer,
+			raw_data([]vk.DeviceSize{0}),
+		)
+		vk.CmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, .UINT32)
+		for &inst, i in instances {
+			vk.CmdDrawIndexed(
+				commandBuffer,
+				models[inst.modelID].indexCount,
+				1,
+				models[inst.modelID].indexOffset,
+				i32(models[inst.modelID].vertexOffset),
+				u32(i),
+			)
+		}
+
+		vk.CmdEndRenderPass(commandBuffer)
 	}
 
-	vk.CmdEndRenderPass(commandBuffer)
+	// MAIN
+	{
+		renderPassInfo: vk.RenderPassBeginInfo = {
+			sType = .RENDER_PASS_BEGIN_INFO,
+			pNext = nil,
+			renderPass = pipelines[PipelineIndex.MAIN].renderPass,
+			framebuffer = pipelines[PipelineIndex.MAIN].frameBuffers[imageIndex],
+			renderArea = vk.Rect2D{offset = {0, 0}, extent = {u32(RENDER_SIZE.x), u32(RENDER_SIZE.y)}},
+			clearValueCount = 2,
+			pClearValues = raw_data(
+				[]vk.ClearValue {
+					{color = vk.ClearColorValue{float32 = CLEAR_COLOUR}},
+					{depthStencil = vk.ClearDepthStencilValue{depth = 1, stencil = 0}},
+				},
+			),
+		}
+		vk.CmdBeginRenderPass(commandBuffer, &renderPassInfo, .INLINE)
+
+		vk.CmdBindDescriptorSets(
+			commandBuffer,
+			.GRAPHICS,
+			pipelines[PipelineIndex.MAIN].layout,
+			0,
+			1,
+			&pipelines[PipelineIndex.MAIN].descriptorSets[currentFrame],
+			0,
+			nil,
+		)
+		vk.CmdBindPipeline(commandBuffer, .GRAPHICS, pipelines[PipelineIndex.MAIN].pipeline)
+
+		vk.CmdBindVertexBuffers(
+			commandBuffer,
+			0,
+			1,
+			&vertexBuffer.buffer,
+			raw_data([]vk.DeviceSize{0}),
+		)
+		vk.CmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, .UINT32)
+		for &inst, i in instances {
+			vk.CmdDrawIndexed(
+				commandBuffer,
+				models[inst.modelID].indexCount,
+				1,
+				models[inst.modelID].indexOffset,
+				i32(models[inst.modelID].vertexOffset),
+				u32(i),
+			)
+		}
+
+		vk.CmdEndRenderPass(commandBuffer)
+	}
 
 	if vk.EndCommandBuffer(commandBuffer) != .SUCCESS {
 		log.log(.Error, "Failed to record command buffer!")
@@ -3121,7 +3682,7 @@ recordComputeBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		pipelines[PipelineIndex.MAIN].renderPass.colour.image,
+		pipelines[PipelineIndex.MAIN].colour.image,
 		.UNDEFINED,
 		.TRANSFER_SRC_OPTIMAL,
 		1,
@@ -3202,11 +3763,7 @@ recordComputeBuffer :: proc(
 
 	copyImage(
 		commandBuffer,
-		vk.Extent3D {
-			swapchainExtent.width,
-			swapchainExtent.height,
-			1,
-		},
+		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 1},
 		outImage.image,
 		swapchainImages[imageIndex],
 		.TRANSFER_SRC_OPTIMAL,
@@ -3217,7 +3774,7 @@ recordComputeBuffer :: proc(
 		graphicsContext,
 		commandBuffer,
 		swapchainImages[imageIndex],
-		.UNDEFINED,
+		.TRANSFER_DST_OPTIMAL,
 		.PRESENT_SRC_KHR,
 		1,
 	)
@@ -3229,22 +3786,57 @@ recordComputeBuffer :: proc(
 }
 
 @(private = "file")
+updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
+	lightData := make([]Light, len(pointLights))
+	defer delete(lightData)
+	for light, i in pointLights {
+		position := light.position
+		// position := rotation3(f32(radians(90 * time.duration_seconds(time.since(startTime)))), Vec3{0, 1, 0}) * light.position
+		direction := normalize(Vec3{0, 0, 0} - position)
+		up: Vec3
+		if dot(direction, Vec3{0, 1, 0}) < 0.0001 {
+			up = cross(direction, Vec3{0, 0, 1})
+		} else {
+			up = cross(direction, Vec3{0, 1, 0})
+		}
+		lightData[i] = {
+			position        = Vec4{position.x, position.y, position.z, 0},
+			colourIntensity = Vec4 {
+				light.colourIntensity.x,
+				light.colourIntensity.y,
+				light.colourIntensity.z,
+				0,
+			},
+			mvp             = perspective(
+				light.fov,
+				1,
+				0.01,
+				100,
+			) * lookAt(position, Vec3{0, 0, 0}, up),
+		}
+	}
+	mem.copy(
+		lightsBuffers[currentFrame].mapped,
+		raw_data(lightData),
+		size_of(Light) * len(pointLights),
+	)
+}
+
+@(private = "file")
 updateViewProjectionUniform :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
 	view := lookAt(camera.eye, camera.center, camera.up)
 	projection: Mat4
 	if camera.mode == .PERSPECTIVE {
 		projection = perspective(
 			radians(f32(45.0)),
-			f32(swapchainExtent.width) /
-			f32(swapchainExtent.height),
+			f32(swapchainExtent.width) / f32(swapchainExtent.height),
 			0.1,
 			10000,
 		)
 	} else if camera.mode == .ORTHOGRAPHIC {
 		projection = orthographic(
 			radians(f32(45.0)),
-			f32(swapchainExtent.width) /
-			f32(swapchainExtent.height),
+			f32(swapchainExtent.width) / f32(swapchainExtent.height),
 			0.1,
 			10000,
 		)
@@ -3421,13 +4013,7 @@ updateInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 }
 
 drawFrame :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
-	vk.WaitForFences(
-		device,
-		1,
-		&inFlightFrames[currentFrame],
-		true,
-		max(u64),
-	)
+	vk.WaitForFences(device, 1, &inFlightFrames[currentFrame], true, max(u64))
 
 	imageIndex: u32
 	if result := vk.AcquireNextImageKHR(
@@ -3444,35 +4030,25 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
 		log.log(.Error, "Failed to aquire swapchain image!")
 		panic("Failed to aquire swapchain image!")
 	}
-	vk.ResetFences(
-		device,
-		1,
-		&inFlightFrames[currentFrame],
-	)
+	vk.ResetFences(device, 1, &inFlightFrames[currentFrame])
 
-	vk.ResetCommandBuffer(graphicsCommandBuffers[currentFrame], {})
+	vk.ResetCommandBuffer(shadowCommandBuffers[currentFrame], {})
+	vk.ResetCommandBuffer(mainCommandBuffers[currentFrame], {})
 	vk.ResetCommandBuffer(computeCommandBuffers[currentFrame], {})
+	updateLightBuffer(graphicsContext)
 	updateViewProjectionUniform(graphicsContext, camera)
 	updateInstanceBuffer(graphicsContext)
-	recordGraphicsBuffer(
-		graphicsContext,
-		graphicsCommandBuffers[currentFrame],
-		imageIndex,
-	)
-	recordComputeBuffer(
-		graphicsContext,
-		computeCommandBuffers[currentFrame],
-		imageIndex,
-	)
+	recordMainBuffer(graphicsContext, mainCommandBuffers[currentFrame], imageIndex)
+	recordComputeBuffer(graphicsContext, computeCommandBuffers[currentFrame], imageIndex)
 
 	submitInfo: vk.SubmitInfo = {
 		sType                = .SUBMIT_INFO,
 		pNext                = nil,
-		waitSemaphoreCount   = 1,
-		pWaitSemaphores      = &imagesAvailable[currentFrame],
-		pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
+		waitSemaphoreCount   = 0,
+		pWaitSemaphores      = nil,
+		pWaitDstStageMask    = nil,
 		commandBufferCount   = 1,
-		pCommandBuffers      = &graphicsCommandBuffers[currentFrame],
+		pCommandBuffers      = &mainCommandBuffers[currentFrame],
 		signalSemaphoreCount = 1,
 		pSignalSemaphores    = &rendersFinished[currentFrame],
 	}
@@ -3486,21 +4062,19 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
 		sType                = .SUBMIT_INFO,
 		pNext                = nil,
 		waitSemaphoreCount   = 1,
-		pWaitSemaphores      = &rendersFinished[currentFrame],
-		pWaitDstStageMask    = &vk.PipelineStageFlags{.COMPUTE_SHADER},
+		pWaitSemaphores      = raw_data(
+			[]vk.Semaphore{rendersFinished[currentFrame], imagesAvailable[currentFrame]},
+		),
+		pWaitDstStageMask    = raw_data(
+			[]vk.PipelineStageFlags{{.COMPUTE_SHADER}, {.BOTTOM_OF_PIPE}},
+		),
 		commandBufferCount   = 1,
 		pCommandBuffers      = &computeCommandBuffers[currentFrame],
 		signalSemaphoreCount = 1,
 		pSignalSemaphores    = &computeFinished[currentFrame],
 	}
 
-	if vk.QueueSubmit(
-		   computeQueue,
-		   1,
-		   &submitInfo,
-		   inFlightFrames[currentFrame],
-	   ) !=
-	   .SUCCESS {
+	if vk.QueueSubmit(computeQueue, 1, &submitInfo, inFlightFrames[currentFrame]) != .SUCCESS {
 		log.log(.Error, "Failed to submit compute command buffer!")
 		panic("Failed to submit compute command buffer!")
 	}
@@ -3509,7 +4083,7 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
 		sType              = .PRESENT_INFO_KHR,
 		pNext              = nil,
 		waitSemaphoreCount = 1,
-		pWaitSemaphores    = &rendersFinished[currentFrame],
+		pWaitSemaphores    = &computeFinished[currentFrame],
 		swapchainCount     = 1,
 		pSwapchains        = &swapchain,
 		pImageIndices      = &imageIndex,
@@ -3517,9 +4091,7 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
 	}
 
 	if result := vk.QueuePresentKHR(presentQueue, &presentInfo);
-	   result == .ERROR_OUT_OF_DATE_KHR ||
-	   result == .SUBOPTIMAL_KHR ||
-	   framebufferResized {
+	   result == .ERROR_OUT_OF_DATE_KHR || result == .SUBOPTIMAL_KHR || framebufferResized {
 		framebufferResized = false
 		recreateSwapchain(graphicsContext)
 	} else if result != .SUCCESS {
@@ -3527,7 +4099,7 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
 		panic("Failed to present swapchain image!")
 	}
 
-	currentFrame += (currentFrame + 1) % 2
+	currentFrame = (currentFrame + 1) % 2
 }
 
 // ###################################################################
@@ -3547,22 +4119,8 @@ cleanupSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.DestroyImage(device, outImage.image, nil)
 	vk.FreeMemory(device, outImage.memory, nil)
 
-	vk.DestroyDescriptorPool(
-		device,
-		pipelines[PipelineIndex.POST].descriptorPool,
-		nil,
-	)
-	vk.DestroyDescriptorSetLayout(
-		device,
-		pipelines[PipelineIndex.POST].descriptorSetLayout,
-		nil,
-	)
 	vk.DestroyPipeline(device, pipelines[PipelineIndex.POST].pipeline, nil)
-	vk.DestroyPipelineLayout(
-		device,
-		pipelines[PipelineIndex.POST].layout,
-		nil,
-	)
+	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.POST].layout, nil)
 }
 
 @(private = "file")
@@ -3610,6 +4168,7 @@ cleanupAssets :: proc(using graphicsContext: ^GraphicsContext) {
 	delete(instances)
 	delete(vertices)
 	delete(indices)
+	delete(pointLights)
 }
 
 clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
@@ -3618,16 +4177,8 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	cleanupAssets(graphicsContext)
 
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyBuffer(
-			device,
-			viewProjectionUniforms[index].buffer,
-			nil,
-		)
-		vk.FreeMemory(
-			device,
-			viewProjectionUniforms[index].memory,
-			nil,
-		)
+		vk.DestroyBuffer(device, viewProjectionUniforms[index].buffer, nil)
+		vk.FreeMemory(device, viewProjectionUniforms[index].memory, nil)
 	}
 
 	for frameBuffer in pipelines[PipelineIndex.MAIN].frameBuffers {
@@ -3635,10 +4186,19 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 	delete(pipelines[PipelineIndex.MAIN].frameBuffers)
 
+	for frameBuffer in pipelines[PipelineIndex.LIGHT].frameBuffers {
+		vk.DestroyFramebuffer(device, frameBuffer, nil)
+	}
+	delete(pipelines[PipelineIndex.LIGHT].frameBuffers)
+
 	cleanupSwapchain(graphicsContext)
 	delete(swapchainImages)
 	delete(swapchainImageViews)
 
+	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.POST].descriptorPool, nil)
+	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.POST].descriptorSetLayout, nil)
+
+	// MAIN
 	vk.DestroyImageView(device, pipelines[PipelineIndex.MAIN].colour.view, nil)
 	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].colour.image, nil)
 	vk.FreeMemory(device, pipelines[PipelineIndex.MAIN].colour.memory, nil)
@@ -3647,26 +4207,25 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].depth.image, nil)
 	vk.FreeMemory(device, pipelines[PipelineIndex.MAIN].depth.memory, nil)
 
-	vk.DestroyDescriptorPool(
-		device,
-		pipelines[PipelineIndex.MAIN].descriptorPool,
-		nil,
-	)
-
-	vk.DestroyDescriptorSetLayout(
-		device,
-		pipelines[PipelineIndex.MAIN].descriptorSetLayout,
-		nil,
-	)
+	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.MAIN].descriptorPool, nil)
+	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.MAIN].descriptorSetLayout, nil)
 
 	vk.DestroyPipeline(device, pipelines[PipelineIndex.MAIN].pipeline, nil)
-	vk.DestroyPipelineLayout(
-		device,
-		pipelines[PipelineIndex.MAIN].layout,
-		nil,
-	)
-	vk.DestroyRenderPass(device, pipelines[PipelineIndex.MAIN].vulkanRenderPass, nil)
-	
+	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.MAIN].layout, nil)
+	vk.DestroyRenderPass(device, pipelines[PipelineIndex.MAIN].renderPass, nil)
+
+	// LIGHT
+	vk.DestroyImageView(device, pipelines[PipelineIndex.LIGHT].depth.view, nil)
+	vk.DestroyImage(device, pipelines[PipelineIndex.LIGHT].depth.image, nil)
+	vk.FreeMemory(device, pipelines[PipelineIndex.LIGHT].depth.memory, nil)
+
+	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.LIGHT].descriptorPool, nil)
+	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.LIGHT].descriptorSetLayout, nil)
+
+	vk.DestroyPipeline(device, pipelines[PipelineIndex.LIGHT].pipeline, nil)
+	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.LIGHT].layout, nil)
+	vk.DestroyRenderPass(device, pipelines[PipelineIndex.LIGHT].renderPass, nil)
+
 	delete(pipelines)
 
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
@@ -3682,16 +4241,13 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 
 	vk.DestroyCommandPool(device, graphicsCommandPool, nil)
 	vk.DestroyCommandPool(device, computeCommandPool, nil)
-	delete(graphicsCommandBuffers)
+	delete(shadowCommandBuffers)
+	delete(mainCommandBuffers)
 	delete(computeCommandBuffers)
 
 	vk.DestroyDevice(device, nil)
 	when ODIN_DEBUG {
-		vk.DestroyDebugUtilsMessengerEXT(
-			instance,
-			debugMessenger,
-			nil,
-		)
+		vk.DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nil)
 	}
 	vk.DestroySurfaceKHR(instance, surface, nil)
 	vk.DestroyInstance(instance, nil)
