@@ -36,8 +36,8 @@ Valhalla is a graphics engine designed for rendering 3D scenes with a focus on n
 ## Roadmap
 
 - [X] Implement basic rendering pipeline
-- [/] Implement basic lighting
-- [/] Implement shadow mapping
+- [X] Implement basic lighting
+- [X] Implement shadow mapping
 - [ ] Add support for various non-photorealistic rendering techniques
 - [ ] Optimize performance
 - [ ] Integrate with future game engine
