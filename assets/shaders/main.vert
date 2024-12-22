@@ -1,10 +1,11 @@
 #version 450
 
-layout(binding = 0) readonly uniform ViewProjectionUniform {
+layout(binding = 0) readonly uniform UniformBuffer {
 	mat4 view;
 	mat4 projection;
 	mat4 viewProjection;
-} viewProjectionUniform;
+    uint lightCount;
+} uniformBuffer;
 
 struct InstanceInfo {
     mat4 model;
@@ -52,7 +53,7 @@ void main() {
     mat4 vertexTransform = instanceBuffer.instanceInfo[gl_InstanceIndex].model * boneTransform;
     outPosition = vertexTransform * vec4(inPosition, 1.0);
 
-    gl_Position = viewProjectionUniform.viewProjection * outPosition;
+    gl_Position = uniformBuffer.viewProjection * outPosition;
     outUV = vec3(inUV.xy, instanceBuffer.instanceInfo[gl_InstanceIndex].samplerOffset);
     outNormal = normalize(mat3(vertexTransform) * inNormal);
 }
