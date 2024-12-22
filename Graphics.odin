@@ -2119,7 +2119,7 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 	createInstanceBuffer(graphicsContext)
 	createBoneBuffer(graphicsContext)
 	createLightBuffer(graphicsContext)
-	
+
 	createShadowImage(graphicsContext)
 
 	hasAssetsLoaded = true
@@ -3667,19 +3667,6 @@ recordGraphicsBuffer :: proc(
 
 		vk.CmdEndRenderPass(commandBuffer)
 
-		vk.CmdPipelineBarrier(
-			commandBuffer,
-			{.FRAGMENT_SHADER},
-			{.BOTTOM_OF_PIPE},
-			{},
-			0,
-			nil,
-			0,
-			nil,
-			0,
-			nil,
-		)
-
 		vk.CmdCopyImage(
 			commandBuffer,
 			pipelines[PipelineIndex.SHADOW].depth.image,
@@ -3919,7 +3906,12 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 	defer delete(lightData)
 	for light, i in pointLights {
 		// position := light.position
-		position := rotation3(f32(radians(90 * time.duration_seconds(time.since(startTime)))), Vec3{0, 1, 0}) * light.position
+		position :=
+			rotation3(
+				f32(radians(90 * time.duration_seconds(time.since(startTime)))),
+				Vec3{0, 1, 0},
+			) *
+			light.position
 		direction := normalize(Vec3{0, 0, 0} - position)
 		up: Vec3
 		if dot(direction, Vec3{0, 1, 0}) < 0.0001 {
