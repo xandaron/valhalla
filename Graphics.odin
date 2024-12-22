@@ -65,13 +65,13 @@ vertexInputAttributeDescriptions: []vk.VertexInputAttributeDescription = {
 ENGINE_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 
 @(private = "file")
-MODEL_PATH: cstring : "./assets/models/monster/jog.fbx"
+MODEL_PATH: cstring : "./assets/models/hestia/hestia.fbx"
 
 @(private = "file")
-TEXTURE_PATH: cstring : "./assets/models/monster/skeletonZombie_diffuse.png"
+TEXTURE_PATH: cstring : "./assets/models/hestia/albedo.png"
 
 @(private = "file")
-NORMALS_PATH: cstring : "./assets/models/monster/skeletonZombie_normal.png"
+NORMALS_PATH: cstring : "./assets/models/hestia/normals.png"
 
 @(private = "file")
 MAX_FRAMES_IN_FLIGHT: u32 : 2
@@ -83,7 +83,7 @@ RENDER_SIZE: Vec2 : {1980, 1080}
 SHADOW_RESOLUTION: Vec2 : {2048, 2048}
 
 @(private = "file")
-CLEAR_COLOUR: Vec4 : {0.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0}
+CLEAR_COLOUR: Vec4 : {255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0}
 
 @(private = "file")
 DEPTH_BIAS_CONSTANT: f32 = 1.25
@@ -1735,9 +1735,9 @@ loadModels :: proc(using graphicsContext: ^GraphicsContext, modelPaths: []cstrin
 
 		loadBone :: proc(skeleton: ^[dynamic]Bone, node: ^fbx.Node) {
 			parentIndex: u32 = 0
-			if !node^.parent.is_root {
+			if !node.parent.is_root {
 				for bone, index in skeleton {
-					if bone.name == node^.parent^.element.name.data {
+					if bone.name == node.parent.element.name.data {
 						parentIndex = u32(index)
 						break
 					}
@@ -1775,22 +1775,22 @@ loadModels :: proc(using graphicsContext: ^GraphicsContext, modelPaths: []cstrin
 			if node.mesh != nil do append(&meshes, node.mesh)
 			if node.bone != nil do loadBone(&skeleton, node)
 		}
-		model^.skeleton = skeleton[:]
+		model.skeleton = skeleton[:]
 
 		vertices: [dynamic]Vertex
 		indices: [dynamic]u32
 		indexCount: u32 = 0
 		for mesh in meshes {
-			indexCount += loadMesh(mesh, &model^.skeleton, &vertices, &indices)
+			indexCount += loadMesh(mesh, &model.skeleton, &vertices, &indices)
 		}
-		model^.vertices = vertices[:]
-		model^.indices = indices[:]
-		model^.indexCount = indexCount
+		model.vertices = vertices[:]
+		model.indices = indices[:]
+		model.indexCount = indexCount
 
 		for index in 0 ..< scene.skin_cluster.count {
 			skinCluster := scene.skin_cluster.data[index]^
 			for &bone, index in model^.skeleton {
-				if bone.name != skinCluster.bone_node^.element.name.data {
+				if bone.name != skinCluster.bone_node.element.name.data {
 					continue
 				}
 				m := skinCluster.geometry_to_bone.cols
@@ -1816,19 +1816,19 @@ loadModels :: proc(using graphicsContext: ^GraphicsContext, modelPaths: []cstrin
 			}
 		}
 
-		model^.animations = make([]Anim, scene^.anim_stacks.count)
-		for animIndex in 0 ..< scene^.anim_stacks.count {
-			stack := scene^.anim_stacks.data[animIndex]
-			bakedAnim := fbx.bake_anim(scene, stack^.anim, nil, &err)
+		model.animations = make([]Anim, scene.anim_stacks.count)
+		for animIndex in 0 ..< scene.anim_stacks.count {
+			stack := scene.anim_stacks.data[animIndex]
+			bakedAnim := fbx.bake_anim(scene, stack.anim, nil, &err)
 			defer fbx.free_baked_anim(bakedAnim)
-			animation := &model^.animations[animIndex]
+			animation := &model.animations[animIndex]
 			animation^.duration = bakedAnim^.playback_duration
 			animation^.nodes = make([]AnimNode, bakedAnim.nodes.count)
 			for bakedIndex in 0 ..< bakedAnim.nodes.count {
 				bakedNode := bakedAnim.nodes.data[bakedIndex]
-				sceneNode := scene^.nodes.data[bakedNode.typed_id]
-				for bone, index in model^.skeleton {
-					if bone.name != sceneNode^.element.name.data {
+				sceneNode := scene.nodes.data[bakedNode.typed_id]
+				for bone, index in model.skeleton {
+					if bone.name != sceneNode.element.name.data {
 						continue
 					}
 					animNode := AnimNode {
@@ -2091,8 +2091,8 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 		modelID       = 0,
 		animID        = 0,
 		textureID     = 0,
-		position      = {0, 0, 0},
-		rotation      = quatFromY(f32(radians(180.0))),
+		position      = {0, 0.1, 0},
+		rotation      = quatFromY(f32(radians(180.0))) * quatFromX(f32(radians(-90.0))),
 		scale         = {0.003, 0.003, 0.003},
 		animStartTime = now,
 	}
@@ -2104,16 +2104,10 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 
 	pointLights = make([]PointLight, 2)
 	pointLights[0] = {
-		position        = Vec3{-1, 1, -1},
-		direction       = normalize(Vec3{0, 0, 0} - Vec3{-1, 1, -1}),
-		colourIntensity = 3 * Vec3{1, 0, 0},
-		fov             = 45,
-	}
-	pointLights[1] = {
-		position        = Vec3{1, -1, 1},
-		direction       = normalize(Vec3{0, 0, 0} - Vec3{1, -1, 1}),
-		colourIntensity = 5 * Vec3{0, 1, 0},
-		fov             = 45,
+		position        = Vec3{0, 1, 0},
+		direction       = normalize(Vec3{0, 0, 0} - Vec3{0, 1, 0}),
+		colourIntensity = 2 * Vec3{1, 1, 1},
+		fov             = f32(radians(90.0)),
 	}
 
 	createInstanceBuffer(graphicsContext)
@@ -3905,19 +3899,20 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 	lightData := make([]LightData, len(pointLights))
 	defer delete(lightData)
 	for light, i in pointLights {
-		// position := light.position
-		position :=
-			rotation3(
-				f32(radians(90 * time.duration_seconds(time.since(startTime)))),
-				Vec3{0, 1, 0},
-			) *
-			light.position
+		position := light.position
+		// position :=
+		// 	rotation3(
+		// 		f32(radians(90 * time.duration_seconds(time.since(startTime)))),
+		// 		Vec3{0, 1, 0},
+		// 	) *
+		// 	light.position
 		direction := normalize(Vec3{0, 0, 0} - position)
 		up: Vec3
-		if dot(direction, Vec3{0, 1, 0}) < 0.0001 {
-			up = cross(direction, Vec3{0, 0, 1})
-		} else {
+		dot := dot(direction, Vec3{0, 1, 0})
+		if dot < 0.0001 && dot > -0.0001 {
 			up = cross(direction, Vec3{0, 1, 0})
+		} else {
+			up = cross(direction, Vec3{0, 0, 1})
 		}
 		lightData[i] = {
 			mvp             = perspective(
@@ -3999,12 +3994,9 @@ updateInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 
 		skeleton := &model^.skeleton
-		animation := model^.animations[instance.animID]
 		now = instance.animStartTime // Pauses animations
 		timeSinceAnimStart := time.duration_seconds(time.diff(instance.animStartTime, now))
-		timeStamp :=
-			timeSinceAnimStart -
-			(floor(timeSinceAnimStart / animation.duration) * animation.duration)
+
 		localBoneTransforms := make([]Mat4, len(skeleton))
 		defer delete(localBoneTransforms)
 
@@ -4012,93 +4004,100 @@ updateInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 			localBoneTransforms[index] = IMat4
 		}
 
-		for &node, nodeIndex in animation.nodes {
-			// a *= b == a = a * b
-			// therefore I *= T *= R *= S == aT = I * T * R * S
-			if node.numKeyPositions == 1 {
-				localBoneTransforms[node.bone] *= translate(node.keyPositions[0].value)
-			} else if node.numKeyPositions != 0 {
-				id := instance.positionKeys[nodeIndex]
-				for true {
-					if node.keyPositions[id].time <= timeStamp &&
-					   timeStamp <= node.keyPositions[id + 1].time {
-						instance.positionKeys[nodeIndex] = id
-						break
+		if len(model^.animations) != 0 {
+			animation := model^.animations[instance.animID]
+			timeStamp :=
+				timeSinceAnimStart -
+				(floor(timeSinceAnimStart / animation.duration) * animation.duration)
+			for &node, nodeIndex in animation.nodes {
+				// a *= b == a = a * b
+				// therefore I *= T *= R *= S == aT = I * T * R * S
+				if node.numKeyPositions == 1 {
+					localBoneTransforms[node.bone] *= translate(node.keyPositions[0].value)
+				} else if node.numKeyPositions != 0 {
+					id := instance.positionKeys[nodeIndex]
+					for true {
+						if node.keyPositions[id].time <= timeStamp &&
+						   timeStamp <= node.keyPositions[id + 1].time {
+							instance.positionKeys[nodeIndex] = id
+							break
+						}
+						id += 1
+						if id == node.numKeyPositions - 1 {
+							id = 0
+						}
 					}
-					id += 1
-					if id == node.numKeyPositions - 1 {
-						id = 0
-					}
+					valueDiff :=
+						node.keyPositions[instance.positionKeys[nodeIndex] + 1].value -
+						node.keyPositions[instance.positionKeys[nodeIndex]].value
+					timeDiff :=
+						(timeStamp - node.keyPositions[instance.positionKeys[nodeIndex]].time) /
+						(node.keyPositions[instance.positionKeys[nodeIndex] + 1].time -
+								node.keyPositions[instance.positionKeys[nodeIndex]].time)
+					value :=
+						f32(timeDiff) * valueDiff +
+						node.keyPositions[instance.positionKeys[nodeIndex]].value
+					localBoneTransforms[node.bone] *= translate(value)
 				}
-				valueDiff :=
-					node.keyPositions[instance.positionKeys[nodeIndex] + 1].value -
-					node.keyPositions[instance.positionKeys[nodeIndex]].value
-				timeDiff :=
-					(timeStamp - node.keyPositions[instance.positionKeys[nodeIndex]].time) /
-					(node.keyPositions[instance.positionKeys[nodeIndex] + 1].time -
-							node.keyPositions[instance.positionKeys[nodeIndex]].time)
-				value :=
-					f32(timeDiff) * valueDiff +
-					node.keyPositions[instance.positionKeys[nodeIndex]].value
-				localBoneTransforms[node.bone] *= translate(value)
-			}
 
-			if node.numKeyRotations == 1 {
-				localBoneTransforms[node.bone] *= quatToRotation(node.keyRotations[0].value)
-			} else if node.numKeyRotations != 0 {
-				id := instance.rotationKeys[nodeIndex]
-				for true {
-					if node.keyRotations[id].time <= timeStamp &&
-					   timeStamp <= node.keyRotations[id + 1].time {
-						instance.rotationKeys[nodeIndex] = id
-						break
+				if node.numKeyRotations == 1 {
+					localBoneTransforms[node.bone] *= quatToRotation(node.keyRotations[0].value)
+				} else if node.numKeyRotations != 0 {
+					id := instance.rotationKeys[nodeIndex]
+					for true {
+						if node.keyRotations[id].time <= timeStamp &&
+						   timeStamp <= node.keyRotations[id + 1].time {
+							instance.rotationKeys[nodeIndex] = id
+							break
+						}
+						id += 1
+						if id == node.numKeyRotations - 1 {
+							id = 0
+						}
 					}
-					id += 1
-					if id == node.numKeyRotations - 1 {
-						id = 0
-					}
+					valueDiff :=
+						node.keyRotations[instance.rotationKeys[nodeIndex] + 1].value -
+						node.keyRotations[instance.rotationKeys[nodeIndex]].value
+					timeDiff :=
+						(timeStamp - node.keyRotations[instance.rotationKeys[nodeIndex]].time) /
+						(node.keyRotations[instance.rotationKeys[nodeIndex] + 1].time -
+								node.keyRotations[instance.rotationKeys[nodeIndex]].time)
+					localBoneTransforms[node.bone] *= quatToRotation(
+						quatLurp(
+							node.keyRotations[instance.rotationKeys[nodeIndex]].value,
+							node.keyRotations[instance.rotationKeys[nodeIndex] + 1].value,
+							f32(timeDiff),
+						),
+					)
 				}
-				valueDiff :=
-					node.keyRotations[instance.rotationKeys[nodeIndex] + 1].value -
-					node.keyRotations[instance.rotationKeys[nodeIndex]].value
-				timeDiff :=
-					(timeStamp - node.keyRotations[instance.rotationKeys[nodeIndex]].time) /
-					(node.keyRotations[instance.rotationKeys[nodeIndex] + 1].time -
-							node.keyRotations[instance.rotationKeys[nodeIndex]].time)
-				localBoneTransforms[node.bone] *= quatToRotation(
-					quatLurp(
-						node.keyRotations[instance.rotationKeys[nodeIndex]].value,
-						node.keyRotations[instance.rotationKeys[nodeIndex] + 1].value,
-						f32(timeDiff),
-					),
-				)
-			}
 
-			if node.numKeyScales == 1 {
-				localBoneTransforms[node.bone] *= scale(node.keyScales[0].value)
-			} else if node.numKeyScales != 0 {
-				id := instance.scaleKeys[nodeIndex]
-				for true {
-					if node.keyScales[id].time <= timeStamp &&
-					   timeStamp <= node.keyScales[id + 1].time {
-						instance.scaleKeys[nodeIndex] = id
-						break
+				if node.numKeyScales == 1 {
+					localBoneTransforms[node.bone] *= scale(node.keyScales[0].value)
+				} else if node.numKeyScales != 0 {
+					id := instance.scaleKeys[nodeIndex]
+					for true {
+						if node.keyScales[id].time <= timeStamp &&
+						   timeStamp <= node.keyScales[id + 1].time {
+							instance.scaleKeys[nodeIndex] = id
+							break
+						}
+						id += 1
+						if id == node.numKeyScales - 1 {
+							id = 0
+						}
 					}
-					id += 1
-					if id == node.numKeyScales - 1 {
-						id = 0
-					}
+					valueDiff :=
+						node.keyScales[instance.scaleKeys[nodeIndex] + 1].value -
+						node.keyScales[instance.scaleKeys[nodeIndex]].value
+					timeDiff :=
+						(timeStamp - node.keyScales[instance.scaleKeys[nodeIndex]].time) /
+						(node.keyScales[instance.scaleKeys[nodeIndex] + 1].time -
+								node.keyScales[instance.scaleKeys[nodeIndex]].time)
+					value :=
+						f32(timeDiff) * valueDiff +
+						node.keyScales[instance.scaleKeys[nodeIndex]].value
+					localBoneTransforms[node.bone] *= scale(value)
 				}
-				valueDiff :=
-					node.keyScales[instance.scaleKeys[nodeIndex] + 1].value -
-					node.keyScales[instance.scaleKeys[nodeIndex]].value
-				timeDiff :=
-					(timeStamp - node.keyScales[instance.scaleKeys[nodeIndex]].time) /
-					(node.keyScales[instance.scaleKeys[nodeIndex] + 1].time -
-							node.keyScales[instance.scaleKeys[nodeIndex]].time)
-				value :=
-					f32(timeDiff) * valueDiff + node.keyScales[instance.scaleKeys[nodeIndex]].value
-				localBoneTransforms[node.bone] *= scale(value)
 			}
 		}
 
@@ -4117,6 +4116,7 @@ updateInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 		boneOffset += u32(len(skeleton))
 	}
+
 	mem.copy(
 		boneBuffers[currentFrame].mapped,
 		raw_data(finalBoneTransforms),

@@ -18,9 +18,15 @@
             "command": "./assets/shaders/compile.bat"
         },
         {
-            "label": "build",
+            "label": "debug",
             "type": "shell",
             "command": "odin build . -debug -out:build/debug.exe",
+            "group": "build"
+        },
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "odin build . -out:build/build.exe",
             "group": "build"
         },
         {
@@ -28,6 +34,7 @@
             "dependsOn": [
                 "mkdir",
                 "compile_shaders",
+                "debug",
                 "build"
             ]
         }

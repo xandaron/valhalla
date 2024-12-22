@@ -42,7 +42,7 @@ transpose :: linalg.transpose
 
 distance :: linalg.distance
 
-length  :: linalg.length
+length :: linalg.length
 length2 :: linalg.length2
 
 normalize :: linalg.normalize

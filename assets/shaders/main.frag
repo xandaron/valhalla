@@ -30,11 +30,26 @@ layout(location = 0) out vec4 outColour;
 #define ambientLight 0.0
 
 float textureProj(vec4 shadowCoord, float arrayIndex) {
-    float dist = texture(shadowMap, vec3(shadowCoord.st, arrayIndex)).r;
+    float dist = texture(shadowMap, vec3(shadowCoord.xy, arrayIndex)).r;
     if (dist > shadowCoord.z) {
         return 1.0;
     }
     return 0.0;
+}
+
+float filterPCF(vec4 shadowCoord, float arrayIndex) {
+	vec2 texDim = textureSize(shadowMap, 0).xy;
+	vec2 scale = 1.0 / texDim;
+
+	float sum = 0.0;
+	const float range = 1.5;
+	for (float x = -range; x <= range; x++) {
+		for (float y = -range; y <= range; y++) {
+			sum += textureProj(shadowCoord + vec4(vec2(x, y) * scale, 0.0, 0.0), arrayIndex);
+		}
+	
+	}
+	return sum / ((2 * range + 1) * (2 * range + 1));
 }
 
 const mat4 biasMat = mat4( 
@@ -57,12 +72,10 @@ void main() {
 
         vec4 vertexPos = biasMat * lightBuffer.lights[i].mvp * inPosition;
 
-        float shadow = textureProj(vertexPos / vertexPos.w, float(i));
+        float shadow = filterPCF(vertexPos / vertexPos.w, float(i));
         cumulativeColour += albedo * shadow * lambertainCoefficient * lightBuffer.lights[i].colourIntensity.xyz / lightSquareDistance;
     }
 
+    // outColour = vec4(1.0);
     outColour = vec4(cumulativeColour, 1.0);
-    // vec4 vertexPos = biasMat * lightBuffer.lights[1].mvp * inPosition;
-    // outColour = vec4(textureProj(vertexPos / vertexPos.w, 0.0));
-    // outColour = vec4(albedo * textureProj(vertexPos / vertexPos.w, 1.0), 1.0);
 }

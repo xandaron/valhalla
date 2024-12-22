@@ -31,6 +31,7 @@ EngineState :: struct {
 }
 
 main :: proc() {
+	os.set_current_directory("D:/Projects/Valhalla/")
 	when ODIN_DEBUG {
 		logPath := createLogPath()
 		if logHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_CREATE)); err == 0 {
