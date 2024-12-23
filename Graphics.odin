@@ -68,7 +68,7 @@ ENGINE_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 MODEL_PATH: cstring : "./assets/models/bunny/bunny.fbx"
 
 @(private = "file")
-TEXTURE_PATH: cstring : "./assets/models/bunny/yellow.jpg"
+TEXTURE_PATH: cstring : "./assets/models/bunny/orange.jpg"
 
 @(private = "file")
 NORMALS_PATH: cstring : "./assets/models/bunny/normals.jpg"

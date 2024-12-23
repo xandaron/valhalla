@@ -59,6 +59,10 @@ const mat4 biasMat = mat4(
 	0.5, 0.5, 0.0, 1.0 
 );
 
+vec3 powerVec3(vec3 base, float power) {
+    return vec3(pow(base.r, power), pow(base.g, power), pow(base.b, power));
+}
+
 void main() {
     vec3 cumulativeColour = vec3(0.0);
     vec3 albedo = texture(albedoArray, inUV).xyz;
@@ -76,6 +80,5 @@ void main() {
         cumulativeColour += albedo * shadow * lambertainCoefficient * lightBuffer.lights[i].colourIntensity.xyz / lightSquareDistance;
     }
 
-    // outColour = vec4(1.0);
-    outColour = vec4(cumulativeColour, 1.0);
+    outColour =  vec4(powerVec3(cumulativeColour, 1 / 2.4), 1.0);
 }
