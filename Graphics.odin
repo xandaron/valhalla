@@ -65,13 +65,13 @@ vertexInputAttributeDescriptions: []vk.VertexInputAttributeDescription = {
 ENGINE_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 
 @(private = "file")
-MODEL_PATH: cstring : "./assets/models/hestia/hestia.fbx"
+MODEL_PATH: cstring : "./assets/models/bunny/bunny.fbx"
 
 @(private = "file")
-TEXTURE_PATH: cstring : "./assets/models/hestia/albedo.png"
+TEXTURE_PATH: cstring : "./assets/models/bunny/yellow.jpg"
 
 @(private = "file")
-NORMALS_PATH: cstring : "./assets/models/hestia/normals.png"
+NORMALS_PATH: cstring : "./assets/models/bunny/normals.jpg"
 
 @(private = "file")
 MAX_FRAMES_IN_FLIGHT: u32 : 2
@@ -83,7 +83,7 @@ RENDER_SIZE: Vec2 : {1980, 1080}
 SHADOW_RESOLUTION: Vec2 : {2048, 2048}
 
 @(private = "file")
-CLEAR_COLOUR: Vec4 : {255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0, 255.0 / 255.0}
+CLEAR_COLOUR: Vec4 : {150.0 / 255.0, 150.0 / 255.0, 150.0 / 255.0, 255.0 / 255.0}
 
 @(private = "file")
 DEPTH_BIAS_CONSTANT: f32 = 1.25
@@ -1691,8 +1691,14 @@ loadModels :: proc(using graphicsContext: ^GraphicsContext, modelPaths: []cstrin
 			for index in 0 ..< vertexCount {
 				vertexIndex := mesh.vertex_position.indices.data[index]
 				pos := mesh.vertex_position.values.data[vertexIndex]
-				uv := mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[index]]
-				norm := mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[index]]
+				uv := [2]f64{0, 0}
+				if mesh.vertex_uv.values.count != 0 {
+					uv = mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[index]]
+				}
+				norm := [3]f64{0, 1, 0}
+				if mesh.vertex_uv.values.count != 0 {
+					norm = mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[index]]
+				}
 
 				vertex: Vertex = {
 					position = {f32(pos.x), f32(pos.y), f32(pos.z)},
@@ -2091,9 +2097,9 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 		modelID       = 0,
 		animID        = 0,
 		textureID     = 0,
-		position      = {0, 0.1, 0},
-		rotation      = quatFromY(f32(radians(180.0))) * quatFromX(f32(radians(-90.0))),
-		scale         = {0.003, 0.003, 0.003},
+		position      = {0, -0.1, 0},
+		rotation      = quatFromY(f32(radians(180.0))),
+		scale         = {1, 1, 1},
 		animStartTime = now,
 	}
 	skeletonLength := len(models[instances[0].modelID].skeleton)
@@ -2106,8 +2112,8 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 	pointLights[0] = {
 		position        = Vec3{0, 1, 0},
 		direction       = normalize(Vec3{0, 0, 0} - Vec3{0, 1, 0}),
-		colourIntensity = 2 * Vec3{1, 1, 1},
-		fov             = f32(radians(90.0)),
+		colourIntensity = 0.5 * Vec3{1, 1, 1},
+		fov             = f32(radians(20.0)),
 	}
 
 	createInstanceBuffer(graphicsContext)
