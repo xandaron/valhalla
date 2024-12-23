@@ -12,7 +12,9 @@ import vk "vendor:vulkan"
 
 
 createLogPath :: proc() -> string {
-	//TODO: There has to be a better way of doing this.
+	if !os.exists("./logs") do os.make_directory("./logs")
+	
+	//TODO: There has to be a better way of doing this. Maybe I can check how many files are in the directory and then create a new file with the next number.
 	now := t.now()
 	year, month, day := t.date(now)
 	dateTime: dt.DateTime = {
@@ -36,6 +38,7 @@ createLogPath :: proc() -> string {
 		seconds,
 	)
 	return str
+
 }
 
 

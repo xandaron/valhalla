@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:os"
+import "core:path/filepath"
 import "core:strings"
 import "core:time"
 import "vendor:glfw"
@@ -31,7 +32,22 @@ EngineState :: struct {
 }
 
 main :: proc() {
-	os.set_current_directory("D:/Projects/Valhalla/")
+	{
+		dashCount: u32 = 0
+		filePath, _ := filepath.abs(os.args[0])
+		for i := len(filePath) - 1; i >= 0; i -= 1 {
+			if os.is_path_separator(filePath[i]) {
+				dashCount += 1
+				if dashCount == 2 {
+					if err := os.set_current_directory(filePath[:i]); err != os.ERROR_NONE {
+						fmt.printfln("Failed to set current directory to '{}': {}", filePath[:i], err)
+					}
+					break
+				}
+			}
+		}
+	}
+
 	when ODIN_DEBUG {
 		logPath := createLogPath()
 		if logHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_CREATE)); err == 0 {
@@ -96,8 +112,8 @@ main :: proc() {
 
 	engineState: EngineState = {
 		camera = {
-			eye = {0.0, 0.45, -1.3},
-			center = {0.0, 0.45, 0.0},
+			eye = {0.0, 0.0, -2.5},
+			center = {0.0, 0.0, 0.0},
 			up = {0.0, 1.0, 0.0},
 			mode = .ORTHOGRAPHIC,
 		},
