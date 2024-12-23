@@ -13,6 +13,7 @@ Valhalla is a graphics engine designed for rendering 3D scenes with a focus on n
 ### Prerequisites
 
 - Odin programming language
+  - Install Odin from [here](https://odin-lang.org/docs/install/)
 
 ### Setup
 
@@ -23,6 +24,11 @@ cd valhalla
 odin build . -out:build/build.exe
 ./build/build.exe
 ```
+
+> **Note:** On Linux, you will need to install the GLFW library separately. You can do this using your package manager. For example, on Ubuntu, you can run:
+> ```sh
+> sudo apt-get install libglfw3-dev
+> ```
 
 ## Demo
 
