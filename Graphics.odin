@@ -68,7 +68,7 @@ ENGINE_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 MODEL_PATH: cstring : "./assets/models/bunny/bunny.fbx"
 
 @(private = "file")
-TEXTURE_PATH: cstring : "./assets/models/bunny/orange.jpg"
+TEXTURE_PATH: cstring : "./assets/models/bunny/purple.jpg"
 
 @(private = "file")
 NORMALS_PATH: cstring : "./assets/models/bunny/normals.jpg"
@@ -1696,7 +1696,7 @@ loadModels :: proc(using graphicsContext: ^GraphicsContext, modelPaths: []cstrin
 					uv = mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[index]]
 				}
 				norm := [3]f64{0, 1, 0}
-				if mesh.vertex_uv.values.count != 0 {
+				if mesh.vertex_normal.values.count != 0 {
 					norm = mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[index]]
 				}
 
@@ -2097,7 +2097,7 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 		modelID       = 0,
 		animID        = 0,
 		textureID     = 0,
-		position      = {0, -0.1, 0},
+		position      = {-0.02, -0.1, 0},
 		rotation      = quatFromY(f32(radians(180.0))),
 		scale         = {1, 1, 1},
 		animStartTime = now,
