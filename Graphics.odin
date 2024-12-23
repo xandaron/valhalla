@@ -68,7 +68,7 @@ ENGINE_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 MODEL_PATH: cstring : "./assets/models/bunny/bunny.fbx"
 
 @(private = "file")
-TEXTURE_PATH: cstring : "./assets/models/bunny/purple.jpg"
+TEXTURE_PATH: cstring : "./assets/models/bunny/white.jpg"
 
 @(private = "file")
 NORMALS_PATH: cstring : "./assets/models/bunny/normals.jpg"
@@ -2108,11 +2108,27 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 	instances[0].rotationKeys = make([]u32, skeletonLength)
 	instances[0].scaleKeys = make([]u32, skeletonLength)
 
-	pointLights = make([]PointLight, 2)
+	pointLights = make([]PointLight, 3)
+	position := Vec3{0, 2, -1}
+	lightIntensity: f32 = 2.0
 	pointLights[0] = {
-		position        = Vec3{0, 1, 0},
-		direction       = normalize(Vec3{0, 0, 0} - Vec3{0, 1, 0}),
-		colourIntensity = 0.5 * Vec3{1, 1, 1},
+		position        = position,
+		direction       = normalize(Vec3{0, 0, 0} - position),
+		colourIntensity = lightIntensity * Vec3{1, 1, 0},
+		fov             = f32(radians(20.0)),
+	}
+	position = rotation3(f32(radians(120.0)), Vec3{0, 0, 1}) * position
+	pointLights[1] = {
+		position        = position,
+		direction       = normalize(Vec3{0, 0, 0} - position),
+		colourIntensity = lightIntensity * Vec3{0, 1, 1},
+		fov             = f32(radians(20.0)),
+	}
+	position = rotation3(f32(radians(120.0)), Vec3{0, 0, 1}) * position
+	pointLights[2] = {
+		position        = position,
+		direction       = normalize(Vec3{0, 0, 0} - position),
+		colourIntensity = lightIntensity * Vec3{1, 0, 1},
 		fov             = f32(radians(20.0)),
 	}
 
@@ -3905,13 +3921,13 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 	lightData := make([]LightData, len(pointLights))
 	defer delete(lightData)
 	for light, i in pointLights {
-		position := light.position
-		// position :=
-		// 	rotation3(
-		// 		f32(radians(90 * time.duration_seconds(time.since(startTime)))),
-		// 		Vec3{0, 1, 0},
-		// 	) *
-		// 	light.position
+		// position := light.position
+		position :=
+			rotation3(
+				f32(radians(120.0 * time.duration_seconds(time.since(startTime)))),
+				Vec3{0, 0, 1},
+			) *
+			light.position
 		direction := normalize(Vec3{0, 0, 0} - position)
 		up: Vec3
 		dot := dot(direction, Vec3{0, 1, 0})

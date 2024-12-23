@@ -24,6 +24,13 @@ odin build . -out:valhalla
 ./build/build.exe
 ```
 
+## Demo
+
+<video width="600" controls>
+  <source src="demo/bunny lights.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 ## Roadmap
 
 - [X] Implement basic rendering pipeline
