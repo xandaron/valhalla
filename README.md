@@ -13,25 +13,16 @@ Valhalla is a graphics engine designed for rendering 3D scenes with a focus on n
 ### Prerequisites
 
 - Odin programming language
-- A 3D model to import
 
 ### Setup
 
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/yourusername/valhalla.git
-    cd valhalla
-    ```
-
-2. Import your 3D model into the project.
-
-3. Edit the relevant constants in `Graphics.odin` to match your model's specifications.
-
-4. Build and run the project:
-    ```sh
-    odin build . -out:valhalla
-    ./valhalla
-    ```
+Run the following script to clone the repository, build the project and run the exe:
+```sh
+git clone https://github.com/yourusername/valhalla.git
+cd valhalla
+odin build . -out:valhalla
+./build/build.exe
+```
 
 ## Roadmap
 
