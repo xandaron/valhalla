@@ -18,9 +18,9 @@ Valhalla is a graphics engine designed for rendering 3D scenes with a focus on n
 
 Run the following script to clone the repository, build the project and run the exe:
 ```sh
-git clone https://github.com/yourusername/valhalla.git
+git clone https://github.com/xandaron/valhalla.git
 cd valhalla
-odin build . -out:valhalla
+odin build . -out:build/build.exe
 ./build/build.exe
 ```
 
