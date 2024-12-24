@@ -4240,6 +4240,7 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
 		pResults           = nil,
 	}
 
+	// Causes a seg fault on my wsl instance... issue unique to wsl or all linux?
 	if result := vk.QueuePresentKHR(presentQueue, &presentInfo);
 	   result == .ERROR_OUT_OF_DATE_KHR || result == .SUBOPTIMAL_KHR || framebufferResized {
 		framebufferResized = false

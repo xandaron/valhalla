@@ -9,6 +9,18 @@
             "program": "${workspaceFolder}/build/debug.exe",
             "args": [],
             "cwd": "${workspaceFolder}"
+        },
+        {
+            // Linux
+            "name": "Linux Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "preLaunchTask": "Build",
+            "program": "${workspaceFolder}/build/debug.exe",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "args": [],
+            "cwd": "${workspaceFolder}",
         }
     ]
 }
