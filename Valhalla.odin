@@ -125,10 +125,10 @@ main :: proc() {
 
 	engineState: EngineState = {
 		camera = {
-			eye = {0.0, 0.0, -2.5},
-			center = {0.0, 0.0, 0.0},
-			up = {0.0, 1.0, 0.0},
-			mode = .ORTHOGRAPHIC,
+			eye = {0, .2, -.4},
+			center = {0, 0, 0},
+			up = {0, 1, 0},
+			mode = .PERSPECTIVE,
 		},
 		graphicsContext = {window = window},
 	}

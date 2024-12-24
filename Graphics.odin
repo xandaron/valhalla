@@ -2083,16 +2083,16 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 		cleanupAssets(graphicsContext)
 	}
 
-	loadModels(graphicsContext, {MODEL_PATH})
+	loadModels(graphicsContext, {MODEL_PATH, "./assets/models/cube/cube_inverted.fbx"})
 
 	createVertexBuffer(graphicsContext)
 	createIndexBuffer(graphicsContext)
 
-	loadTextures(graphicsContext, &albidos, {TEXTURE_PATH})
+	loadTextures(graphicsContext, &albidos, {TEXTURE_PATH, "./assets/models/cube/texture.jpg"})
 	loadTextures(graphicsContext, &normals, {NORMALS_PATH})
 
 	now := time.now()
-	instances = make([]Instance, 1)
+	instances = make([]Instance, 2)
 	instances[0] = {
 		modelID       = 0,
 		animID        = 0,
@@ -2102,6 +2102,15 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 		scale         = {1, 1, 1},
 		animStartTime = now,
 	}
+	instances[1] = {
+		modelID       = 1,
+		animID        = 0,
+		textureID     = 1,
+		position      = {0, 0.14, 0},
+		rotation      = quatFromY(0.0),
+		scale         = {.2, .2, .2},
+		animStartTime = now,
+	}
 	skeletonLength := len(models[instances[0].modelID].skeleton)
 	boneCount += skeletonLength
 	instances[0].positionKeys = make([]u32, skeletonLength)
@@ -2109,29 +2118,28 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 	instances[0].scaleKeys = make([]u32, skeletonLength)
 
 	pointLights = make([]PointLight, 3)
-	position := Vec3{0, 2, -1}
-	lightIntensity: f32 = 2.0
+	position := Vec3{0, .3, .2}
+	lightIntensity: f32 = 0.04
 	pointLights[0] = {
 		position        = position,
 		direction       = normalize(Vec3{0, 0, 0} - position),
-		colourIntensity = lightIntensity * Vec3{1, 1, 0},
-		fov             = f32(radians(20.0)),
+		colourIntensity = lightIntensity * Vec3{1, 0, 0},
+		fov             = f32(radians(120.0)),
 	}
-	position = rotation3(f32(radians(120.0)), Vec3{0, 0, 1}) * position
+	position = rotation3(f32(radians(120.0)), Vec3{0, 1, 0}) * position
 	pointLights[1] = {
 		position        = position,
 		direction       = normalize(Vec3{0, 0, 0} - position),
-		colourIntensity = lightIntensity * Vec3{0, 1, 1},
-		fov             = f32(radians(20.0)),
+		colourIntensity = lightIntensity * Vec3{0, 1, 0},
+		fov             = f32(radians(120.0)),
 	}
-	position = rotation3(f32(radians(120.0)), Vec3{0, 0, 1}) * position
+	position = rotation3(f32(radians(120.0)), Vec3{0, 1, 0}) * position
 	pointLights[2] = {
 		position        = position,
 		direction       = normalize(Vec3{0, 0, 0} - position),
-		colourIntensity = lightIntensity * Vec3{1, 0, 1},
-		fov             = f32(radians(20.0)),
+		colourIntensity = lightIntensity * Vec3{0, 0, 1},
+		fov             = f32(radians(120.0)),
 	}
-
 	createInstanceBuffer(graphicsContext)
 	createBoneBuffer(graphicsContext)
 	createLightBuffer(graphicsContext)
@@ -3921,17 +3929,20 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 	lightData := make([]LightData, len(pointLights))
 	defer delete(lightData)
 	for light, i in pointLights {
-		// position := light.position
-		position :=
+		position: Vec3
+		direction: Vec3
+		lookAtVector: Vec3
+		position =
 			rotation3(
 				f32(radians(120.0 * time.duration_seconds(time.since(startTime)))),
-				Vec3{0, 0, 1},
+				Vec3{0, 1, 0},
 			) *
 			light.position
-		direction := normalize(Vec3{0, 0, 0} - position)
+		direction = normalize(Vec3{0, 0, 0} - position)
+		lookAtVector = Vec3{0, 0, 0}
 		up: Vec3
 		dot := dot(direction, Vec3{0, 1, 0})
-		if dot < 0.0001 && dot > -0.0001 {
+		if abs(dot) < 0.0001 {
 			up = cross(direction, Vec3{0, 1, 0})
 		} else {
 			up = cross(direction, Vec3{0, 0, 1})
@@ -3942,7 +3953,7 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 				1,
 				0.01,
 				100,
-			) * lookAt(position, Vec3{0, 0, 0}, up),
+			) * lookAt(position, lookAtVector, up),
 			position        = Vec4{position.x, position.y, position.z, 0},
 			colourIntensity = Vec4 {
 				light.colourIntensity.x,
