@@ -41,8 +41,11 @@ odin build . -out:build/build.exe
 
 ## Demo
 
-![Demo](demo/CMY_Bunny.gif)
-![Demo](demo/RGB_Bunny_Box.gif)
+![CMY Bunny](demo/CMY_Bunny.gif)
+*The CMY Bunny demonstrates a rendered scene of the Stanford bunny illuminated by rotating Cyan, Magenta, and Yellow point lights around the Z-axis.*
+
+![RGB Bunny Box](demo/RGB_Bunny_Box.gif)
+*The RGB Bunny Box showcases a rendered scene of the Stanford bunny inside a box, lit by Red, Green, and Blue point lights rotating around the Y-axis.*
 
 ## Roadmap
 
