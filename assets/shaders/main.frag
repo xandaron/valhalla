@@ -30,6 +30,9 @@ layout(location = 0) out vec4 outColour;
 #define ambientLight 0.1
 
 float textureProj(vec4 shadowCoord, float arrayIndex) {
+    if (shadowCoord.x < -1.0 || shadowCoord.x > 1.0 || shadowCoord.y < -1.0 || shadowCoord.y > 1.0) {
+        return 0.0;
+    }
     float dist = texture(shadowMap, vec3(shadowCoord.xy, arrayIndex)).r;
     if (dist > shadowCoord.z) {
         return 1.0;
@@ -45,7 +48,6 @@ float filterPCF(vec4 shadowCoord, float arrayIndex) {
 	const float range = 1.5;
 	for (float x = -range; x <= range; x++) {
 		for (float y = -range; y <= range; y++) {
-
 			sum += textureProj(shadowCoord + vec4(vec2(x, y) * scale, 0.0, 0.0), arrayIndex);
 		}
 	}

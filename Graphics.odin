@@ -371,7 +371,7 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	loadAssets(graphicsContext)
 
 	// Frame Resources
-	createStorageImage(graphicsContext)
+	createStorageImages(graphicsContext)
 	createSyncObjects(graphicsContext)
 
 	// Pipeline
@@ -960,7 +960,7 @@ recreateSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	cleanupSwapchain(graphicsContext)
 
 	createSwapchain(graphicsContext)
-	createStorageImage(graphicsContext)
+	createStorageImages(graphicsContext)
 	createComputeDescriptorSets(graphicsContext)
 	createComputePipelines(graphicsContext)
 }
@@ -2031,6 +2031,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext) {
 		.OPTIMAL,
 		{},
 	)
+
 	createImage(
 		graphicsContext,
 		&shadowImages,
@@ -2071,8 +2072,8 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext) {
 
 	shadowImages.sampler = createSampler(
 		graphicsContext,
-		.NEAREST,
-		.NEAREST,
+		.LINEAR,
+		.LINEAR,
 		.CLAMP_TO_BORDER,
 		false,
 		1,
@@ -2126,21 +2127,21 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 		position        = position,
 		direction       = normalize(Vec3{0, 0, 0} - position),
 		colourIntensity = lightIntensity * Vec3{1, 0, 0},
-		fov             = f32(radians(120.0)),
+		fov             = f32(radians(90.0)),
 	}
 	position = rotation3(f32(radians(120.0)), Vec3{0, 1, 0}) * position
 	pointLights[1] = {
 		position        = position,
 		direction       = normalize(Vec3{0, 0, 0} - position),
 		colourIntensity = lightIntensity * Vec3{0, 1, 0},
-		fov             = f32(radians(120.0)),
+		fov             = f32(radians(90.0)),
 	}
 	position = rotation3(f32(radians(120.0)), Vec3{0, 1, 0}) * position
 	pointLights[2] = {
 		position        = position,
 		direction       = normalize(Vec3{0, 0, 0} - position),
 		colourIntensity = lightIntensity * Vec3{0, 0, 1},
-		fov             = f32(radians(120.0)),
+		fov             = f32(radians(90.0)),
 	}
 	createInstanceBuffer(graphicsContext)
 	createBoneBuffer(graphicsContext)
@@ -2804,7 +2805,7 @@ createComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 // ###################################################################
 
 @(private = "file")
-createStorageImage :: proc(using graphicsContext: ^GraphicsContext) {
+createStorageImages :: proc(using graphicsContext: ^GraphicsContext) {
 	inImage.format = swapchainFormat.format
 	createImage(
 		graphicsContext,
@@ -2822,6 +2823,7 @@ createStorageImage :: proc(using graphicsContext: ^GraphicsContext) {
 		0,
 		nil,
 	)
+
 	inImage.view = createImageView(
 		graphicsContext,
 		inImage.image,
@@ -2830,6 +2832,7 @@ createStorageImage :: proc(using graphicsContext: ^GraphicsContext) {
 		{.COLOR},
 		1,
 	)
+
 	outImage.format = swapchainFormat.format
 	createImage(
 		graphicsContext,
@@ -2847,6 +2850,7 @@ createStorageImage :: proc(using graphicsContext: ^GraphicsContext) {
 		0,
 		nil,
 	)
+	
 	outImage.view = createImageView(
 		graphicsContext,
 		outImage.image,
