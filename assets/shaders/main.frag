@@ -30,7 +30,7 @@ layout(location = 0) out vec4 outColour;
 #define ambientLight 0.1
 
 float textureProj(vec4 shadowCoord, float arrayIndex) {
-    if (shadowCoord.x < -1.0 || shadowCoord.x > 1.0 || shadowCoord.y < -1.0 || shadowCoord.y > 1.0) {
+    if (shadowCoord.z < 0.0) {
         return 0.0;
     }
     float dist = texture(shadowMap, vec3(shadowCoord.xy, arrayIndex)).r;

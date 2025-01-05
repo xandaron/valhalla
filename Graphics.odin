@@ -1429,6 +1429,7 @@ createSampler :: proc(
 	addressMode: vk.SamplerAddressMode,
 	anistropyEnabled: b32,
 	maxAnistropy: f32,
+	borderColour: vk.BorderColor,
 ) -> (
 	sampler: vk.Sampler,
 ) {
@@ -1449,7 +1450,7 @@ createSampler :: proc(
 		compareOp               = .ALWAYS,
 		minLod                  = 0,
 		maxLod                  = vk.LOD_CLAMP_NONE,
-		borderColor             = .INT_OPAQUE_WHITE,
+		borderColor             = borderColour,
 		unnormalizedCoordinates = false,
 	}
 	if vk.CreateSampler(device, &samplerInfo, nil, &sampler) != .SUCCESS {
@@ -2020,6 +2021,7 @@ loadTextures :: proc(
 		.CLAMP_TO_EDGE,
 		false,
 		properties.limits.maxSamplerAnisotropy,
+		.INT_OPAQUE_WHITE,
 	)
 }
 
@@ -2077,6 +2079,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext) {
 		.CLAMP_TO_BORDER,
 		false,
 		1,
+		.FLOAT_OPAQUE_BLACK,
 	)
 }
 
@@ -2850,7 +2853,7 @@ createStorageImages :: proc(using graphicsContext: ^GraphicsContext) {
 		0,
 		nil,
 	)
-	
+
 	outImage.view = createImageView(
 		graphicsContext,
 		outImage.image,
@@ -3097,6 +3100,7 @@ createRenderPass :: proc(using graphicsContext: ^GraphicsContext) {
 			.CLAMP_TO_EDGE,
 			false,
 			0.0,
+			.INT_OPAQUE_WHITE,
 		)
 
 		attachments: []vk.AttachmentDescription = {
