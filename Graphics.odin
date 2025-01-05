@@ -2130,21 +2130,21 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 		position        = position,
 		direction       = normalize(Vec3{0, 0, 0} - position),
 		colourIntensity = lightIntensity * Vec3{1, 0, 0},
-		fov             = f32(radians(90.0)),
+		fov             = f32(radians(120.0)),
 	}
 	position = rotation3(f32(radians(120.0)), Vec3{0, 1, 0}) * position
 	pointLights[1] = {
 		position        = position,
 		direction       = normalize(Vec3{0, 0, 0} - position),
 		colourIntensity = lightIntensity * Vec3{0, 1, 0},
-		fov             = f32(radians(90.0)),
+		fov             = f32(radians(120.0)),
 	}
 	position = rotation3(f32(radians(120.0)), Vec3{0, 1, 0}) * position
 	pointLights[2] = {
 		position        = position,
 		direction       = normalize(Vec3{0, 0, 0} - position),
 		colourIntensity = lightIntensity * Vec3{0, 0, 1},
-		fov             = f32(radians(90.0)),
+		fov             = f32(radians(120.0)),
 	}
 	createInstanceBuffer(graphicsContext)
 	createBoneBuffer(graphicsContext)
@@ -4066,12 +4066,13 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 		position: Vec3
 		direction: Vec3
 		lookAtVector: Vec3
-		position =
-			rotation3(
-				f32(radians(120.0 * time.duration_seconds(time.since(startTime)))),
-				Vec3{0, 1, 0},
-			) *
-			light.position
+		// position =
+		// 	rotation3(
+		// 		f32(radians(30.0 * time.duration_seconds(time.since(startTime)))),
+		// 		Vec3{0, 1, 0},
+		// 	) *
+		// 	light.position
+		position = light.position
 		direction = normalize(Vec3{0, 0, 0} - position)
 		lookAtVector = Vec3{0, 0, 0}
 		up: Vec3

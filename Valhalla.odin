@@ -50,7 +50,7 @@ main :: proc() {
 
 	when ODIN_DEBUG {
 		logPath := createLogPath()
-		if logHandle, err := os.open(logPath, mode = (os.O_WRONLY | os.O_CREATE)); err == 0 {
+		if logHandle, err := os.open(logPath, os.O_WRONLY | os.O_CREATE); err == 0 {
 			logger = log.create_multi_logger(
 				log.create_console_logger(),
 				log.create_file_logger(logHandle),

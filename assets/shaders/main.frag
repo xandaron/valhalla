@@ -74,7 +74,7 @@ void main() {
 
         vec4 vertexPos = biasMat * lightBuffer.lights[i].mvp * inPosition;
 
-        float shadow = textureProj(vertexPos / vertexPos.w, float(i));
+        float shadow = filterPCF(vertexPos / vertexPos.w, float(i));
         cumulativeColour += albedo * shadow * lambertainCoefficient * lightBuffer.lights[i].colourIntensity.xyz / lightSquareDistance;
     }
     outColour =  vec4(clamp(pow(cumulativeColour, vec3(1 / 2.4)), ambientLight, 1.0), 1.0);
