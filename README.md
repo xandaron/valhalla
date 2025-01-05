@@ -42,9 +42,11 @@ odin build . -out:build/build.exe
 ## Demo
 
 ![CMY Bunny](demo/CMY_Bunny.gif)
+
 *The CMY Bunny demonstrates a rendered scene of the Stanford bunny illuminated by rotating Cyan, Magenta, and Yellow point lights around the Z-axis.*
 
 ![RGB Bunny Box](demo/RGB_Bunny_Box.gif)
+
 *The RGB Bunny Box showcases a rendered scene of the Stanford bunny inside a box, lit by Red, Green, and Blue point lights rotating around the Y-axis.*
 
 ## Roadmap
@@ -52,7 +54,8 @@ odin build . -out:build/build.exe
 - [X] Implement basic rendering pipeline
 - [X] Implement basic lighting
 - [X] Implement shadow mapping
-- [ ] Add support for various non-photorealistic rendering techniques
+- [ ] HDR support
+- [ ] Support for various non-photorealistic rendering techniques
 - [ ] Optimize performance
 - [ ] Integrate with future game engine
 
