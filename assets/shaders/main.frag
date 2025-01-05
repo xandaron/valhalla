@@ -27,7 +27,7 @@ layout(location = 2) in vec3 inNormal;
 
 layout(location = 0) out vec4 outColour;
 
-#define ambientLight 0.0
+#define ambientLight 0.1
 
 float textureProj(vec4 shadowCoord, float arrayIndex) {
     float dist = texture(shadowMap, vec3(shadowCoord.xy, arrayIndex)).r;
@@ -45,9 +45,9 @@ float filterPCF(vec4 shadowCoord, float arrayIndex) {
 	const float range = 1.5;
 	for (float x = -range; x <= range; x++) {
 		for (float y = -range; y <= range; y++) {
+
 			sum += textureProj(shadowCoord + vec4(vec2(x, y) * scale, 0.0, 0.0), arrayIndex);
 		}
-	
 	}
 	return sum / ((2 * range + 1) * (2 * range + 1));
 }
@@ -58,10 +58,6 @@ const mat4 biasMat = mat4(
 	0.0, 0.0, 1.0, 0.0,
 	0.5, 0.5, 0.0, 1.0 
 );
-
-vec3 powerVec3(vec3 base, float power) {
-    return vec3(pow(base.r, power), pow(base.g, power), pow(base.b, power));
-}
 
 void main() {
     vec3 cumulativeColour = vec3(0.0);
@@ -76,9 +72,8 @@ void main() {
 
         vec4 vertexPos = biasMat * lightBuffer.lights[i].mvp * inPosition;
 
-        float shadow = filterPCF(vertexPos / vertexPos.w, float(i));
+        float shadow = textureProj(vertexPos / vertexPos.w, float(i));
         cumulativeColour += albedo * shadow * lambertainCoefficient * lightBuffer.lights[i].colourIntensity.xyz / lightSquareDistance;
     }
-
-    outColour =  vec4(powerVec3(cumulativeColour, 1 / 2.4), 1.0);
+    outColour =  vec4(clamp(pow(cumulativeColour, vec3(1 / 2.4)), ambientLight, 1.0), 1.0);
 }
