@@ -36,26 +36,13 @@ main :: proc() {
 		dashCount: u32 = 0
 		filePath, _ := filepath.abs(os.args[0])
 		for i := len(filePath) - 1; i >= 0; i -= 1 {
-			when ODIN_OS == .Windows {
-				if os.is_path_separator(filePath[i]) {
-					dashCount += 1
-					if dashCount == 2 {
-						if err := os.set_current_directory(filePath[:i]); err != os.ERROR_NONE {
-							fmt.printfln("Failed to set current directory to '{}': {}", filePath[:i], err)
-						}
-						break
+			if filepath.is_separator(filePath[i]) {
+				dashCount += 1
+				if dashCount == 2 {
+					if err := os.set_current_directory(filePath[:i]); err != os.ERROR_NONE {
+						fmt.printfln("Failed to set current directory to '{}': {}", filePath[:i], err)
 					}
-				}
-			}
-			else { // Not sure if this is correct or not. Need to test.
-				if os.is_path_separator(rune(filePath[i])) {
-					dashCount += 1
-					if dashCount == 2 {
-						if err := os.set_current_directory(filePath[:i]); err != os.ERROR_NONE {
-							fmt.printfln("Failed to set current directory to '{}': {}", filePath[:i], err)
-						}
-						break
-					}
+					break
 				}
 			}
 		}

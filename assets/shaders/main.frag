@@ -45,7 +45,7 @@ float filterPCF(vec4 shadowCoord, float arrayIndex) {
 	vec2 scale = 1.0 / texDim;
 
 	float sum = 0.0;
-	const float range = 1.5;
+	#define range 1.5
 	for (float x = -range; x <= range; x++) {
 		for (float y = -range; y <= range; y++) {
 			sum += textureProj(shadowCoord + vec4(vec2(x, y) * scale, 0.0, 0.0), arrayIndex);
