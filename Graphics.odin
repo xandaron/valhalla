@@ -65,15 +65,6 @@ vertexInputAttributeDescriptions: []vk.VertexInputAttributeDescription = {
 ENGINE_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
 
 @(private = "file")
-MODEL_PATH: cstring : "./assets/models/bunny/bunny.fbx"
-
-@(private = "file")
-TEXTURE_PATH: cstring : "./assets/models/bunny/white.jpg"
-
-@(private = "file")
-NORMALS_PATH: cstring : "./assets/models/bunny/normals.jpg"
-
-@(private = "file")
 MAX_FRAMES_IN_FLIGHT: u32 : 2
 
 @(private = "file")
@@ -2089,13 +2080,20 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 		cleanupAssets(graphicsContext)
 	}
 
-	loadModels(graphicsContext, {MODEL_PATH, "./assets/models/cube/cube_inverted.fbx"})
+	loadModels(
+		graphicsContext,
+		{"./assets/models/bunny/bunny.fbx", "./assets/models/cube/cube_inverted.fbx"},
+	)
 
 	createVertexBuffer(graphicsContext)
 	createIndexBuffer(graphicsContext)
 
-	loadTextures(graphicsContext, &albidos, {TEXTURE_PATH, "./assets/models/cube/texture.jpg"})
-	loadTextures(graphicsContext, &normals, {NORMALS_PATH})
+	loadTextures(
+		graphicsContext,
+		&albidos,
+		{"./assets/textures/white.jpg", "./assets/models/cube/texture.jpg"},
+	)
+	loadTextures(graphicsContext, &normals, {"./assets/textures/normal.jpg"})
 
 	now := time.now()
 	instances = make([]Instance, 2)
@@ -4066,13 +4064,13 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 		position: Vec3
 		direction: Vec3
 		lookAtVector: Vec3
-		// position =
-		// 	rotation3(
-		// 		f32(radians(30.0 * time.duration_seconds(time.since(startTime)))),
-		// 		Vec3{0, 1, 0},
-		// 	) *
-		// 	light.position
-		position = light.position
+		position =
+			rotation3(
+				f32(radians(30.0 * time.duration_seconds(time.since(startTime)))),
+				Vec3{0, 1, 0},
+			) *
+			light.position
+		// position = light.position
 		direction = normalize(Vec3{0, 0, 0} - position)
 		lookAtVector = Vec3{0, 0, 0}
 		up: Vec3
