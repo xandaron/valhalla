@@ -41,6 +41,10 @@ odin build . -out:build/build.exe
 
 ## Demo
 
+![Rigged Zombie](demo/Zombie_Walking.gif)
+
+*A demo of a rigged 3D model and animation.*
+
 ![CMY Bunny](demo/CMY_Bunny.gif)
 
 *The CMY Bunny demonstrates a rendered scene of the Stanford bunny illuminated by rotating Cyan, Magenta, and Yellow point lights around the Z-axis.*
