@@ -8,6 +8,7 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
+import "imgui"
 import "vendor:glfw"
 
 APP_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
@@ -27,7 +28,8 @@ cameraMove: Vec3 = {0, 0, 0}
 logger: runtime.Logger
 
 EngineState :: struct {
-	camera:          Camera,
+	cameras:         []Camera,
+	cameraID:        u32,
 	graphicsContext: GraphicsContext,
 }
 
@@ -115,17 +117,9 @@ main :: proc() {
 	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
 
 	engineState: EngineState = {
-		camera = {
-			eye = {0, 0.2, -0.4},
-			center = {0, 0, 0},
-			up = {0, 1, 0},
-			fov = 45.0,
-			mode = .PERSPECTIVE,
-		},
+		cameraID = 0,
 		graphicsContext = {window = window},
 	}
-	engineState.camera.distance = distance(engineState.camera.center, engineState.camera.eye)
-
 	glfw.SetWindowUserPointer(window, &engineState)
 
 	scene, err := loadScene(&engineState.graphicsContext, "./assets/scenes/bunny_box.json")
@@ -133,6 +127,9 @@ main :: proc() {
 		log.logf(.Fatal, "Failed to load scene: {}", err)
 		panic("Failed to load scene")
 	}
+
+	engineState.cameras = scene.cameras
+	defer delete(engineState.cameras)
 
 	initVkGraphics(&engineState.graphicsContext, scene)
 	defer clanupVkGraphics(&engineState.graphicsContext)
@@ -146,30 +143,30 @@ main :: proc() {
 		if mouseMode {
 			if mouseDelta != {0, 0} {
 				axis: Vec3 = {0, 0, 0}
-				forward := engineState.camera.center - engineState.camera.eye
+				forward := engineState.cameras[engineState.cameraID].center - engineState.cameras[engineState.cameraID].eye
 				if mouseDelta.x < 0 {
-					axis -= engineState.camera.up
+					axis -= engineState.cameras[engineState.cameraID].up
 				} else if mouseDelta.x > 0 {
-					axis += engineState.camera.up
+					axis += engineState.cameras[engineState.cameraID].up
 				}
 				if mouseDelta.y > 0 {
-					axis += cross(engineState.camera.up, forward)
+					axis += cross(engineState.cameras[engineState.cameraID].up, forward)
 				} else if mouseDelta.y < 0 {
-					axis -= cross(engineState.camera.up, forward)
+					axis -= cross(engineState.cameras[engineState.cameraID].up, forward)
 				}
 				rotation := rotation3(f32(radians(cameraSpeed)), axis)
-				engineState.camera.up = rotation * engineState.camera.up
+				engineState.cameras[engineState.cameraID].up = rotation * engineState.cameras[engineState.cameraID].up
 				forward = rotation * forward
-				engineState.camera.eye = engineState.camera.center - forward
+				engineState.cameras[engineState.cameraID].eye = engineState.cameras[engineState.cameraID].center - forward
 				mouseDelta = {0, 0}
 			}
 			if scrollDelta.y != 0 {
 				forward :=
-					(engineState.camera.center - engineState.camera.eye) /
-					engineState.camera.distance
-				engineState.camera.distance *= 1 + f32(-scrollDelta.y * 0.1)
-				engineState.camera.eye =
-					engineState.camera.center - forward * engineState.camera.distance
+					(engineState.cameras[engineState.cameraID].center - engineState.cameras[engineState.cameraID].eye) /
+					engineState.cameras[engineState.cameraID].distance
+				engineState.cameras[engineState.cameraID].distance *= 1 + f32(-scrollDelta.y * 0.1)
+				engineState.cameras[engineState.cameraID].eye =
+					engineState.cameras[engineState.cameraID].center - forward * engineState.cameras[engineState.cameraID].distance
 				scrollDelta = {0, 0}
 			}
 		}
@@ -177,31 +174,31 @@ main :: proc() {
 		if cameraMove.x != 0 {
 			right := normalize(
 				cross(
-					engineState.camera.up,
-					(engineState.camera.center - engineState.camera.eye) /
-					engineState.camera.distance,
+					engineState.cameras[engineState.cameraID].up,
+					(engineState.cameras[engineState.cameraID].center - engineState.cameras[engineState.cameraID].eye) /
+					engineState.cameras[engineState.cameraID].distance,
 				),
 			)
 			movement := cameraMoveSpeed * cameraMove.x * right
-			engineState.camera.eye += movement
-			engineState.camera.center += movement
+			engineState.cameras[engineState.cameraID].eye += movement
+			engineState.cameras[engineState.cameraID].center += movement
 		}
 		if cameraMove.y != 0 {
-			movement := cameraMoveSpeed * cameraMove.y * engineState.camera.up
-			engineState.camera.eye += movement
-			engineState.camera.center += movement
+			movement := cameraMoveSpeed * cameraMove.y * engineState.cameras[engineState.cameraID].up
+			engineState.cameras[engineState.cameraID].eye += movement
+			engineState.cameras[engineState.cameraID].center += movement
 		}
 		if cameraMove.z != 0 {
 			movement :=
 				cameraMoveSpeed *
 				cameraMove.z *
-				(engineState.camera.center - engineState.camera.eye) /
-				engineState.camera.distance
-			engineState.camera.eye += movement
-			engineState.camera.center += movement
+				(engineState.cameras[engineState.cameraID].center - engineState.cameras[engineState.cameraID].eye) /
+				engineState.cameras[engineState.cameraID].distance
+			engineState.cameras[engineState.cameraID].eye += movement
+			engineState.cameras[engineState.cameraID].center += movement
 		}
 
-		drawFrame(&engineState.graphicsContext, engineState.camera)
+		drawFrame(&engineState.graphicsContext, engineState.cameras[engineState.cameraID])
 		lastFrameTime = time.now()
 		calcFrameRate(window)
 		free_all(context.temp_allocator)
@@ -272,7 +269,8 @@ keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods:
 		}
 	}
 	if key == glfw.KEY_C && action == glfw.PRESS {
-		camera := (^EngineState)(glfw.GetWindowUserPointer(window))^.camera
+		engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
+		camera := engineState.cameras[engineState.cameraID]
 		log.logf(
 			.Debug,
 			"eye: ({}, {}, {}), center: ({}, {}, {}), up: ({}, {}, {})",

@@ -4261,10 +4261,10 @@ updateInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 	now := time.now()
 	for &instance, instanceIndex in instances {
 		instanceData[instanceIndex] = {
-			model         = translate(
+			model                = translate(
 				instance.position,
 			) * quatToRotation(instance.rotation) * scale(instance.scale),
-			boneOffset    = boneOffset,
+			boneOffset           = boneOffset,
 			textureSamplerOffset = f32(instance.textureID),
 			normalsSamplerOffset = f32(instance.normalID),
 		}
