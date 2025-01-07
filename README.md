@@ -58,8 +58,9 @@ odin build . -out:build/build.exe
 - [X] Implement basic rendering pipeline
 - [X] Implement basic lighting
 - [X] Implement shadow mapping
-- [ ] Add support for storing and loading scenes
+- [X] Add support for loading scenes
 - [ ] Add GUI to edit scene objects and properties
+- [ ] Add support to store scenes
 - [ ] HDR support
 
 ## Contributing
