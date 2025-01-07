@@ -58,40 +58,21 @@ glfwErrorCallback :: proc "c" (code: i32, desc: cstring) {
 //########################################################//
 
 // TODO: There has to be a better way of doing this.
-when ODIN_OS == .Windows {
-	vkDebugCallback :: proc "std" (
-		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
-		messageType: vk.DebugUtilsMessageTypeFlagsEXT,
-		pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
-		pUserData: rawptr,
-	) -> b32 {
-		context = runtime.default_context()
-		context.logger = logger
-		log.logf(
-			vkDecodeSeverity(messageSeverity),
-			"Vulkan validation layer ({}):\n{}\n",
-			vkDecodeMessageTypeFlag(messageType),
-			pCallbackData.pMessage,
-		)
-		return false
-	}
-} else {
-	vkDebugCallback :: proc "cdecl" (
-		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
-		messageType: vk.DebugUtilsMessageTypeFlagsEXT,
-		pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
-		pUserData: rawptr,
-	) -> b32 {
-		context = runtime.default_context()
-		context.logger = logger
-		log.logf(
-			vkDecodeSeverity(messageSeverity),
-			"Vulkan validation layer ({}):\n{}\n",
-			vkDecodeMessageTypeFlag(messageType),
-			pCallbackData.pMessage,
-		)
-		return false
-	}
+vkDebugCallback :: proc "system" (
+	messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
+	messageType: vk.DebugUtilsMessageTypeFlagsEXT,
+	pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
+	pUserData: rawptr,
+) -> b32 {
+	context = runtime.default_context()
+	context.logger = logger
+	log.logf(
+		vkDecodeSeverity(messageSeverity),
+		"Vulkan validation layer ({}):\n{}\n",
+		vkDecodeMessageTypeFlag(messageType),
+		pCallbackData.pMessage,
+	)
+	return false
 }
 
 vkDecodeSeverity :: proc(
@@ -164,4 +145,19 @@ vkPopulateDebugMessengerCreateInfo :: proc() -> (createInfo: vk.DebugUtilsMessen
 		pUserData       = nil,
 	}
 	return
+}
+
+
+//########################################################//
+//                          Imgui                         //
+//########################################################//
+
+
+imguiCheckVkResult :: proc "c" (err: vk.Result) {
+	context = runtime.default_context()
+	if int(err) == 0 { return }
+	if int(err) < 0 {
+		log.logf(.Fatal, "Imgui-Vulkan: VkResult = {}", err)
+	}
+	log.logf(.Error, "Imgui-Vulkan: VkResult = {}", err)
 }

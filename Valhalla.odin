@@ -8,7 +8,6 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
-import "imgui"
 import "vendor:glfw"
 
 APP_VERSION: u32 : (0 << 22) | (0 << 12) | (1)
@@ -30,7 +29,7 @@ logger: runtime.Logger
 EngineState :: struct {
 	cameras:         []Camera,
 	cameraID:        u32,
-	graphicsContext: GraphicsContext,
+	graphicsContext: ^GraphicsContext,
 }
 
 main :: proc() {
@@ -118,11 +117,11 @@ main :: proc() {
 
 	engineState: EngineState = {
 		cameraID = 0,
-		graphicsContext = {window = window},
+		graphicsContext = &{window = window},
 	}
 	glfw.SetWindowUserPointer(window, &engineState)
 
-	scene, err := loadScene(&engineState.graphicsContext, "./assets/scenes/bunny_box.json")
+	scene, err := loadScene("./assets/scenes/bunny_box.json")
 	if err != .None {
 		log.logf(.Fatal, "Failed to load scene: {}", err)
 		panic("Failed to load scene")
@@ -130,9 +129,9 @@ main :: proc() {
 
 	engineState.cameras = scene.cameras
 	defer delete(engineState.cameras)
-
-	initVkGraphics(&engineState.graphicsContext, scene)
-	defer clanupVkGraphics(&engineState.graphicsContext)
+	
+	initVkGraphics(engineState.graphicsContext, scene)
+	defer clanupVkGraphics(engineState.graphicsContext)
 
 	deleteScene(scene)
 
@@ -198,9 +197,10 @@ main :: proc() {
 			engineState.cameras[engineState.cameraID].center += movement
 		}
 
-		drawFrame(&engineState.graphicsContext, engineState.cameras[engineState.cameraID])
+		drawFrame(engineState.graphicsContext, engineState.cameras[engineState.cameraID])
 		lastFrameTime = time.now()
 		calcFrameRate(window)
+
 		free_all(context.temp_allocator)
 	}
 }

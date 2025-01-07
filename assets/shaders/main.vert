@@ -40,8 +40,8 @@ layout(location = 4) in vec4 inWeights;
 
 layout(location = 0) out vec4 outPosition;
 layout(location = 1) out vec2 outUV;
-layout(location = 2) out uint outAlbedoTexture;
-layout(location = 3) out uint outNormalTexture;
+layout(location = 2) out float outAlbedoTexture;
+layout(location = 3) out float outNormalTexture;
 layout(location = 4) out vec3 outNormal;
 
 void main() {

@@ -6,6 +6,9 @@ import "core:mem"
 import "core:os"
 import "core:strings"
 import "core:time"
+import "imgui"
+import implGLFW "imgui/imgui_impl_glfw"
+import implVulkan "imgui/imgui_impl_vulkan"
 import fbx "ufbx"
 import "vendor:glfw"
 import img "vendor:stb/image"
@@ -271,6 +274,8 @@ Camera :: struct {
 
 GraphicsContext :: struct {
 	window:                glfw.WindowHandle,
+	imguiContext:          ^imgui.Context,
+	imguiDescriptorPool:   vk.DescriptorPool,
 	instance:              vk.Instance,
 	debugMessenger:        vk.DebugUtilsMessengerEXT,
 	surface:               vk.SurfaceKHR,
@@ -385,6 +390,90 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext, scene: Scene) {
 
 	createGraphicsPipelines(graphicsContext)
 	createComputePipelines(graphicsContext)
+
+	initImgui(graphicsContext)
+}
+
+@(private = "file")
+initImgui :: proc(using graphicsContext: ^GraphicsContext) {
+	poolSizes: []vk.DescriptorPoolSize = {
+		{ .SAMPLER, 1000 },
+		{ .COMBINED_IMAGE_SAMPLER, 1000 },
+		{ .SAMPLED_IMAGE, 1000 },
+		{ .STORAGE_IMAGE, 1000 },
+		{ .UNIFORM_TEXEL_BUFFER, 1000 },
+		{ .STORAGE_TEXEL_BUFFER, 1000 },
+		{ .UNIFORM_BUFFER, 1000 },
+		{ .STORAGE_BUFFER, 1000 },
+		{ .UNIFORM_BUFFER_DYNAMIC, 1000 },
+		{ .STORAGE_BUFFER_DYNAMIC, 1000 },
+		{ .INPUT_ATTACHMENT, 1000 }
+	}
+
+	descriptorPoolCreateInfo: vk.DescriptorPoolCreateInfo = {
+		sType = .DESCRIPTOR_POOL_CREATE_INFO,
+		pNext = nil,
+		flags = {.FREE_DESCRIPTOR_SET},
+		maxSets = 1000,
+		poolSizeCount = u32(len(poolSizes)),
+		pPoolSizes = raw_data(poolSizes),
+	}
+	if err := vk.CreateDescriptorPool(device, &descriptorPoolCreateInfo, nil, &imguiDescriptorPool); err != .SUCCESS {
+		log.log(.Fatal, "Failed to create imgui descriptor pool!")
+		panic("Failed to create imgui descriptor pool!")
+	}
+
+	imguiContext = imgui.CreateContext()
+	// io: ^imgui.IO = imgui.GetIO()
+	// io.ConfigFlags |= {.NavEnableKeyboard, .DockingEnable}
+
+	implVulkan.LoadFunctions(
+		proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
+			return vk.GetInstanceProcAddr((vk.Instance)(user_data), function_name)
+		},
+		instance,
+	)
+
+	ok := implGLFW.InitForVulkan(window, true)
+	if !ok {
+		log.log(.Fatal, "Failed to initialize imgui for vulkan, quitting application.")
+		return
+	}
+
+	implInitInfo: implVulkan.InitInfo = {
+		Instance = instance,
+		PhysicalDevice = physicalDevice,
+		Device = device,
+		QueueFamily = queueFamilies.graphicsFamily,
+		Queue = graphicsQueue,
+		DescriptorPool = imguiDescriptorPool,
+		RenderPass = pipelines[PipelineIndex.MAIN].renderPass,
+		MinImageCount = 2,
+		ImageCount = 2,
+		MSAASamples = ._1,
+	
+		// (Optional)
+		PipelineCache = {},
+		Subpass = 0,
+	
+		// (Optional) Dynamic Rendering
+		// Need to explicitly enable VK_KHR_dynamic_rendering extension to use this, even for Vulkan 1.3.
+		UseDynamicRendering = false,
+		// NOTE: Odin-imgui: this field if #ifdef'd out in the Dear ImGui side if the struct is not defined.
+		// Keeping the field is a pretty safe bet, but make sure to check this if you have issues!
+		PipelineRenderingCreateInfo = {},
+	
+		// (Optional) Allocation, Debugging
+		Allocator = nil,
+		CheckVkResultFn = imguiCheckVkResult,
+		MinAllocationSize = 1024*1024, // Minimum allocation size. Set to 1024*1024 to satisfy zealous best practices validation layer and waste a little memory.
+	}
+
+	ok = implVulkan.Init(&implInitInfo)
+	if !ok {
+		log.log(.Fatal, "Failed to init vulkan impl.")
+		panic("Failed to init vulkan impl.")
+	}
 }
 
 @(private = "file")
@@ -480,7 +569,7 @@ createInstance :: proc(using graphicsContext: ^GraphicsContext) {
 @(private = "file")
 createSurface :: proc(using graphicsContext: ^GraphicsContext) {
 	if glfw.CreateWindowSurface(instance, window, nil, &surface) != .SUCCESS {
-		log.log(.Error, "Failed to create surface!")
+		log.log(.Fatal, "Failed to create surface!")
 		panic("Failed to create surface!")
 	}
 }
@@ -849,7 +938,7 @@ getSwapchainInfo :: proc(using graphicsContext: ^GraphicsContext) {
 	delete(swapchainSupport.formats)
 	delete(swapchainSupport.modes)
 
-	ideal := swapchainSupport.capabilities.minImageCount + 1
+	ideal: u32 = 2
 	max := swapchainSupport.capabilities.maxImageCount
 	swapchainImageCount = max if max > 0 && ideal > max else ideal
 	swapchainTransform = swapchainSupport.capabilities.currentTransform
@@ -954,8 +1043,8 @@ createSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 recreateSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	width, height := glfw.GetFramebufferSize(window)
 	for width == 0 && height == 0 {
-		width, height = glfw.GetFramebufferSize(window)
 		glfw.WaitEvents()
+		width, height = glfw.GetFramebufferSize(window)
 	}
 
 	vk.DeviceWaitIdle(device)
@@ -2127,13 +2216,7 @@ LoadSceneError :: enum {
 	FailedToParseJson,
 }
 
-loadScene :: proc(
-	graphicsContext: ^GraphicsContext,
-	sceneFile: string,
-) -> (
-	scene: Scene,
-	err: LoadSceneError = .None,
-) {
+loadScene :: proc(sceneFile: string) -> (scene: Scene, err: LoadSceneError = .None) {
 	data, ok := os.read_entire_file_from_filename(sceneFile)
 	if !ok {
 		log.logf(.Error, "Failed to load scene file: {}", sceneFile)
@@ -3406,7 +3489,7 @@ createGraphicsPipelines :: proc(
 	using graphicsContext: ^GraphicsContext,
 	pipelineCache: vk.PipelineCache = 0,
 ) {
-	pipelineCount: u32 = 2
+	pipelineCount: u32 : 2
 	pipelineInfos := make([]vk.GraphicsPipelineCreateInfo, pipelineCount)
 	defer delete(pipelineInfos)
 
@@ -3438,37 +3521,25 @@ createGraphicsPipelines :: proc(
 		panic("Failed to create pipeline layout!")
 	}
 
-	shadowShaderStages := [?]vk.ShaderStageFlag{.VERTEX, .FRAGMENT}
-	shadowShaderFiles := [?]string {
-		"./assets/shaders/light_vert.spv",
-		/*"./assets/shaders/light_frag.spv",*/
-	}
+	shadowShaderFiles := "./assets/shaders/light_vert.spv"
 
-	shadowShaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, len(shadowShaderFiles))
-	for path, index in shadowShaderFiles {
-		shadowShaderStagesInfo[index] = {
-			sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-			pNext               = nil,
-			flags               = {},
-			stage               = {shadowShaderStages[index]},
-			module              = createShaderModule(graphicsContext, path),
-			pName               = "main",
-			pSpecializationInfo = nil,
-		}
+	shadowShaderStagesInfo: vk.PipelineShaderStageCreateInfo = {
+		sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		pNext               = nil,
+		flags               = {},
+		stage               = {.VERTEX},
+		module              = createShaderModule(graphicsContext, shadowShaderFiles),
+		pName               = "main",
+		pSpecializationInfo = nil,
 	}
-	defer {
-		for stage in shadowShaderStagesInfo {
-			vk.DestroyShaderModule(device, stage.module, nil)
-		}
-		delete(shadowShaderStagesInfo)
-	}
+	defer vk.DestroyShaderModule(device, shadowShaderStagesInfo.module, nil)
 
 	pipelineInfos[0] = {
 		sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
 		pNext               = nil,
 		flags               = {},
-		stageCount          = u32(len(shadowShaderStagesInfo)),
-		pStages             = raw_data(shadowShaderStagesInfo),
+		stageCount          = 1,
+		pStages             = &shadowShaderStagesInfo,
 		pVertexInputState   = &{
 			sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 			pNext = nil,
@@ -3946,6 +4017,8 @@ recordGraphicsBuffer :: proc(
 		u32(len(pointLights)),
 	)
 
+	imgui.Render()
+
 	// MAIN
 	{
 		renderPassInfo: vk.RenderPassBeginInfo = {
@@ -3997,6 +4070,7 @@ recordGraphicsBuffer :: proc(
 				u32(i),
 			)
 		}
+		implVulkan.RenderDrawData(imgui.GetDrawData(), commandBuffer)
 
 		vk.CmdEndRenderPass(commandBuffer)
 	}
@@ -4415,6 +4489,12 @@ updateInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 drawFrame :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
 	vk.WaitForFences(device, 1, &inFlightFrames[currentFrame], true, max(u64))
 
+	implVulkan.NewFrame()
+	implGLFW.NewFrame()
+	imgui.NewFrame()
+
+	imgui.ShowDemoWindow()
+
 	imageIndex: u32
 	if result := vk.AcquireNextImageKHR(
 		device,
@@ -4582,10 +4662,19 @@ cleanupAssets :: proc(using graphicsContext: ^GraphicsContext) {
 	delete(pointLights)
 }
 
+@(private = "file")
+cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
+	implVulkan.Shutdown()
+	implGLFW.Shutdown()
+	vk.DestroyDescriptorPool(device, imguiDescriptorPool, nil)
+	imgui.DestroyContext(imguiContext)
+}
+
 clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.DeviceWaitIdle(device)
 
 	cleanupAssets(graphicsContext)
+	cleanupImgui(graphicsContext)
 
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		vk.DestroyBuffer(device, uniformBuffers[index].buffer, nil)
