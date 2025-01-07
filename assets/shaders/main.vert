@@ -10,7 +10,8 @@ layout(binding = 0) readonly uniform UniformBuffer {
 struct InstanceInfo {
     mat4 model;
     uint boneOffset;
-    float samplerOffset;
+    float albedoSamplerOffset;
+    float normalSamplerOffset;
 };
 
 layout(binding = 1) readonly buffer InstanceBuffer {
@@ -38,8 +39,10 @@ layout(location = 3) in uvec4 inBones;
 layout(location = 4) in vec4 inWeights;
 
 layout(location = 0) out vec4 outPosition;
-layout(location = 1) out vec3 outUV;
-layout(location = 2) out vec3 outNormal;
+layout(location = 1) out vec2 outUV;
+layout(location = 2) out uint outAlbedoTexture;
+layout(location = 3) out uint outNormalTexture;
+layout(location = 4) out vec3 outNormal;
 
 void main() {
     mat4 boneTransform = mat4(0.0);
@@ -54,6 +57,8 @@ void main() {
     outPosition = vertexTransform * vec4(inPosition, 1.0);
 
     gl_Position = uniformBuffer.viewProjection * outPosition;
-    outUV = vec3(inUV.xy, instanceBuffer.instanceInfo[gl_InstanceIndex].samplerOffset);
+    outUV = inUV.xy;
+    outAlbedoTexture = instanceBuffer.instanceInfo[gl_InstanceIndex].albedoSamplerOffset;
+    outNormalTexture = instanceBuffer.instanceInfo[gl_InstanceIndex].normalSamplerOffset;
     outNormal = normalize(mat3(vertexTransform) * inNormal);
 }

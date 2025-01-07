@@ -1,0 +1,68 @@
+{
+    "cameras": [
+        {
+            "eye": [0.0, 0.2, -0.4],
+            "center": [0.0, 0.0, 0.0],
+            "up": [0.0, 1.0, 0.0],
+            "distance": 0.447214,
+            "fov": 45.0,
+            "type": 0,
+            "mode": 0
+        }
+    ],
+    "lights": [
+        {
+            "position": [0.0, 0.3, 0.2],
+            "direction": [0.0, -0.3, -0.2],
+            "colour": [1.0, 0.0, 0.0],
+            "intensity": 0.04,
+            "fov": 120.0,
+            "type": 0
+        },
+        {
+            "position": [0.1732050808, 0.3, -0.1],
+            "direction": [-0.1732050808, -0.3, 0.1],
+            "colour": [0.0, 1.0, 0.0],
+            "intensity": 0.04,
+            "fov": 120.0,
+            "type": 0
+        },
+        {
+            "position": [-0.1732050808, 0.3, -0.1],
+            "direction": [0.1732050808, 0.3, 0.1],
+            "colour": [0.0, 0.0, 1.0],
+            "intensity": 0.04,
+            "fov": 120.0,
+            "type": 0
+        }
+    ],
+    "models": [
+        "./assets/models/bunny/bunny.fbx",
+        "./assets/models/cube/cube_inverted.fbx"
+    ],
+    "albedos": [
+        "./assets/textures/white.jpg",
+        "./assets/models/cube/texture.jpg"
+    ],
+    "normals": [
+        "./assets/textures/normal.jpg"
+    ],
+    "instances": [
+        {
+            "model": 0,
+            "albedo": 0,
+            "normal": 0,
+            "position": [-0.02, -0.1, 0.0],
+            "rotation": [0.0, 180.0, 0.0],
+            "scale": [1.0, 1.0, 1.0]
+        },
+        {
+            "model": 1,
+            "albedo": 1,
+            "normal": 0,
+            "position": [0.0, 0.14, 0.0],
+            "rotation": [0.0, 0.0, 0.0],
+            "scale": [0.2, 0.2, 0.2]
+        }
+    ]
+}

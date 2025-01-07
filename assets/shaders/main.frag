@@ -22,8 +22,10 @@ layout(binding = 5) uniform sampler2DArray normalArray;
 layout(binding = 6) uniform sampler2DArray shadowMap;
 
 layout(location = 0) in vec4 inPosition;
-layout(location = 1) in vec3 inUV;
-layout(location = 2) in vec3 inNormal;
+layout(location = 1) in vec2 inUV;
+layout(location = 2) in float inAlbedoTexture;
+layout(location = 3) in float inNormalTexture;
+layout(location = 4) in vec3 inNormal;
 
 layout(location = 0) out vec4 outColour;
 
@@ -63,8 +65,8 @@ const mat4 biasMat = mat4(
 
 void main() {
     vec3 cumulativeColour = vec3(0.0);
-    vec3 albedo = texture(albedoArray, inUV).xyz;
-    vec3 normal = outerProduct(inNormal, vec3(0.0, 0.0, 1.0)) * (texture(normalArray, inUV).xyz - 0.5) * 2.0;
+    vec3 albedo = texture(albedoArray, vec3(inUV, inAlbedoTexture)).xyz;
+    vec3 normal = outerProduct(inNormal, vec3(0.0, 0.0, 1.0)) * (texture(normalArray, vec3(inUV, inNormalTexture)).xyz - 0.5) * 2.0;
 
     for (uint i = 0; i < uniformBuffer.lightCount; i++) {
         vec3 relativePosition = lightBuffer.lights[i].position.xyz - inPosition.xyz;

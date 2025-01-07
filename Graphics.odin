@@ -1,9 +1,10 @@
 package Valhalla
 
-import "core:c"
+import "core:encoding/json"
 import "core:log"
 import "core:mem"
 import "core:os"
+import "core:strings"
 import "core:time"
 import fbx "ufbx"
 import "vendor:glfw"
@@ -155,34 +156,12 @@ Image :: struct {
 	sampler: vk.Sampler,
 }
 
-@(private = "file")
-PointLight :: struct {
-	position:        Vec3,
-	direction:       Vec3,
-	colourIntensity: Vec3,
-	fov:             f32,
-}
-
 // Use Vec4 becuse of alignment issues when using Vec3
 @(private = "file")
 LightData :: struct #align (16) {
 	mvp:             Mat4,
 	position:        Vec4,
 	colourIntensity: Vec4,
-}
-
-@(private = "file")
-Instance :: struct {
-	modelID:       u32,
-	animID:        u32,
-	textureID:     u32,
-	position:      Vec3,
-	rotation:      Quat,
-	scale:         Vec3,
-	positionKeys:  []u32,
-	rotationKeys:  []u32,
-	scaleKeys:     []u32,
-	animStartTime: time.Time,
 }
 
 @(private = "file")
@@ -202,9 +181,10 @@ UniformBuffer :: struct #align (16) {
 
 @(private = "file")
 InstanceInfo :: struct #align (16) {
-	model:         Mat4,
-	boneOffset:    u32,
-	samplerOffset: f32,
+	model:                Mat4,
+	boneOffset:           u32,
+	textureSamplerOffset: f32,
+	normalsSamplerOffset: f32,
 }
 
 @(private = "file")
@@ -247,6 +227,36 @@ Pipeline :: struct {
 	layout:               vk.PipelineLayout,
 }
 
+PointLight :: struct {
+	position:        Vec3,
+	direction:       Vec3,
+	colourIntensity: Vec3,
+	fov:             f32,
+}
+
+Instance :: struct {
+	modelID:       u32,
+	animID:        u32,
+	textureID:     f32,
+	normalID:      f32,
+	position:      Vec3,
+	rotation:      Quat,
+	scale:         Vec3,
+	positionKeys:  []u32,
+	rotationKeys:  []u32,
+	scaleKeys:     []u32,
+	animStartTime: time.Time,
+}
+
+Scene :: struct {
+	cameras:      []Camera,
+	pointLights:  []PointLight,
+	modelPaths:   []cstring,
+	texturePaths: []cstring,
+	normalPaths:  []cstring,
+	instances:    []Instance,
+}
+
 CameraMode :: enum {
 	PERSPECTIVE,
 	ORTHOGRAPHIC,
@@ -255,6 +265,7 @@ CameraMode :: enum {
 Camera :: struct {
 	eye, center, up: Vec3,
 	distance:        f32,
+	fov:             f32,
 	mode:            CameraMode,
 }
 
@@ -330,7 +341,7 @@ GraphicsContext :: struct {
 // #                               Init                              #
 // ###################################################################
 
-initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
+initVkGraphics :: proc(using graphicsContext: ^GraphicsContext, scene: Scene) {
 	vk.load_proc_addresses(rawptr(glfw.GetInstanceProcAddress))
 
 	framebufferResized = false
@@ -358,8 +369,8 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	// Shader buffers
 	createUniformBuffer(graphicsContext)
 
-	// Assets
-	loadAssets(graphicsContext)
+	// Scene/Assets
+	loadAssets(graphicsContext, scene)
 
 	// Frame Resources
 	createStorageImages(graphicsContext)
@@ -2075,75 +2086,32 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext) {
 }
 
 @(private = "file")
-loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
+loadAssets :: proc(using graphicsContext: ^GraphicsContext, scene: Scene) {
 	if hasAssetsLoaded {
 		cleanupAssets(graphicsContext)
 	}
 
-	loadModels(
-		graphicsContext,
-		{"./assets/models/bunny/bunny.fbx", "./assets/models/cube/cube_inverted.fbx"},
-	)
+	loadModels(graphicsContext, scene.modelPaths)
 
 	createVertexBuffer(graphicsContext)
 	createIndexBuffer(graphicsContext)
 
-	loadTextures(
-		graphicsContext,
-		&albidos,
-		{"./assets/textures/white.jpg", "./assets/models/cube/texture.jpg"},
-	)
-	loadTextures(graphicsContext, &normals, {"./assets/textures/normal.jpg"})
+	loadTextures(graphicsContext, &albidos, scene.texturePaths)
+	loadTextures(graphicsContext, &normals, scene.normalPaths)
 
 	now := time.now()
-	instances = make([]Instance, 2)
-	instances[0] = {
-		modelID       = 0,
-		animID        = 0,
-		textureID     = 0,
-		position      = {-0.02, -0.1, 0},
-		rotation      = quatFromY(f32(radians(180.0))),
-		scale         = {1, 1, 1},
-		animStartTime = now,
+	instances = scene.instances
+	now = time.now()
+	for &instance in instances {
+		skeletonLength := len(models[instance.modelID].skeleton)
+		boneCount += skeletonLength
+		instance.positionKeys = make([]u32, skeletonLength)
+		instance.rotationKeys = make([]u32, skeletonLength)
+		instance.scaleKeys = make([]u32, skeletonLength)
+		instance.animStartTime = now
 	}
-	instances[1] = {
-		modelID       = 1,
-		animID        = 0,
-		textureID     = 1,
-		position      = {0, 0.14, 0},
-		rotation      = quatFromY(0.0),
-		scale         = {0.2, 0.2, 0.2},
-		animStartTime = now,
-	}
-	skeletonLength := len(models[instances[0].modelID].skeleton)
-	boneCount += skeletonLength
-	instances[0].positionKeys = make([]u32, skeletonLength)
-	instances[0].rotationKeys = make([]u32, skeletonLength)
-	instances[0].scaleKeys = make([]u32, skeletonLength)
+	pointLights = scene.pointLights
 
-	pointLights = make([]PointLight, 3)
-	position := Vec3{0, 0.3, 0.2}
-	lightIntensity: f32 = 0.04
-	pointLights[0] = {
-		position        = position,
-		direction       = normalize(Vec3{0, 0, 0} - position),
-		colourIntensity = lightIntensity * Vec3{1, 0, 0},
-		fov             = f32(radians(120.0)),
-	}
-	position = rotation3(f32(radians(120.0)), Vec3{0, 1, 0}) * position
-	pointLights[1] = {
-		position        = position,
-		direction       = normalize(Vec3{0, 0, 0} - position),
-		colourIntensity = lightIntensity * Vec3{0, 1, 0},
-		fov             = f32(radians(120.0)),
-	}
-	position = rotation3(f32(radians(120.0)), Vec3{0, 1, 0}) * position
-	pointLights[2] = {
-		position        = position,
-		direction       = normalize(Vec3{0, 0, 0} - position),
-		colourIntensity = lightIntensity * Vec3{0, 0, 1},
-		fov             = f32(radians(120.0)),
-	}
 	createInstanceBuffer(graphicsContext)
 	createBoneBuffer(graphicsContext)
 	createLightBuffer(graphicsContext)
@@ -2151,6 +2119,154 @@ loadAssets :: proc(using graphicsContext: ^GraphicsContext) {
 	createShadowImage(graphicsContext)
 
 	hasAssetsLoaded = true
+}
+
+LoadSceneError :: enum {
+	None,
+	FailedToLoadSceneFile,
+	FailedToParseJson,
+}
+
+loadScene :: proc(
+	graphicsContext: ^GraphicsContext,
+	sceneFile: string,
+) -> (
+	scene: Scene,
+	err: LoadSceneError = .None,
+) {
+	data, ok := os.read_entire_file_from_filename(sceneFile)
+	if !ok {
+		log.logf(.Error, "Failed to load scene file: {}", sceneFile)
+		err = .FailedToLoadSceneFile
+		return
+	}
+	defer delete(data)
+
+	json_data, error := json.parse(data)
+	if error != .None {
+		log.logf(.Error, "Failed to parse json: {}", error)
+		err = .FailedToParseJson
+		return
+	}
+	defer json.destroy_value(json_data)
+
+	root := json_data.(json.Object)
+
+	cameras := root["cameras"].(json.Array)
+	scene.cameras = make([]Camera, len(cameras))
+	for camera, i in cameras {
+		camera := camera.(json.Object)
+		eye := camera["eye"].(json.Array)
+		center := camera["center"].(json.Array)
+		up := camera["up"].(json.Array)
+		scene.cameras[i] = {
+			eye      = Vec3 {
+				f32(eye[0].(json.Float)),
+				f32(eye[1].(json.Float)),
+				f32(eye[2].(json.Float)),
+			},
+			center   = Vec3 {
+				f32(center[0].(json.Float)),
+				f32(center[1].(json.Float)),
+				f32(center[2].(json.Float)),
+			},
+			up       = Vec3 {
+				f32(up[0].(json.Float)),
+				f32(up[1].(json.Float)),
+				f32(up[2].(json.Float)),
+			},
+			distance = f32(camera["distance"].(json.Float)),
+			fov      = f32(camera["fov"].(json.Float)),
+			mode     = .PERSPECTIVE if camera["mode"].(json.Float) == 0 else .ORTHOGRAPHIC,
+		}
+	}
+
+	lights := root["lights"].(json.Array)
+	scene.pointLights = make([]PointLight, len(lights))
+	for light, i in lights {
+		light := light.(json.Object)
+		position := light["position"].(json.Array)
+		direction := light["direction"].(json.Array)
+		colour := light["colour"].(json.Array)
+		scene.pointLights[i] = {
+			position        = Vec3 {
+				f32(position[0].(json.Float)),
+				f32(position[1].(json.Float)),
+				f32(position[2].(json.Float)),
+			},
+			direction       = Vec3 {
+				f32(direction[0].(json.Float)),
+				f32(direction[1].(json.Float)),
+				f32(direction[2].(json.Float)),
+			},
+			colourIntensity = f32(
+				light["intensity"].(json.Float),
+			) * Vec3{f32(colour[0].(json.Float)), f32(colour[1].(json.Float)), f32(colour[2].(json.Float))},
+			fov             = radians(f32(light["fov"].(json.Float))),
+		}
+	}
+
+	models := root["models"].(json.Array)
+	scene.modelPaths = make([]cstring, len(models))
+	for model, i in models {
+		scene.modelPaths[i] = strings.clone_to_cstring(model.(json.String))
+	}
+
+	albedos := root["albedos"].(json.Array)
+	scene.texturePaths = make([]cstring, len(albedos))
+	for texture, i in albedos {
+		scene.texturePaths[i] = strings.clone_to_cstring(texture.(json.String))
+	}
+
+	normals := root["normals"].(json.Array)
+	scene.normalPaths = make([]cstring, len(normals))
+	for normal, i in normals {
+		scene.normalPaths[i] = strings.clone_to_cstring(normal.(json.String))
+	}
+
+	instances := root["instances"].(json.Array)
+	scene.instances = make([]Instance, len(instances))
+	for instance, i in instances {
+		instance := instance.(json.Object)
+		position := instance["position"].(json.Array)
+		rotation := instance["rotation"].(json.Array)
+		scale := instance["scale"].(json.Array)
+		scene.instances[i] = {
+			modelID   = u32(instance["model"].(json.Float)),
+			animID    = 0,
+			textureID = f32(instance["albedo"].(json.Float)),
+			normalID  = f32(instance["normal"].(json.Float)),
+			position  = Vec3 {
+				f32(position[0].(json.Float)),
+				f32(position[1].(json.Float)),
+				f32(position[2].(json.Float)),
+			},
+			rotation  = quatFromX(
+				f32(rotation[0].(json.Float)),
+			) * quatFromY(f32(rotation[1].(json.Float))) * quatFromZ(f32(rotation[2].(json.Float))),
+			scale     = Vec3 {
+				f32(scale[0].(json.Float)),
+				f32(scale[1].(json.Float)),
+				f32(scale[2].(json.Float)),
+			},
+		}
+	}
+	return
+}
+
+deleteScene :: proc(scene: Scene) {
+	for &modelPath in scene.modelPaths {
+		delete(modelPath)
+	}
+	delete(scene.modelPaths)
+	for &texturePath in scene.texturePaths {
+		delete(texturePath)
+	}
+	delete(scene.texturePaths)
+	for &normalPath in scene.normalPaths {
+		delete(normalPath)
+	}
+	delete(scene.normalPaths)
 }
 
 // ###################################################################
@@ -4149,7 +4265,8 @@ updateInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 				instance.position,
 			) * quatToRotation(instance.rotation) * scale(instance.scale),
 			boneOffset    = boneOffset,
-			samplerOffset = f32(instance.textureID),
+			textureSamplerOffset = f32(instance.textureID),
+			normalsSamplerOffset = f32(instance.normalID),
 		}
 
 		model := &models[instance.modelID]

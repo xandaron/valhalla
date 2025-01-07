@@ -40,7 +40,11 @@ main :: proc() {
 				dashCount += 1
 				if dashCount == 2 {
 					if err := os.set_current_directory(filePath[:i]); err != os.ERROR_NONE {
-						fmt.printfln("Failed to set current directory to '{}': {}", filePath[:i], err)
+						fmt.printfln(
+							"Failed to set current directory to '{}': {}",
+							filePath[:i],
+							err,
+						)
 					}
 					break
 				}
@@ -95,7 +99,7 @@ main :: proc() {
 
 	width: i32 = 800
 	height: i32 = 600
-	name: cstring : "New Innsmouth"
+	name: cstring : "Valhalla"
 	monitor: glfw.MonitorHandle = nil
 	window := glfw.CreateWindow(width, height, name, monitor, nil)
 	if window == nil {
@@ -112,9 +116,10 @@ main :: proc() {
 
 	engineState: EngineState = {
 		camera = {
-			eye = {0, .2, -.4},
+			eye = {0, 0.2, -0.4},
 			center = {0, 0, 0},
 			up = {0, 1, 0},
+			fov = 45.0,
 			mode = .PERSPECTIVE,
 		},
 		graphicsContext = {window = window},
@@ -122,8 +127,17 @@ main :: proc() {
 	engineState.camera.distance = distance(engineState.camera.center, engineState.camera.eye)
 
 	glfw.SetWindowUserPointer(window, &engineState)
-	initVkGraphics(&engineState.graphicsContext)
+
+	scene, err := loadScene(&engineState.graphicsContext, "./assets/scenes/bunny_box.json")
+	if err != .None {
+		log.logf(.Fatal, "Failed to load scene: {}", err)
+		panic("Failed to load scene")
+	}
+
+	initVkGraphics(&engineState.graphicsContext, scene)
 	defer clanupVkGraphics(&engineState.graphicsContext)
+
+	deleteScene(scene)
 
 	lastFrameTime := time.now()
 	for !glfw.WindowShouldClose(window) {

@@ -38,7 +38,6 @@ createLogPath :: proc() -> string {
 		seconds,
 	)
 	return str
-
 }
 
 
