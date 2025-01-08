@@ -78,6 +78,9 @@ RENDER_SIZE: Vec2 : {1980, 1080}
 SHADOW_RESOLUTION: Vec2 : {2048, 2048}
 
 @(private = "file")
+IMAGES_RESOLUTION: Vec2 : {4096, 4096}
+
+@(private = "file")
 CLEAR_COLOUR: Vec4 : {150.0 / 255.0, 150.0 / 255.0, 150.0 / 255.0, 1.0}
 
 @(private = "file")
@@ -304,6 +307,7 @@ GraphicsContext :: struct {
 	pipelines:             []Pipeline,
 
 	// Frame Resources
+	imageSampler:          vk.Sampler,
 	inImage:               Image,
 	outImage:              Image,
 	shadowImages:          Image,
@@ -1841,7 +1845,7 @@ copyImage :: proc(
 upscaleImage :: proc(
 	commandBuffer: vk.CommandBuffer,
 	src, dst: vk.Image,
-	srcSize, dstSize: vk.Extent2D,
+	srcSize, dstSize: vk.Extent3D,
 ) {
 	blit: vk.ImageBlit = {
 		srcSubresource = {aspectMask = {.COLOR}, mipLevel = 0, baseArrayLayer = 0, layerCount = 1},
@@ -1849,7 +1853,7 @@ upscaleImage :: proc(
 			{x = 0, y = 0, z = 0},
 			{x = i32(srcSize.width), y = i32(srcSize.height), z = 1},
 		},
-		dstSubresource = {aspectMask = {.COLOR}, mipLevel = 0, baseArrayLayer = 0, layerCount = 1},
+		dstSubresource = {aspectMask = {.COLOR}, mipLevel = 0, baseArrayLayer = dstSize.depth, layerCount = 1},
 		dstOffsets = {
 			{x = 0, y = 0, z = 0},
 			{x = i32(dstSize.width), y = i32(dstSize.height), z = 1},
@@ -1864,7 +1868,7 @@ upscaleImage :: proc(
 		.TRANSFER_DST_OPTIMAL,
 		1,
 		&blit,
-		.NEAREST,
+		.LINEAR,
 	)
 }
 
@@ -2116,66 +2120,19 @@ loadTextures :: proc(
 	texture: ^Image,
 	texturePaths: []cstring,
 ) {
-	textureWidth, textureHeight: i32
-	pixels := img.load(texturePaths[0], &textureWidth, &textureHeight, nil, 4)
-	if pixels == nil {
-		log.log(.Error, "Failed to load texture!")
-		panic("Failed to load texture!")
-	}
-	img.image_free(pixels)
-	textureSize := int(textureWidth * textureHeight * 4)
 	textureCount := len(texturePaths)
-
-	stagingBuffer: vk.Buffer
-	stagingBufferMemory: vk.DeviceMemory
-	createBuffer(
-		graphicsContext,
-		textureSize * textureCount,
-		{.TRANSFER_SRC},
-		{.HOST_VISIBLE, .HOST_COHERENT},
-		&stagingBuffer,
-		&stagingBufferMemory,
-	)
-
-	for path, index in texturePaths {
-		width, height: i32
-		pixels := img.load(path, &width, &height, nil, 4)
-		defer img.image_free(pixels)
-		if pixels == nil {
-			log.log(.Error, "Failed to load texture!")
-			panic("Failed to load texture!")
-		}
-
-		if textureWidth != width || textureHeight != height {
-			log.log(.Error, "Image of wrong dims!")
-			panic("Image of wrong dims!")
-		}
-
-		data: rawptr
-		vk.MapMemory(
-			device,
-			stagingBufferMemory,
-			vk.DeviceSize(textureSize * index),
-			vk.DeviceSize(textureSize),
-			{},
-			&data,
-		)
-		mem.copy(data, pixels, textureSize)
-		vk.UnmapMemory(device, stagingBufferMemory)
-	}
-
 	texture.format = .R8G8B8A8_SRGB
 	createImage(
 		graphicsContext,
 		texture,
 		{},
 		.D2,
-		u32(textureWidth),
-		u32(textureHeight),
+		u32(IMAGES_RESOLUTION.x),
+		u32(IMAGES_RESOLUTION.y),
 		u32(textureCount),
 		{._1},
 		.OPTIMAL,
-		{.TRANSFER_DST, .TRANSFER_SRC, .SAMPLED},
+		{.TRANSFER_DST, .SAMPLED},
 		{.DEVICE_LOCAL},
 		.EXCLUSIVE,
 		0,
@@ -2192,17 +2149,101 @@ loadTextures :: proc(
 		{.COLOR},
 		u32(textureCount),
 	)
+	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 
-	copyBufferToTextureArray(
-		graphicsContext,
-		commandBuffer,
-		stagingBuffer,
-		texture^.image,
-		u32(textureWidth),
-		u32(textureHeight),
-		u32(textureCount),
-	)
+	for path, index in texturePaths {
+		width, height: i32
+		pixels := img.load(path, &width, &height, nil, 4)
+		defer img.image_free(pixels)
+		if pixels == nil {
+			log.log(.Error, "Failed to load texture!")
+			panic("Failed to load texture!")
+		}
+		textureSize := int(width * height * 4)
 
+		stagingBuffer: Buffer
+		createBuffer(
+			graphicsContext,
+			textureSize,
+			{.TRANSFER_SRC},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&stagingBuffer.buffer,
+			&stagingBuffer.memory,
+		)
+		defer {
+			vk.DestroyBuffer(device, stagingBuffer.buffer, nil)
+			vk.FreeMemory(device, stagingBuffer.memory, nil)
+		}
+
+		data: rawptr
+		vk.MapMemory(device, stagingBuffer.memory, 0, vk.DeviceSize(textureSize), {}, &data)
+		mem.copy(data, pixels, textureSize)
+		vk.UnmapMemory(device, stagingBuffer.memory)
+
+		stagingImage: Image
+		stagingImage.format = .R8G8B8A8_SRGB
+		createImage(
+			graphicsContext,
+			&stagingImage,
+			{},
+			.D2,
+			u32(width),
+			u32(height),
+			1,
+			{._1},
+			.OPTIMAL,
+			{.TRANSFER_DST, .TRANSFER_SRC},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
+		defer {
+			vk.DestroyImage(device, stagingImage.image, nil)
+			vk.FreeMemory(device, stagingImage.memory, nil)
+		}
+
+		commandBuffer := beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
+		transitionImageLayout(
+			graphicsContext,
+			commandBuffer,
+			stagingImage.image,
+			.UNDEFINED,
+			.TRANSFER_DST_OPTIMAL,
+			{.COLOR},
+			1,
+		)
+
+		copyBufferToImage(
+			graphicsContext,
+			commandBuffer,
+			stagingBuffer.buffer,
+			stagingImage.image,
+			u32(width),
+			u32(height),
+		)
+
+		transitionImageLayout(
+			graphicsContext,
+			commandBuffer,
+			stagingImage.image,
+			.TRANSFER_DST_OPTIMAL,
+			.TRANSFER_SRC_OPTIMAL,
+			{.COLOR},
+			1,
+		)
+
+		upscaleImage(
+			commandBuffer,
+			stagingImage.image,
+			texture.image,
+			{u32(width), u32(height), 0},
+			{u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y), u32(index)},
+		)
+		endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
+	}
+
+	commandBuffer = beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
@@ -2213,9 +2254,6 @@ loadTextures :: proc(
 		u32(textureCount),
 	)
 	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
-
-	vk.DestroyBuffer(device, stagingBuffer, nil)
-	vk.FreeMemory(device, stagingBufferMemory, nil)
 
 	texture.view = createImageView(
 		graphicsContext,
@@ -4485,8 +4523,8 @@ recordComputeBuffer :: proc(
 		commandBuffer,
 		pipelines[PipelineIndex.MAIN].colour.image,
 		inImage.image,
-		vk.Extent2D{u32(RENDER_SIZE.x), u32(RENDER_SIZE.y)},
-		swapchainExtent,
+		vk.Extent3D{u32(RENDER_SIZE.x), u32(RENDER_SIZE.y), 1},
+		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 0},
 	)
 
 	transitionImageLayout(
