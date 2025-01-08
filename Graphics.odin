@@ -14,9 +14,11 @@ import "vendor:glfw"
 import img "vendor:stb/image"
 import vk "vendor:vulkan"
 
+
 // ###################################################################
 // #                          Constants                              #
 // ###################################################################
+
 
 @(private = "file")
 requestedLayers: []cstring = {"VK_LAYER_KHRONOS_validation"}
@@ -89,9 +91,11 @@ DEPTH_BIAS_CONSTANT: f32 = 1.25
 @(private = "file")
 DEPTH_BIAS_SLOPE: f32 = 1.75
 
+
 // ###################################################################
 // #                         Data Structures                         #
 // ###################################################################
+
 
 @(private = "file")
 UIData :: struct {
@@ -327,7 +331,9 @@ GraphicsContext :: struct {
 	// Assets
 	models:                []Model,
 	albidos:               Image,
+	albidosCount:          u32,
 	normals:               Image,
+	normalsCount:          u32,
 	vertices:              []Vertex,
 	indices:               []u32,
 	boneCount:             int,
@@ -353,9 +359,11 @@ GraphicsContext :: struct {
 	hasAssetsLoaded:       b8,
 }
 
+
 // ###################################################################
 // #                               Init                              #
 // ###################################################################
+
 
 initVkGraphics :: proc(using graphicsContext: ^GraphicsContext, scene: Scene) {
 	vk.load_proc_addresses(rawptr(glfw.GetInstanceProcAddress))
@@ -695,9 +703,11 @@ createSurface :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 }
 
+
 // ###################################################################
 // #                              Device                             #
 // ###################################################################
+
 
 @(private = "file")
 findQueueFamilies :: proc(
@@ -1049,9 +1059,11 @@ createLogicalDevice :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.GetDeviceQueue(device, queueFamilies.computeFamily, 0, &computeQueue)
 }
 
+
 // ###################################################################
 // #                            Swapchain                            #
 // ###################################################################
+
 
 @(private = "file")
 getSwapchainInfo :: proc(using graphicsContext: ^GraphicsContext) {
@@ -1179,9 +1191,11 @@ recreateSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	initImgui(graphicsContext)
 }
 
+
 // ###################################################################
 // #                             Commands                            #
 // ###################################################################
+
 
 @(private = "file")
 createCommandBuffers :: proc(using graphicsContext: ^GraphicsContext) {
@@ -1304,9 +1318,11 @@ endSingleTimeCommands :: proc(
 	vk.FreeCommandBuffers(device, commandPool, 1, &commandBuffer)
 }
 
+
 // ###################################################################
 // #                             Buffers                             #
 // ###################################################################
+
 
 @(private = "file")
 createBuffer :: proc(
@@ -1519,9 +1535,11 @@ createLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 }
 
+
 // ###################################################################
 // #                              Images                             #
 // ###################################################################
+
 
 @(private = "file")
 findMemoryType :: proc(
@@ -1751,7 +1769,7 @@ transitionImageLayout :: proc(
 		log.log(.Error, "Unsupported image layout transition!")
 		panic("Unsupported image layout transition!")
 	}
-	
+
 	vk.CmdPipelineBarrier(
 		commandBuffer,
 		sourceStage,
@@ -1856,7 +1874,12 @@ upscaleImage :: proc(
 			{x = 0, y = 0, z = 0},
 			{x = i32(srcSize.width), y = i32(srcSize.height), z = 1},
 		},
-		dstSubresource = {aspectMask = {.COLOR}, mipLevel = 0, baseArrayLayer = dstSize.depth, layerCount = 1},
+		dstSubresource = {
+			aspectMask = {.COLOR},
+			mipLevel = 0,
+			baseArrayLayer = dstSize.depth,
+			layerCount = 1,
+		},
 		dstOffsets = {
 			{x = 0, y = 0, z = 0},
 			{x = i32(dstSize.width), y = i32(dstSize.height), z = 1},
@@ -1875,9 +1898,11 @@ upscaleImage :: proc(
 	)
 }
 
+
 // ###################################################################
 // #                          Create Assets                          #
 // ###################################################################
+
 
 @(private = "file")
 loadModels :: proc(using graphicsContext: ^GraphicsContext, modelPaths: []cstring) {
@@ -2135,7 +2160,7 @@ loadTextures :: proc(
 		u32(textureCount),
 		{._1},
 		.OPTIMAL,
-		{.TRANSFER_DST, .SAMPLED},
+		{.TRANSFER_DST, .TRANSFER_SRC, .SAMPLED},
 		{.DEVICE_LOCAL},
 		.EXCLUSIVE,
 		0,
@@ -2277,6 +2302,210 @@ loadTextures :: proc(
 		false,
 		properties.limits.maxSamplerAnisotropy,
 		.INT_OPAQUE_WHITE,
+	)
+}
+
+// MAKE SURE TO UPDATE THE RELEVENT DESCRIPTOR SET
+@(private = "file")
+addTextures :: proc(
+	using graphicsContext: ^GraphicsContext,
+	texture: ^Image,
+	textureCount: ^u32,
+	texturePaths: []cstring,
+) {
+	newTexturesCount := u32(len(texturePaths))
+	newTexture: Image
+	newTexture.format = texture.format
+	createImage(
+		graphicsContext,
+		&newTexture,
+		{},
+		.D2,
+		u32(IMAGES_RESOLUTION.x),
+		u32(IMAGES_RESOLUTION.y),
+		textureCount^ + newTexturesCount,
+		{._1},
+		.OPTIMAL,
+		{.TRANSFER_DST, .TRANSFER_SRC, .SAMPLED},
+		{.DEVICE_LOCAL},
+		.EXCLUSIVE,
+		0,
+		nil,
+	)
+
+	commandBuffer := beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
+	transitionImageLayout(
+		graphicsContext,
+		commandBuffer,
+		texture.image,
+		.SHADER_READ_ONLY_OPTIMAL,
+		.TRANSFER_SRC_OPTIMAL,
+		{.COLOR},
+		textureCount^,
+	)
+	transitionImageLayout(
+		graphicsContext,
+		commandBuffer,
+		newTexture.image,
+		.UNDEFINED,
+		.TRANSFER_DST_OPTIMAL,
+		{.COLOR},
+		textureCount^ + newTexturesCount,
+	)
+	vk.CopyImageToImage(
+		device,
+		&vk.CopyImageToImageInfo{
+			sType = .COPY_IMAGE_TO_IMAGE_INFO,
+			pNext = nil,
+			flags = {},
+			srcImage = texture.image,
+			srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+			dstImage = newTexture.image,
+			dstImageLayout = .TRANSFER_DST_OPTIMAL,
+			regionCount = 1,
+			pRegions = &vk.ImageCopy2{
+				sType = .IMAGE_COPY_2,
+				pNext = nil,
+				srcSubresource = vk.ImageSubresourceLayers{
+					aspectMask = {.COLOR},
+					mipLevel = 1,
+					baseArrayLayer = 0,
+					layerCount = 1,
+				},
+				srcOffset = vk.Offset3D{0, 0, 0},
+				dstSubresource = vk.ImageSubresourceLayers{
+					aspectMask = {.COLOR},
+					mipLevel = 1,
+					baseArrayLayer = 0,
+					layerCount = 1,
+				},
+				dstOffset = vk.Offset3D{0, 0, 0},
+				extent = vk.Extent3D{u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y), textureCount^},
+			},
+		},
+	)
+	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
+	
+	vk.DestroyImageView(device, texture.view, nil)
+	vk.DestroyImage(device, texture.image, nil)
+	vk.FreeMemory(device, texture.memory, nil)
+
+	newTexture.sampler = texture.sampler
+	texture^ = newTexture
+
+	for path, index in texturePaths {
+		width, height: i32
+		pixels := img.load(path, &width, &height, nil, 4)
+		defer img.image_free(pixels)
+		if pixels == nil {
+			log.log(.Error, "Failed to load texture!")
+			panic("Failed to load texture!")
+		}
+		textureSize := int(width * height * 4)
+
+		stagingBuffer: Buffer
+		createBuffer(
+			graphicsContext,
+			textureSize,
+			{.TRANSFER_SRC},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&stagingBuffer.buffer,
+			&stagingBuffer.memory,
+		)
+		defer {
+			vk.DestroyBuffer(device, stagingBuffer.buffer, nil)
+			vk.FreeMemory(device, stagingBuffer.memory, nil)
+		}
+
+		data: rawptr
+		vk.MapMemory(device, stagingBuffer.memory, 0, vk.DeviceSize(textureSize), {}, &data)
+		mem.copy(data, pixels, textureSize)
+		vk.UnmapMemory(device, stagingBuffer.memory)
+
+		stagingImage: Image
+		stagingImage.format = .R8G8B8A8_SRGB
+		createImage(
+			graphicsContext,
+			&stagingImage,
+			{},
+			.D2,
+			u32(width),
+			u32(height),
+			1,
+			{._1},
+			.OPTIMAL,
+			{.TRANSFER_DST, .TRANSFER_SRC},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
+		defer {
+			vk.DestroyImage(device, stagingImage.image, nil)
+			vk.FreeMemory(device, stagingImage.memory, nil)
+		}
+
+		commandBuffer := beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
+		transitionImageLayout(
+			graphicsContext,
+			commandBuffer,
+			stagingImage.image,
+			.UNDEFINED,
+			.TRANSFER_DST_OPTIMAL,
+			{.COLOR},
+			1,
+		)
+
+		copyBufferToImage(
+			graphicsContext,
+			commandBuffer,
+			stagingBuffer.buffer,
+			stagingImage.image,
+			u32(width),
+			u32(height),
+		)
+
+		transitionImageLayout(
+			graphicsContext,
+			commandBuffer,
+			stagingImage.image,
+			.TRANSFER_DST_OPTIMAL,
+			.TRANSFER_SRC_OPTIMAL,
+			{.COLOR},
+			1,
+		)
+
+		upscaleImage(
+			commandBuffer,
+			stagingImage.image,
+			texture.image,
+			{u32(width), u32(height), 0},
+			{u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y), textureCount^ + u32(index)},
+		)
+		endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
+	}
+
+	textureCount^ += newTexturesCount
+
+	commandBuffer = beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
+	transitionImageLayout(
+		graphicsContext,
+		commandBuffer,
+		texture^.image,
+		.TRANSFER_DST_OPTIMAL,
+		.SHADER_READ_ONLY_OPTIMAL,
+		{.COLOR},
+		textureCount^,
+	)
+	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
+
+	texture.view = createImageView(
+		graphicsContext,
+		texture.image,
+		.D2_ARRAY,
+		texture.format,
+		{.COLOR},
+		textureCount^ + newTexturesCount,
 	)
 }
 
@@ -2516,9 +2745,11 @@ deleteScene :: proc(scene: Scene) {
 	delete(scene.normalPaths)
 }
 
+
 // ###################################################################
 // #                        Shader Descriptors                       #
 // ###################################################################
+
 
 @(private = "file")
 createGraphicsDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
@@ -2848,7 +3079,6 @@ createGraphicsDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 				offset = 0,
 				range  = vk.DeviceSize(len(pointLights) * size_of(LightData)),
 			}
-
 			descriptorWrite: []vk.WriteDescriptorSet = {
 				{
 					sType = .WRITE_DESCRIPTOR_SET,
@@ -3164,9 +3394,35 @@ createComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 }
 
+@(private = "file")
+updateDescriptorSetImage :: proc(using graphicsContext: ^GraphicsContext, pipeline: Pipeline, imageInfo: ^vk.DescriptorImageInfo, dstBinding: u32) {
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		descriptorWrite: vk.WriteDescriptorSet = {
+			sType = .WRITE_DESCRIPTOR_SET,
+			pNext = nil,
+			dstSet = pipeline.descriptorSets[index],
+			dstBinding = dstBinding,
+			dstArrayElement = 0,
+			descriptorCount = 1,
+			descriptorType = .COMBINED_IMAGE_SAMPLER,
+			pImageInfo = imageInfo,
+			pBufferInfo = nil,
+			pTexelBufferView = nil,
+		}
+		vk.UpdateDescriptorSets(
+			device,
+			1,
+			&descriptorWrite,
+			0,
+			nil,
+		)
+	}
+}
+
 // ###################################################################
 // #                         Frame Resources                         #
 // ###################################################################
+
 
 @(private = "file")
 createStorageImages :: proc(using graphicsContext: ^GraphicsContext) {
@@ -3310,9 +3566,11 @@ createSyncObjects :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 }
 
+
 // ###################################################################
 // #                             Pipeline                            #
 // ###################################################################
+
 
 @(private = "file")
 findSupportedDepthFormat :: proc(
@@ -4102,9 +4360,11 @@ createComputePipelines :: proc(
 	}
 }
 
+
 // ###################################################################
 // #                           Render Loop                           #
 // ###################################################################
+
 
 @(private = "file")
 updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext) {
@@ -4829,9 +5089,11 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
 	currentFrame = (currentFrame + 1) % 2
 }
 
+
 // ###################################################################
 // #                             Cleanup                             #
 // ###################################################################
+
 
 @(private = "file")
 cleanupSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
