@@ -496,7 +496,6 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 			finalLayout    = .TRANSFER_SRC_OPTIMAL,
 		}
 
-
 		colourAttachmentRef: vk.AttachmentReference = {
 			attachment = 0,
 			layout     = .COLOR_ATTACHMENT_OPTIMAL,
@@ -1717,6 +1716,9 @@ transitionImageLayout :: proc(
 	case .SHADER_READ_ONLY_OPTIMAL:
 		barrier.srcAccessMask = {.SHADER_READ}
 		sourceStage = {.FRAGMENT_SHADER}
+	case .GENERAL:
+		barrier.srcAccessMask = {.SHADER_READ}
+		sourceStage = {.COMPUTE_SHADER}
 	case:
 		log.log(.Error, "Unsupported image layout transition!")
 		panic("Unsupported image layout transition!")
@@ -1749,6 +1751,7 @@ transitionImageLayout :: proc(
 		log.log(.Error, "Unsupported image layout transition!")
 		panic("Unsupported image layout transition!")
 	}
+	
 	vk.CmdPipelineBarrier(
 		commandBuffer,
 		sourceStage,
@@ -3220,6 +3223,59 @@ createStorageImages :: proc(using graphicsContext: ^GraphicsContext) {
 		{.COLOR},
 		1,
 	)
+
+	commandBuffer := beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
+	barriers: []vk.ImageMemoryBarrier = {
+		{
+			sType = .IMAGE_MEMORY_BARRIER,
+			pNext = nil,
+			srcAccessMask = {},
+			dstAccessMask = {},
+			oldLayout = .UNDEFINED,
+			newLayout = .GENERAL,
+			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			image = inImage.image,
+			subresourceRange = vk.ImageSubresourceRange {
+				aspectMask = {.COLOR},
+				baseMipLevel = 0,
+				levelCount = 1,
+				baseArrayLayer = 0,
+				layerCount = 1,
+			},
+		},
+		{
+			sType = .IMAGE_MEMORY_BARRIER,
+			pNext = nil,
+			srcAccessMask = {},
+			dstAccessMask = {},
+			oldLayout = .UNDEFINED,
+			newLayout = .TRANSFER_SRC_OPTIMAL,
+			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			image = outImage.image,
+			subresourceRange = vk.ImageSubresourceRange {
+				aspectMask = {.COLOR},
+				baseMipLevel = 0,
+				levelCount = 1,
+				baseArrayLayer = 0,
+				layerCount = 1,
+			},
+		},
+	}
+	vk.CmdPipelineBarrier(
+		commandBuffer,
+		{.TOP_OF_PIPE},
+		{.ALL_COMMANDS},
+		{},
+		0,
+		nil,
+		0,
+		nil,
+		2,
+		raw_data(barriers),
+	)
+	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 }
 
 @(private = "file")
@@ -3473,7 +3529,7 @@ createRenderPass :: proc(using graphicsContext: ^GraphicsContext) {
 				stencilLoadOp = .DONT_CARE,
 				stencilStoreOp = .DONT_CARE,
 				initialLayout = .UNDEFINED,
-				finalLayout = .COLOR_ATTACHMENT_OPTIMAL,
+				finalLayout = .TRANSFER_SRC_OPTIMAL,
 			},
 			{
 				flags = {},
@@ -3484,7 +3540,7 @@ createRenderPass :: proc(using graphicsContext: ^GraphicsContext) {
 				stencilLoadOp = .DONT_CARE,
 				stencilStoreOp = .DONT_CARE,
 				initialLayout = .UNDEFINED,
-				finalLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+				finalLayout = .SHADER_READ_ONLY_OPTIMAL,
 			},
 		}
 
@@ -4420,7 +4476,6 @@ recordGraphicsBuffer :: proc(
 		u32(len(pointLights)),
 	)
 
-
 	// MAIN
 	{
 		renderPassInfo: vk.RenderPassBeginInfo = {
@@ -4502,16 +4557,6 @@ recordComputeBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		pipelines[PipelineIndex.MAIN].colour.image,
-		.UNDEFINED,
-		.TRANSFER_SRC_OPTIMAL,
-		{.COLOR},
-		1,
-	)
-
-	transitionImageLayout(
-		graphicsContext,
-		commandBuffer,
 		inImage.image,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
@@ -4546,40 +4591,6 @@ recordComputeBuffer :: proc(
 		{.COLOR},
 		1,
 	)
-
-	{
-		barrier: vk.ImageMemoryBarrier = {
-			sType = .IMAGE_MEMORY_BARRIER,
-			pNext = nil,
-			srcAccessMask = {},
-			dstAccessMask = {},
-			oldLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-			newLayout = .SHADER_READ_ONLY_OPTIMAL,
-			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			image = pipelines[PipelineIndex.MAIN].depth.image,
-			subresourceRange = vk.ImageSubresourceRange {
-				aspectMask = {.DEPTH},
-				baseMipLevel = 0,
-				levelCount = 1,
-				baseArrayLayer = 0,
-				layerCount = 1,
-			},
-		}
-
-		vk.CmdPipelineBarrier(
-			commandBuffer,
-			{.TOP_OF_PIPE},
-			{.COMPUTE_SHADER},
-			{},
-			0,
-			nil,
-			0,
-			nil,
-			1,
-			&barrier,
-		)
-	}
 
 	vk.CmdBindDescriptorSets(
 		commandBuffer,
