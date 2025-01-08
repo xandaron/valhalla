@@ -1,7 +1,18 @@
 {
     "cameras": [
         {
+            "name": "Main",
             "eye": [0.0, 0.2, -0.4],
+            "center": [0.0, 0.0, 0.0],
+            "up": [0.0, 1.0, 0.0],
+            "distance": 0.447214,
+            "fov": 45.0,
+            "type": 0,
+            "mode": 0
+        },
+        {
+            "name": "Secondary",
+            "eye": [0.0, 0.2, 0.4],
             "center": [0.0, 0.0, 0.0],
             "up": [0.0, 1.0, 0.0],
             "distance": 0.447214,
@@ -12,6 +23,7 @@
     ],
     "lights": [
         {
+            "name": "Red",
             "position": [0.0, 0.3, 0.2],
             "direction": [0.0, -0.3, -0.2],
             "colour": [1.0, 0.0, 0.0],
@@ -20,6 +32,7 @@
             "type": 0
         },
         {
+            "name": "Green",
             "position": [0.1732050808, 0.3, -0.1],
             "direction": [-0.1732050808, -0.3, 0.1],
             "colour": [0.0, 1.0, 0.0],
@@ -28,6 +41,7 @@
             "type": 0
         },
         {
+            "name": "Blue",
             "position": [-0.1732050808, 0.3, -0.1],
             "direction": [0.1732050808, 0.3, 0.1],
             "colour": [0.0, 0.0, 1.0],
@@ -49,6 +63,7 @@
     ],
     "instances": [
         {
+            "name": "Bunny",
             "model": 0,
             "albedo": 0,
             "normal": 0,
@@ -57,6 +72,7 @@
             "scale": [1.0, 1.0, 1.0]
         },
         {
+            "name": "Box",
             "model": 1,
             "albedo": 1,
             "normal": 0,
