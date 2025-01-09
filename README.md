@@ -41,6 +41,10 @@ odin build . -out:build/build.exe
 
 ## Demo
 
+![GUI Demo](demo/GUI_Demo.gif)
+
+*A demo of imgui in action.*
+
 ![Rigged Zombie](demo/Zombie_Walking.gif)
 
 *A demo of a rigged 3D model and animation.*
@@ -59,7 +63,7 @@ odin build . -out:build/build.exe
 - [X] Implement basic lighting
 - [X] Implement shadow mapping
 - [X] Add support for loading scenes
-- [ ] Add GUI to edit scene objects and properties
+- [X] Add GUI to edit scene objects and properties
 - [ ] Add support to store scenes
 - [ ] HDR support
 
