@@ -1,5 +1,5 @@
 {
-    "name": "Bunny Box",
+    "name": "Bunny CMY",
     "cameras": [
         {
             "name": "Main",
@@ -24,46 +24,44 @@
     ],
     "lights": [
         {
-            "name": "Red",
-            "position": [0.0, 0.3, 0.2],
+            "name": "Yellow",
+            "position": [0.0, 0.2, -0.3],
             "direction": [0.0, -0.3, -0.2],
-            "colour": [1.0, 0.0, 0.0],
+            "colour": [1.0, 1.0, 0.0],
             "intensity": 0.04,
             "fov": 120.0,
             "rotation_angle": 30.0,
-            "rotation_axis": [0.0, 1.0, 0.0],
+            "rotation_axis": [0.0, 0.0, 1.0],
             "type": 0
         },
         {
-            "name": "Green",
-            "position": [0.1732050808, 0.3, -0.1],
+            "name": "Magenta",
+            "position": [0.1732050808, -0.1, -0.3],
             "direction": [-0.1732050808, -0.3, 0.1],
-            "colour": [0.0, 1.0, 0.0],
+            "colour": [1.0, 0.0, 1.0],
             "intensity": 0.04,
             "fov": 120.0,
             "rotation_angle": 30.0,
-            "rotation_axis": [0.0, 1.0, 0.0],
+            "rotation_axis": [0.0, 0.0, 1.0],
             "type": 0
         },
         {
-            "name": "Blue",
-            "position": [-0.1732050808, 0.3, -0.1],
+            "name": "Cyan",
+            "position": [-0.1732050808, -0.1, -0.3],
             "direction": [0.1732050808, 0.3, 0.1],
-            "colour": [0.0, 0.0, 1.0],
+            "colour": [0.0, 1.0, 1.0],
             "intensity": 0.04,
             "fov": 120.0,
             "rotation_angle": 30.0,
-            "rotation_axis": [0.0, 1.0, 0.0],
+            "rotation_axis": [0.0, 0.0, 1.0],
             "type": 0
         }
     ],
     "models": [
-        "./assets/models/bunny/bunny.fbx",
-        "./assets/models/cube/cube_inverted.fbx"
+        "./assets/models/bunny/bunny.fbx"
     ],
     "albedos": [
-        "./assets/textures/white.jpg",
-        "./assets/models/cube/texture.jpg"
+        "./assets/textures/white.jpg"
     ],
     "normals": [
         "./assets/textures/normal.jpg"
@@ -77,15 +75,6 @@
             "position": [-0.02, -0.1, 0.0],
             "rotation": [0.0, 180.0, 0.0],
             "scale": [1.0, 1.0, 1.0]
-        },
-        {
-            "name": "Box",
-            "model": 1,
-            "albedo": 1,
-            "normal": 0,
-            "position": [0.0, 0.14, 0.0],
-            "rotation": [0.0, 0.0, 0.0],
-            "scale": [0.2, 0.2, 0.2]
         }
     ]
 }

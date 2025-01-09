@@ -1,0 +1,60 @@
+{
+    "name": "Shambler",
+    "cameras": [
+        {
+            "name": "Main",
+            "eye": [0.0, 0.2, -0.5],
+            "center": [0.0, 0.0, 0.0],
+            "up": [0.0, 1.0, 0.0],
+            "distance": 0.447214,
+            "fov": 45.0,
+            "type": 0,
+            "mode": 0
+        }
+    ],
+    "lights": [
+        {
+            "name": "White",
+            "position": [0.0, 0.3, -0.3],
+            "direction": [0.0, -0.3, -0.2],
+            "colour": [1.0, 1.0, 1.0],
+            "intensity": 0.04,
+            "fov": 120.0,
+            "rotation_angle": 0.0,
+            "rotation_axis": [0.0, 1.0, 0.0], 
+            "type": 0
+        }
+    ],
+    "models": [
+        "./assets/models/zombie/model.fbx",
+        "./assets/models/cube/cube.fbx"
+    ],
+    "albedos": [
+        "./assets/models/zombie/albedo.png",
+        "./assets/textures/white.jpg"
+    ],
+    "normals": [
+        "./assets/models/zombie/normal.png",
+        "./assets/textures/normal.jpg"
+    ],
+    "instances": [
+        {
+            "name": "Zombie",
+            "model": 0,
+            "albedo": 0,
+            "normal": 0,
+            "position": [0.0, 0.0, 0.0],
+            "rotation": [0.0, 180.0, 0.0],
+            "scale": [0.001, 0.001, 0.001]
+        },
+        {
+            "name": "Floor",
+            "model": 1,
+            "albedo": 1,
+            "normal": 1,
+            "position": [0.0, -0.1, 0.0],
+            "rotation": [0.0, 0.0, 0.0],
+            "scale": [10.0, 0.1, 10.0]
+        }
+    ]
+}
