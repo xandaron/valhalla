@@ -66,6 +66,7 @@ odin build . -out:build/build.exe
 - [X] Add GUI to edit scene objects and properties
 - [ ] Add support to store scenes
 - [ ] HDR support
+- [ ] Raytracer
 
 ## Contributing
 
