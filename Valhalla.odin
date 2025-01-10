@@ -100,14 +100,12 @@ main :: proc() {
 
 	glfw.SetWindowUserPointer(graphicsContext.window, &engineState)
 
-	if err := loadScene(graphicsContext, "./assets/scenes/shambler.json");
-	   err != .None {
+	if err := loadScene(graphicsContext, "./assets/scenes/shambler.json"); err != .None {
 		log.logf(.Fatal, "Failed to load scene: {}", err)
 		panic("Failed to load scene")
 	}
 
-	if err := loadScene(graphicsContext, "./assets/scenes/bunny_box.json");
-	   err != .None {
+	if err := loadScene(graphicsContext, "./assets/scenes/bunny_box.json"); err != .None {
 		log.logf(.Fatal, "Failed to load scene: {}", err)
 		panic("Failed to load scene")
 	}
@@ -117,74 +115,52 @@ main :: proc() {
 	for !glfw.WindowShouldClose(graphicsContext.window) {
 		glfw.PollEvents()
 
+		scene := &graphicsContext.scenes[graphicsContext.activeScene]
+		camera := &scene.cameras[scene.activeCamera]
 		if mouseMode {
 			if mouseDelta != {0, 0} {
 				axis: Vec3 = {0, 0, 0}
-				scene := &graphicsContext.scenes[graphicsContext.activeScene]
-				forward :=
-					scene.cameras[scene.activeCamera].center -
-					scene.cameras[scene.activeCamera].eye
+				forward := camera.center - camera.eye
 				if mouseDelta.x < 0 {
-					axis -= scene.cameras[scene.activeCamera].up
+					axis -= camera.up
 				} else if mouseDelta.x > 0 {
-					axis += scene.cameras[scene.activeCamera].up
+					axis += camera.up
 				}
 				if mouseDelta.y > 0 {
-					axis += cross(scene.cameras[scene.activeCamera].up, forward)
+					axis += cross(camera.up, forward)
 				} else if mouseDelta.y < 0 {
-					axis -= cross(scene.cameras[scene.activeCamera].up, forward)
+					axis -= cross(camera.up, forward)
 				}
 				rotation := rotation3(f32(radians(cameraSpeed)), axis)
-				scene.cameras[scene.activeCamera].up =
-					rotation * scene.cameras[scene.activeCamera].up
+				camera.up = rotation * camera.up
 				forward = rotation * forward
-				scene.cameras[scene.activeCamera].eye =
-					scene.cameras[scene.activeCamera].center - forward
+				camera.eye = camera.center - forward
 				mouseDelta = {0, 0}
 			}
 			if scrollDelta.y != 0 {
-				scene := &graphicsContext.scenes[graphicsContext.activeScene]
-				forward :=
-					(scene.cameras[scene.activeCamera].center -
-						scene.cameras[scene.activeCamera].eye) /
-					scene.cameras[scene.activeCamera].distance
-				scene.cameras[scene.activeCamera].distance *= 1 + f32(-scrollDelta.y * 0.1)
-				scene.cameras[scene.activeCamera].eye =
-					scene.cameras[scene.activeCamera].center -
-					forward * scene.cameras[scene.activeCamera].distance
+				forward := (camera.center - camera.eye) / camera.distance
+				camera.distance *= 1 + f32(-scrollDelta.y * 0.1)
+				camera.eye = camera.center - forward * camera.distance
 				scrollDelta = {0, 0}
 			}
 		}
 		if cameraMove.x != 0 {
-			scene := &graphicsContext.scenes[graphicsContext.activeScene]
-			right := normalize(
-				cross(
-					scene.cameras[scene.activeCamera].up,
-					(scene.cameras[scene.activeCamera].center -
-						scene.cameras[scene.activeCamera].eye) /
-					scene.cameras[scene.activeCamera].distance,
-				),
-			)
+			right := normalize(cross(camera.up, (camera.center - camera.eye) / camera.distance))
 			movement := cameraMoveSpeed * cameraMove.x * right
-			scene.cameras[scene.activeCamera].eye += movement
-			scene.cameras[scene.activeCamera].center += movement
+			camera.eye += movement
+			camera.center += movement
 		}
 		if cameraMove.y != 0 {
 			scene := &graphicsContext.scenes[graphicsContext.activeScene]
-			movement := cameraMoveSpeed * cameraMove.y * scene.cameras[scene.activeCamera].up
-			scene.cameras[scene.activeCamera].eye += movement
-			scene.cameras[scene.activeCamera].center += movement
+			movement := cameraMoveSpeed * cameraMove.y * camera.up
+			camera.eye += movement
+			camera.center += movement
 		}
 		if cameraMove.z != 0 {
-			scene := &graphicsContext.scenes[graphicsContext.activeScene]
 			movement :=
-				cameraMoveSpeed *
-				cameraMove.z *
-				(scene.cameras[scene.activeCamera].center -
-						scene.cameras[scene.activeCamera].eye) /
-				scene.cameras[scene.activeCamera].distance
-			scene.cameras[scene.activeCamera].eye += movement
-			scene.cameras[scene.activeCamera].center += movement
+				cameraMoveSpeed * cameraMove.z * (camera.center - camera.eye) / camera.distance
+			camera.eye += movement
+			camera.center += movement
 		}
 
 		delta := f32(time.duration_seconds(time.since(lastFrameTime)))
@@ -192,6 +168,7 @@ main :: proc() {
 		drawFrame(graphicsContext, delta if !paused else 0.0)
 		calcFrameRate(graphicsContext.window)
 
+		// I'm not using the temp allocatior so this shouldn't do anything
 		free_all(context.temp_allocator)
 	}
 }
