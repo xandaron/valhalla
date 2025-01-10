@@ -1,5 +1,6 @@
 {
     "name": "Shambler",
+    "clear_colour": [150, 150, 150, 255],
     "cameras": [
         {
             "name": "Main",

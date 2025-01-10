@@ -98,13 +98,6 @@ DEPTH_BIAS_SLOPE: f32 = 1.75
 
 
 @(private = "file")
-UIData :: struct {
-	uiContext:            ^imgui.Context,
-	descriptorPool:       vk.DescriptorPool,
-	using renderPassData: RenderPass,
-}
-
-@(private = "file")
 Vertex :: struct {
 	position: Vec3,
 	texCoord: Vec2,
@@ -182,13 +175,6 @@ LightData :: struct #align (16) {
 }
 
 @(private = "file")
-PipelineIndex :: enum {
-	SHADOW = 0,
-	MAIN   = 1,
-	POST   = 2,
-}
-
-@(private = "file")
 UniformBuffer :: struct #align (16) {
 	view:           Mat4,
 	projection:     Mat4,
@@ -226,12 +212,28 @@ Buffer :: struct {
 }
 
 @(private = "file")
+ImguiData :: struct {
+	uiContext:      ^imgui.Context,
+	frameBuffers:   []vk.Framebuffer,
+	descriptorPool: vk.DescriptorPool,
+	renderPass:     vk.RenderPass,
+	colour:         Image,
+}
+
+@(private = "file")
 RenderPass :: struct {
 	frameBuffers: []vk.Framebuffer,
 	colour:       Image,
 	depth:        Image,
 	renderPass:   vk.RenderPass,
 	descriptor:   vk.DescriptorImageInfo,
+}
+
+@(private = "file")
+PipelineIndex :: enum {
+	SHADOW = 0,
+	MAIN   = 1,
+	POST   = 2,
 }
 
 @(private = "file")
@@ -325,10 +327,9 @@ Camera :: struct {
 }
 
 GraphicsContext :: struct {
-	engineState:           ^EngineState,
 	// GLFW + IMGUI
 	window:                glfw.WindowHandle,
-	imguiData:             UIData,
+	imgImguiData:          ImguiData,
 
 	// Vulkan Data
 	instance:              vk.Instance,
@@ -390,6 +391,27 @@ GraphicsContext :: struct {
 
 
 initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
+	glfw.SetErrorCallback(glfwErrorCallback)
+
+	if !glfw.Init() {
+		log.log(.Fatal, "Failed to initalize glfw, quitting application.")
+		return
+	}
+
+	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
+
+	window = glfw.CreateWindow(800, 600, "Valhalla", nil, nil)
+	if window == nil {
+		log.log(.Fatal, "Failed to create window, quitting application.")
+		return
+	}
+
+	glfw.SetKeyCallback(window, keyCallback)
+	glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
+	glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
+	glfw.SetScrollCallback(window, glfwScrollCallback)
+	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
+
 	vk.load_proc_addresses(rawptr(glfw.GetInstanceProcAddress))
 
 	framebufferResized = false
@@ -460,13 +482,13 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		device,
 		&descriptorPoolCreateInfo,
 		nil,
-		&imguiData.descriptorPool,
+		&imgImguiData.descriptorPool,
 	); err != .SUCCESS {
 		log.log(.Fatal, "Failed to create imgui descriptor pool!")
 		panic("Failed to create imgui descriptor pool!")
 	}
 
-	imguiData.uiContext = imgui.CreateContext()
+	imgImguiData.uiContext = imgui.CreateContext()
 
 	implVulkan.LoadFunctions(
 		proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
@@ -483,11 +505,11 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 
 	// RenderPass
 	{
-		imguiData.colour.format = swapchainFormat.format
+		imgImguiData.colour.format = swapchainFormat.format
 
 		createImage(
 			graphicsContext,
-			&imguiData.colour,
+			&imgImguiData.colour,
 			{},
 			.D2,
 			u32(swapchainExtent.width),
@@ -502,18 +524,18 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 			nil,
 		)
 
-		imguiData.colour.view = createImageView(
+		imgImguiData.colour.view = createImageView(
 			graphicsContext,
-			imguiData.colour.image,
+			imgImguiData.colour.image,
 			.D2,
-			imguiData.colour.format,
+			imgImguiData.colour.format,
 			{.COLOR},
 			1,
 		)
 
 		attachment: vk.AttachmentDescription = {
 			flags          = {},
-			format         = imguiData.colour.format,
+			format         = imgImguiData.colour.format,
 			samples        = {._1},
 			loadOp         = .LOAD,
 			storeOp        = .STORE,
@@ -553,7 +575,8 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 			pDependencies   = nil,
 		}
 
-		if vk.CreateRenderPass(device, &renderPassInfo, nil, &imguiData.renderPass) != .SUCCESS {
+		if vk.CreateRenderPass(device, &renderPassInfo, nil, &imgImguiData.renderPass) !=
+		   .SUCCESS {
 			log.log(.Error, "Unable to create render pass!")
 			panic("Unable to create render pass!")
 		}
@@ -565,21 +588,21 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 			sType           = .FRAMEBUFFER_CREATE_INFO,
 			pNext           = nil,
 			flags           = {},
-			renderPass      = imguiData.renderPass,
+			renderPass      = imgImguiData.renderPass,
 			attachmentCount = 1,
-			pAttachments    = &imguiData.colour.view,
+			pAttachments    = &imgImguiData.colour.view,
 			width           = u32(swapchainExtent.width),
 			height          = u32(swapchainExtent.height),
 			layers          = 1,
 		}
 
-		imguiData.frameBuffers = make([]vk.Framebuffer, len(swapchainImageViews))
+		imgImguiData.frameBuffers = make([]vk.Framebuffer, len(swapchainImageViews))
 		for index in 0 ..< len(swapchainImageViews) {
 			if vk.CreateFramebuffer(
 				   device,
 				   &frameBufferInfo,
 				   nil,
-				   &imguiData.frameBuffers[index],
+				   &imgImguiData.frameBuffers[index],
 			   ) !=
 			   .SUCCESS {
 				log.log(.Error, "Failed to create frame buffer!")
@@ -594,8 +617,8 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		Device                      = device,
 		QueueFamily                 = queueFamilies.graphicsFamily,
 		Queue                       = graphicsQueue,
-		DescriptorPool              = imguiData.descriptorPool,
-		RenderPass                  = imguiData.renderPass,
+		DescriptorPool              = imgImguiData.descriptorPool,
+		RenderPass                  = imgImguiData.renderPass,
 		MinImageCount               = 2,
 		ImageCount                  = 2,
 		MSAASamples                 = ._1,
@@ -4516,11 +4539,10 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 
 		if light.rotationAxis != {0, 0, 0} {
 			position =
-			rotation3(f32(radians(light.rotationAngle * delta)), light.rotationAxis) *
-			light.position
+				rotation3(f32(radians(light.rotationAngle * delta)), light.rotationAxis) *
+				light.position
 			light.position = position
-		}
-		else {
+		} else {
 			position = light.position
 		}
 
@@ -5029,7 +5051,7 @@ recordComputeBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		imguiData.colour.image,
+		imgImguiData.colour.image,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
 		{.COLOR},
@@ -5040,7 +5062,7 @@ recordComputeBuffer :: proc(
 		commandBuffer,
 		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 1},
 		outImage.image,
-		imguiData.colour.image,
+		imgImguiData.colour.image,
 		.TRANSFER_SRC_OPTIMAL,
 		.TRANSFER_DST_OPTIMAL,
 	)
@@ -5071,8 +5093,8 @@ recordUIBuffer :: proc(
 	renderPassInfo: vk.RenderPassBeginInfo = {
 		sType = .RENDER_PASS_BEGIN_INFO,
 		pNext = nil,
-		renderPass = imguiData.renderPass,
-		framebuffer = imguiData.frameBuffers[imageIndex],
+		renderPass = imgImguiData.renderPass,
+		framebuffer = imgImguiData.frameBuffers[imageIndex],
 		renderArea = vk.Rect2D{offset = {0, 0}, extent = swapchainExtent},
 		clearValueCount = 0,
 		pClearValues = nil,
@@ -5097,7 +5119,7 @@ recordUIBuffer :: proc(
 	copyImage(
 		commandBuffer,
 		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 1},
-		imguiData.colour.image,
+		imgImguiData.colour.image,
 		swapchainImages[imageIndex],
 		.TRANSFER_SRC_OPTIMAL,
 		.TRANSFER_DST_OPTIMAL,
@@ -5425,19 +5447,19 @@ cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	implVulkan.Shutdown()
 	implGLFW.Shutdown()
 
-	for frameBuffer in imguiData.frameBuffers {
+	for frameBuffer in imgImguiData.frameBuffers {
 		vk.DestroyFramebuffer(device, frameBuffer, nil)
 	}
-	delete(imguiData.frameBuffers)
+	delete(imgImguiData.frameBuffers)
 
-	vk.DestroyImageView(device, imguiData.colour.view, nil)
-	vk.DestroyImage(device, imguiData.colour.image, nil)
-	vk.FreeMemory(device, imguiData.colour.memory, nil)
+	vk.DestroyImageView(device, imgImguiData.colour.view, nil)
+	vk.DestroyImage(device, imgImguiData.colour.image, nil)
+	vk.FreeMemory(device, imgImguiData.colour.memory, nil)
 
-	vk.DestroyRenderPass(device, imguiData.renderPass, nil)
-	vk.DestroyDescriptorPool(device, imguiData.descriptorPool, nil)
+	vk.DestroyRenderPass(device, imgImguiData.renderPass, nil)
+	vk.DestroyDescriptorPool(device, imgImguiData.descriptorPool, nil)
 
-	imgui.DestroyContext(imguiData.uiContext)
+	imgui.DestroyContext(imgImguiData.uiContext)
 }
 
 clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
@@ -5525,4 +5547,7 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 	vk.DestroySurfaceKHR(instance, surface, nil)
 	vk.DestroyInstance(instance, nil)
+
+	glfw.DestroyWindow(window)
+	glfw.Terminate()
 }

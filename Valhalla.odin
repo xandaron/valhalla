@@ -92,68 +92,35 @@ main :: proc() {
 		}
 	}
 
-	glfw.SetErrorCallback(glfwErrorCallback)
-
-	if !glfw.Init() {
-		log.log(.Fatal, "Failed to initalize glfw, quitting application.")
-		return
+	using engineState: EngineState = {
+		graphicsContext = &{},
 	}
-	defer glfw.Terminate()
+	initVkGraphics(graphicsContext)
+	defer clanupVkGraphics(graphicsContext)
 
-	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
+	glfw.SetWindowUserPointer(graphicsContext.window, &engineState)
 
-	width: i32 = 800
-	height: i32 = 600
-	name: cstring : "Valhalla"
-	monitor: glfw.MonitorHandle = nil
-	window := glfw.CreateWindow(width, height, name, monitor, nil)
-	if window == nil {
-		log.log(.Fatal, "Failed to create window, quitting application.")
-		return
-	}
-	defer glfw.DestroyWindow(window)
-
-	glfw.SetKeyCallback(window, keyCallback)
-	glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
-	glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
-	glfw.SetScrollCallback(window, glfwScrollCallback)
-	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
-
-	engineState: EngineState = {
-		graphicsContext = &{window = window},
-	}
-	engineState.graphicsContext.engineState = &engineState
-	glfw.SetWindowUserPointer(window, &engineState)
-
-	initVkGraphics(engineState.graphicsContext)
-	defer clanupVkGraphics(engineState.graphicsContext)
-
-	if err := loadScene(engineState.graphicsContext, "./assets/scenes/shambler.json");
+	if err := loadScene(graphicsContext, "./assets/scenes/shambler.json");
 	   err != .None {
 		log.logf(.Fatal, "Failed to load scene: {}", err)
 		panic("Failed to load scene")
 	}
 
-	if err := loadScene(engineState.graphicsContext, "./assets/scenes/bunny_box.json");
+	if err := loadScene(graphicsContext, "./assets/scenes/bunny_box.json");
 	   err != .None {
 		log.logf(.Fatal, "Failed to load scene: {}", err)
 		panic("Failed to load scene")
 	}
 
-	if err := loadScene(engineState.graphicsContext, "./assets/scenes/bunny_cmy.json"); err != .None {
-		log.logf(.Fatal, "Failed to load scene: {}", err)
-		panic("Failed to load scene")
-	}
+	setActiveScene(graphicsContext, 0)
 
-	setActiveScene(engineState.graphicsContext, 0)
-
-	for !glfw.WindowShouldClose(window) {
+	for !glfw.WindowShouldClose(graphicsContext.window) {
 		glfw.PollEvents()
 
 		if mouseMode {
 			if mouseDelta != {0, 0} {
 				axis: Vec3 = {0, 0, 0}
-				scene := &engineState.graphicsContext.scenes[engineState.graphicsContext.activeScene]
+				scene := &graphicsContext.scenes[graphicsContext.activeScene]
 				forward :=
 					scene.cameras[scene.activeCamera].center -
 					scene.cameras[scene.activeCamera].eye
@@ -176,7 +143,7 @@ main :: proc() {
 				mouseDelta = {0, 0}
 			}
 			if scrollDelta.y != 0 {
-				scene := &engineState.graphicsContext.scenes[engineState.graphicsContext.activeScene]
+				scene := &graphicsContext.scenes[graphicsContext.activeScene]
 				forward :=
 					(scene.cameras[scene.activeCamera].center -
 						scene.cameras[scene.activeCamera].eye) /
@@ -189,7 +156,7 @@ main :: proc() {
 			}
 		}
 		if cameraMove.x != 0 {
-			scene := &engineState.graphicsContext.scenes[engineState.graphicsContext.activeScene]
+			scene := &graphicsContext.scenes[graphicsContext.activeScene]
 			right := normalize(
 				cross(
 					scene.cameras[scene.activeCamera].up,
@@ -203,13 +170,13 @@ main :: proc() {
 			scene.cameras[scene.activeCamera].center += movement
 		}
 		if cameraMove.y != 0 {
-			scene := &engineState.graphicsContext.scenes[engineState.graphicsContext.activeScene]
+			scene := &graphicsContext.scenes[graphicsContext.activeScene]
 			movement := cameraMoveSpeed * cameraMove.y * scene.cameras[scene.activeCamera].up
 			scene.cameras[scene.activeCamera].eye += movement
 			scene.cameras[scene.activeCamera].center += movement
 		}
 		if cameraMove.z != 0 {
-			scene := &engineState.graphicsContext.scenes[engineState.graphicsContext.activeScene]
+			scene := &graphicsContext.scenes[graphicsContext.activeScene]
 			movement :=
 				cameraMoveSpeed *
 				cameraMove.z *
@@ -222,8 +189,8 @@ main :: proc() {
 
 		delta := f32(time.duration_seconds(time.since(lastFrameTime)))
 		lastFrameTime = time.now()
-		drawFrame(engineState.graphicsContext, delta if !paused else 0.0)
-		calcFrameRate(window)
+		drawFrame(graphicsContext, delta if !paused else 0.0)
+		calcFrameRate(graphicsContext.window)
 
 		free_all(context.temp_allocator)
 	}
