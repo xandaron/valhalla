@@ -88,7 +88,6 @@ DEPTH_BIAS_CONSTANT: f32 = 1.25
 @(private = "file")
 DEPTH_BIAS_SLOPE: f32 = 1.75
 
-
 // ###################################################################
 // #                         Data Structures                         #
 // ###################################################################
@@ -454,199 +453,7 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	createComputePipelines(graphicsContext)
 
 	initImgui(graphicsContext)
-}
-
-@(private = "file")
-initImgui :: proc(using graphicsContext: ^GraphicsContext) {
-	poolSizes: []vk.DescriptorPoolSize = {
-		{.SAMPLER, 1000},
-		{.COMBINED_IMAGE_SAMPLER, 1000},
-		{.SAMPLED_IMAGE, 1000},
-		{.STORAGE_IMAGE, 1000},
-		{.UNIFORM_TEXEL_BUFFER, 1000},
-		{.STORAGE_TEXEL_BUFFER, 1000},
-		{.UNIFORM_BUFFER, 1000},
-		{.STORAGE_BUFFER, 1000},
-		{.UNIFORM_BUFFER_DYNAMIC, 1000},
-		{.STORAGE_BUFFER_DYNAMIC, 1000},
-		{.INPUT_ATTACHMENT, 1000},
-	}
-
-	descriptorPoolCreateInfo: vk.DescriptorPoolCreateInfo = {
-		sType         = .DESCRIPTOR_POOL_CREATE_INFO,
-		pNext         = nil,
-		flags         = {.FREE_DESCRIPTOR_SET},
-		maxSets       = 1000,
-		poolSizeCount = u32(len(poolSizes)),
-		pPoolSizes    = raw_data(poolSizes),
-	}
-	if err := vk.CreateDescriptorPool(
-		device,
-		&descriptorPoolCreateInfo,
-		nil,
-		&imgImguiData.descriptorPool,
-	); err != .SUCCESS {
-		log.log(.Fatal, "Failed to create imgui descriptor pool!")
-		panic("Failed to create imgui descriptor pool!")
-	}
-
-	imgImguiData.uiContext = imgui.CreateContext()
-
-	implVulkan.LoadFunctions(
-		proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
-			return vk.GetInstanceProcAddr((vk.Instance)(user_data), function_name)
-		},
-		instance,
-	)
-
-	ok := implGLFW.InitForVulkan(window, true)
-	if !ok {
-		log.log(.Fatal, "Failed to initialize imgui for vulkan, quitting application.")
-		return
-	}
-
-	// RenderPass
-	{
-		imgImguiData.colour.format = swapchainFormat.format
-
-		createImage(
-			graphicsContext,
-			&imgImguiData.colour,
-			{},
-			.D2,
-			u32(swapchainExtent.width),
-			u32(swapchainExtent.height),
-			1,
-			{._1},
-			.OPTIMAL,
-			{.COLOR_ATTACHMENT, .TRANSFER_SRC, .TRANSFER_DST},
-			{.DEVICE_LOCAL},
-			.EXCLUSIVE,
-			0,
-			nil,
-		)
-
-		imgImguiData.colour.view = createImageView(
-			graphicsContext,
-			imgImguiData.colour.image,
-			.D2,
-			imgImguiData.colour.format,
-			{.COLOR},
-			1,
-		)
-
-		attachment: vk.AttachmentDescription = {
-			flags          = {},
-			format         = imgImguiData.colour.format,
-			samples        = {._1},
-			loadOp         = .LOAD,
-			storeOp        = .STORE,
-			stencilLoadOp  = .DONT_CARE,
-			stencilStoreOp = .DONT_CARE,
-			initialLayout  = .TRANSFER_DST_OPTIMAL,
-			finalLayout    = .TRANSFER_SRC_OPTIMAL,
-		}
-
-		colourAttachmentRef: vk.AttachmentReference = {
-			attachment = 0,
-			layout     = .COLOR_ATTACHMENT_OPTIMAL,
-		}
-
-		subpass: vk.SubpassDescription = {
-			flags                   = {},
-			pipelineBindPoint       = .GRAPHICS,
-			inputAttachmentCount    = 0,
-			pInputAttachments       = nil,
-			colorAttachmentCount    = 1,
-			pColorAttachments       = &colourAttachmentRef,
-			pResolveAttachments     = nil,
-			pDepthStencilAttachment = nil,
-			preserveAttachmentCount = 0,
-			pPreserveAttachments    = nil,
-		}
-
-		renderPassInfo: vk.RenderPassCreateInfo = {
-			sType           = .RENDER_PASS_CREATE_INFO,
-			pNext           = nil,
-			flags           = {},
-			attachmentCount = 1,
-			pAttachments    = &attachment,
-			subpassCount    = 1,
-			pSubpasses      = &subpass,
-			dependencyCount = 0,
-			pDependencies   = nil,
-		}
-
-		if vk.CreateRenderPass(device, &renderPassInfo, nil, &imgImguiData.renderPass) !=
-		   .SUCCESS {
-			log.log(.Error, "Unable to create render pass!")
-			panic("Unable to create render pass!")
-		}
-	}
-
-	// FrameBuffer
-	{
-		frameBufferInfo: vk.FramebufferCreateInfo = {
-			sType           = .FRAMEBUFFER_CREATE_INFO,
-			pNext           = nil,
-			flags           = {},
-			renderPass      = imgImguiData.renderPass,
-			attachmentCount = 1,
-			pAttachments    = &imgImguiData.colour.view,
-			width           = u32(swapchainExtent.width),
-			height          = u32(swapchainExtent.height),
-			layers          = 1,
-		}
-
-		imgImguiData.frameBuffers = make([]vk.Framebuffer, len(swapchainImageViews))
-		for index in 0 ..< len(swapchainImageViews) {
-			if vk.CreateFramebuffer(
-				   device,
-				   &frameBufferInfo,
-				   nil,
-				   &imgImguiData.frameBuffers[index],
-			   ) !=
-			   .SUCCESS {
-				log.log(.Error, "Failed to create frame buffer!")
-				panic("Failed to create frame buffer!")
-			}
-		}
-	}
-
-	implInitInfo: implVulkan.InitInfo = {
-		Instance                    = instance,
-		PhysicalDevice              = physicalDevice,
-		Device                      = device,
-		QueueFamily                 = queueFamilies.graphicsFamily,
-		Queue                       = graphicsQueue,
-		DescriptorPool              = imgImguiData.descriptorPool,
-		RenderPass                  = imgImguiData.renderPass,
-		MinImageCount               = 2,
-		ImageCount                  = 2,
-		MSAASamples                 = ._1,
-
-		// (Optional)
-		PipelineCache               = {},
-		Subpass                     = 0,
-
-		// (Optional) Dynamic Rendering
-		// Need to explicitly enable VK_KHR_dynamic_rendering extension to use this, even for Vulkan 1.3.
-		UseDynamicRendering         = false,
-		// NOTE: Odin-imgui: this field if #ifdef'd out in the Dear ImGui side if the struct is not defined.
-		// Keeping the field is a pretty safe bet, but make sure to check this if you have issues!
-		PipelineRenderingCreateInfo = {},
-
-		// (Optional) Allocation, Debugging
-		Allocator                   = nil,
-		CheckVkResultFn             = imguiCheckVkResult,
-		MinAllocationSize           = 1024 * 1024, // Minimum allocation size. Set to 1024*1024 to satisfy zealous best practices validation layer and waste a little memory.
-	}
-
-	ok = implVulkan.Init(&implInitInfo)
-	if !ok {
-		log.log(.Fatal, "Failed to init vulkan impl.")
-		panic("Failed to init vulkan impl.")
-	}
+	updateImgui(graphicsContext)
 }
 
 @(private = "file")
@@ -1229,12 +1036,13 @@ recreateSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 
 	cleanupSwapchain(graphicsContext)
-	cleanupImgui(graphicsContext)
 
 	createSwapchain(graphicsContext)
 	createStorageImages(graphicsContext)
 	updateComputeDescriptorSets(graphicsContext)
-	initImgui(graphicsContext)
+
+	cleanupImgui(graphicsContext)
+	updateImgui(graphicsContext)
 }
 
 
@@ -3111,25 +2919,19 @@ updateGraphicsDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 			uniformBufferInfo.buffer = uniformBuffers[index].buffer
 
 			descriptorWrite: vk.WriteDescriptorSet = {
-				sType = .WRITE_DESCRIPTOR_SET,
-				pNext = nil,
-				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
-				dstBinding = 0,
-				dstArrayElement = 0,
-				descriptorCount = 1,
-				descriptorType = .UNIFORM_BUFFER,
-				pImageInfo = nil,
-				pBufferInfo = &uniformBufferInfo,
+				sType            = .WRITE_DESCRIPTOR_SET,
+				pNext            = nil,
+				dstSet           = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding       = 0,
+				dstArrayElement  = 0,
+				descriptorCount  = 1,
+				descriptorType   = .UNIFORM_BUFFER,
+				pImageInfo       = nil,
+				pBufferInfo      = &uniformBufferInfo,
 				pTexelBufferView = nil,
 			}
 
-			vk.UpdateDescriptorSets(
-				device,
-				1,
-				&descriptorWrite,
-				0,
-				nil,
-			)
+			vk.UpdateDescriptorSets(device, 1, &descriptorWrite, 0, nil)
 		}
 	}
 }
@@ -4486,6 +4288,207 @@ createComputePipelines :: proc(
 
 
 // ###################################################################
+// #                              Imgui                              #
+// ###################################################################
+
+
+@(private = "file")
+initImgui :: proc(using graphicsContext: ^GraphicsContext) {
+	poolSizes: []vk.DescriptorPoolSize = {
+		{.SAMPLER, 1000},
+		{.COMBINED_IMAGE_SAMPLER, 1000},
+		{.SAMPLED_IMAGE, 1000},
+		{.STORAGE_IMAGE, 1000},
+		{.UNIFORM_TEXEL_BUFFER, 1000},
+		{.STORAGE_TEXEL_BUFFER, 1000},
+		{.UNIFORM_BUFFER, 1000},
+		{.STORAGE_BUFFER, 1000},
+		{.UNIFORM_BUFFER_DYNAMIC, 1000},
+		{.STORAGE_BUFFER_DYNAMIC, 1000},
+		{.INPUT_ATTACHMENT, 1000},
+	}
+
+	descriptorPoolCreateInfo: vk.DescriptorPoolCreateInfo = {
+		sType         = .DESCRIPTOR_POOL_CREATE_INFO,
+		pNext         = nil,
+		flags         = {.FREE_DESCRIPTOR_SET},
+		maxSets       = 1000,
+		poolSizeCount = u32(len(poolSizes)),
+		pPoolSizes    = raw_data(poolSizes),
+	}
+
+	if vk.CreateDescriptorPool(
+		   device,
+		   &descriptorPoolCreateInfo,
+		   nil,
+		   &imgImguiData.descriptorPool,
+	   ) !=
+	   .SUCCESS {
+		log.log(.Fatal, "Failed to create imgui descriptor pool!")
+		panic("Failed to create imgui descriptor pool!")
+	}
+}
+
+@(private = "file")
+updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
+	imgImguiData.uiContext = imgui.CreateContext()
+
+	implVulkan.LoadFunctions(
+		proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
+			return vk.GetInstanceProcAddr((vk.Instance)(user_data), function_name)
+		},
+		instance,
+	)
+
+	if !implGLFW.InitForVulkan(window, true) {
+		log.log(.Fatal, "Failed to initialize imgui for vulkan, quitting application.")
+		return
+	}
+	// RenderPass
+	{
+		imgImguiData.colour.format = swapchainFormat.format
+
+		createImage(
+			graphicsContext,
+			&imgImguiData.colour,
+			{},
+			.D2,
+			u32(swapchainExtent.width),
+			u32(swapchainExtent.height),
+			1,
+			{._1},
+			.OPTIMAL,
+			{.COLOR_ATTACHMENT, .TRANSFER_SRC, .TRANSFER_DST},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
+
+		imgImguiData.colour.view = createImageView(
+			graphicsContext,
+			imgImguiData.colour.image,
+			.D2,
+			imgImguiData.colour.format,
+			{.COLOR},
+			1,
+		)
+
+		attachment: vk.AttachmentDescription = {
+			flags          = {},
+			format         = imgImguiData.colour.format,
+			samples        = {._1},
+			loadOp         = .LOAD,
+			storeOp        = .STORE,
+			stencilLoadOp  = .DONT_CARE,
+			stencilStoreOp = .DONT_CARE,
+			initialLayout  = .TRANSFER_DST_OPTIMAL,
+			finalLayout    = .TRANSFER_SRC_OPTIMAL,
+		}
+
+		colourAttachmentRef: vk.AttachmentReference = {
+			attachment = 0,
+			layout     = .COLOR_ATTACHMENT_OPTIMAL,
+		}
+
+		subpass: vk.SubpassDescription = {
+			flags                   = {},
+			pipelineBindPoint       = .GRAPHICS,
+			inputAttachmentCount    = 0,
+			pInputAttachments       = nil,
+			colorAttachmentCount    = 1,
+			pColorAttachments       = &colourAttachmentRef,
+			pResolveAttachments     = nil,
+			pDepthStencilAttachment = nil,
+			preserveAttachmentCount = 0,
+			pPreserveAttachments    = nil,
+		}
+
+		renderPassInfo: vk.RenderPassCreateInfo = {
+			sType           = .RENDER_PASS_CREATE_INFO,
+			pNext           = nil,
+			flags           = {},
+			attachmentCount = 1,
+			pAttachments    = &attachment,
+			subpassCount    = 1,
+			pSubpasses      = &subpass,
+			dependencyCount = 0,
+			pDependencies   = nil,
+		}
+
+		if vk.CreateRenderPass(device, &renderPassInfo, nil, &imgImguiData.renderPass) !=
+		   .SUCCESS {
+			log.log(.Error, "Unable to create render pass!")
+			panic("Unable to create render pass!")
+		}
+	}
+
+	// FrameBuffer
+	{
+		frameBufferInfo: vk.FramebufferCreateInfo = {
+			sType           = .FRAMEBUFFER_CREATE_INFO,
+			pNext           = nil,
+			flags           = {},
+			renderPass      = imgImguiData.renderPass,
+			attachmentCount = 1,
+			pAttachments    = &imgImguiData.colour.view,
+			width           = u32(swapchainExtent.width),
+			height          = u32(swapchainExtent.height),
+			layers          = 1,
+		}
+
+		imgImguiData.frameBuffers = make([]vk.Framebuffer, len(swapchainImageViews))
+		for index in 0 ..< len(swapchainImageViews) {
+			if vk.CreateFramebuffer(
+				   device,
+				   &frameBufferInfo,
+				   nil,
+				   &imgImguiData.frameBuffers[index],
+			   ) !=
+			   .SUCCESS {
+				log.log(.Error, "Failed to create frame buffer!")
+				panic("Failed to create frame buffer!")
+			}
+		}
+	}
+
+	implInitInfo: implVulkan.InitInfo = {
+		Instance                    = instance,
+		PhysicalDevice              = physicalDevice,
+		Device                      = device,
+		QueueFamily                 = queueFamilies.graphicsFamily,
+		Queue                       = graphicsQueue,
+		DescriptorPool              = imgImguiData.descriptorPool,
+		RenderPass                  = imgImguiData.renderPass,
+		MinImageCount               = 2,
+		ImageCount                  = 2,
+		MSAASamples                 = ._1,
+
+		// (Optional)
+		PipelineCache               = {},
+		Subpass                     = 0,
+
+		// (Optional) Dynamic Rendering
+		// Need to explicitly enable VK_KHR_dynamic_rendering extension to use this, even for Vulkan 1.3.
+		UseDynamicRendering         = false,
+		// NOTE: Odin-imgui: this field if #ifdef'd out in the Dear ImGui side if the struct is not defined.
+		// Keeping the field is a pretty safe bet, but make sure to check this if you have issues!
+		PipelineRenderingCreateInfo = {},
+
+		// (Optional) Allocation, Debugging
+		Allocator                   = nil,
+		CheckVkResultFn             = imguiCheckVkResult,
+		MinAllocationSize           = 1024 * 1024, // Minimum allocation size. Set to 1024*1024 to satisfy zealous best practices validation layer and waste a little memory.
+	}
+
+	if !implVulkan.Init(&implInitInfo) {
+		log.log(.Fatal, "Failed to init vulkan impl.")
+		panic("Failed to init vulkan impl.")
+	}
+}
+
+
+// ###################################################################
 // #                           Render Loop                           #
 // ###################################################################
 
@@ -4879,14 +4882,14 @@ recordGraphicsBuffer :: proc(
 			pClearValues = raw_data(
 				[]vk.ClearValue {
 					{
-						color = vk.ClearColorValue{
+						color = vk.ClearColorValue {
 							float32 = Vec4 {
-								f32(scenes[activeScene].clearColour.x) / 255.0, 
-								f32(scenes[activeScene].clearColour.y) / 255.0, 
-								f32(scenes[activeScene].clearColour.z) / 255.0, 
-								f32(scenes[activeScene].clearColour.w) / 255.0, 
-							}
-						}
+								f32(scenes[activeScene].clearColour.x) / 255.0,
+								f32(scenes[activeScene].clearColour.y) / 255.0,
+								f32(scenes[activeScene].clearColour.z) / 255.0,
+								f32(scenes[activeScene].clearColour.w) / 255.0,
+							},
+						},
 					},
 					{depthStencil = vk.ClearDepthStencilValue{depth = 1, stencil = 0}},
 				},
@@ -5072,6 +5075,7 @@ recordUIBuffer :: proc(
 	}
 	vk.CmdBeginRenderPass(commandBuffer, &renderPassInfo, .INLINE)
 
+	drawUI(graphicsContext)
 	imgui.Render()
 	implVulkan.RenderDrawData(imgui.GetDrawData(), commandBuffer)
 
@@ -5229,8 +5233,6 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 	vk.ResetCommandBuffer(mainCommandBuffers[currentFrame], {})
 	vk.ResetCommandBuffer(computeCommandBuffers[currentFrame], {})
 	vk.ResetCommandBuffer(uiCommandBuffers[currentFrame], {})
-
-	drawUI(graphicsContext)
 
 	updateUniformBuffer(
 		graphicsContext,
@@ -5414,7 +5416,6 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 @(private = "file")
 cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	implVulkan.Shutdown()
-	implGLFW.Shutdown()
 
 	for frameBuffer in imgImguiData.frameBuffers {
 		vk.DestroyFramebuffer(device, frameBuffer, nil)
@@ -5426,33 +5427,57 @@ cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.FreeMemory(device, imgImguiData.colour.memory, nil)
 
 	vk.DestroyRenderPass(device, imgImguiData.renderPass, nil)
-	vk.DestroyDescriptorPool(device, imgImguiData.descriptorPool, nil)
 
+	implGLFW.Shutdown()
 	imgui.DestroyContext(imgImguiData.uiContext)
 }
 
 clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
-	vk.DeviceWaitIdle(device)
+	if vk.DeviceWaitIdle(device) != .SUCCESS {
+		panic("Failed to wait for device idle!")
+	}
 
 	for index in 0 ..< len(scenes) {
 		cleanupScene(graphicsContext, u32(index))
 	}
 	delete(scenes)
+
 	cleanupImgui(graphicsContext)
+	vk.DestroyDescriptorPool(device, imgImguiData.descriptorPool, nil)
+
+	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(mainCommandBuffers))
+	vk.FreeCommandBuffers(device, computeCommandPool, 2, raw_data(computeCommandBuffers))
+	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(uiCommandBuffers))
+
+	vk.DestroyCommandPool(device, graphicsCommandPool, nil)
+	vk.DestroyCommandPool(device, computeCommandPool, nil)
+	delete(mainCommandBuffers)
+	delete(computeCommandBuffers)
+	delete(uiCommandBuffers)
+
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		vk.DestroyFence(device, inFlightFrames[index], nil)
+		vk.DestroySemaphore(device, rendersFinished[index], nil)
+		vk.DestroySemaphore(device, computeFinished[index], nil)
+		vk.DestroySemaphore(device, uiFinished[index], nil)
+		vk.DestroySemaphore(device, imagesAvailable[index], nil)
+	}
+	delete(inFlightFrames)
+	delete(rendersFinished)
+	delete(computeFinished)
+	delete(uiFinished)
+	delete(imagesAvailable)
 
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		vk.DestroyBuffer(device, uniformBuffers[index].buffer, nil)
 		vk.FreeMemory(device, uniformBuffers[index].memory, nil)
 	}
 
-	for frameBuffer in pipelines[PipelineIndex.MAIN].frameBuffers {
-		vk.DestroyFramebuffer(device, frameBuffer, nil)
+	for index in 0 ..< swapchainImageCount {
+		vk.DestroyFramebuffer(device, pipelines[PipelineIndex.MAIN].frameBuffers[index], nil)
+		vk.DestroyFramebuffer(device, pipelines[PipelineIndex.SHADOW].frameBuffers[index], nil)
 	}
 	delete(pipelines[PipelineIndex.MAIN].frameBuffers)
-
-	for frameBuffer in pipelines[PipelineIndex.SHADOW].frameBuffers {
-		vk.DestroyFramebuffer(device, frameBuffer, nil)
-	}
 	delete(pipelines[PipelineIndex.SHADOW].frameBuffers)
 
 	cleanupSwapchain(graphicsContext)
@@ -5495,33 +5520,12 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 
 	delete(pipelines)
 
-	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyFence(device, inFlightFrames[index], nil)
-		vk.DestroySemaphore(device, rendersFinished[index], nil)
-		vk.DestroySemaphore(device, computeFinished[index], nil)
-		vk.DestroySemaphore(device, uiFinished[index], nil)
-		vk.DestroySemaphore(device, imagesAvailable[index], nil)
-	}
-	delete(inFlightFrames)
-	delete(rendersFinished)
-	delete(computeFinished)
-	delete(uiFinished)
-	delete(imagesAvailable)
-
-	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(mainCommandBuffers))
-	vk.FreeCommandBuffers(device, computeCommandPool, 2, raw_data(computeCommandBuffers))
-	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(uiCommandBuffers))
-	
-	vk.DestroyCommandPool(device, graphicsCommandPool, nil)
-	vk.DestroyCommandPool(device, computeCommandPool, nil)
-	delete(mainCommandBuffers)
-	delete(computeCommandBuffers)
-	delete(uiCommandBuffers)
-
 	vk.DestroyDevice(device, nil)
+
 	when ODIN_DEBUG {
 		vk.DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nil)
 	}
+
 	vk.DestroySurfaceKHR(instance, surface, nil)
 	vk.DestroyInstance(instance, nil)
 
