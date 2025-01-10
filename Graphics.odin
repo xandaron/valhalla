@@ -83,10 +83,10 @@ SHADOW_RESOLUTION: Vec2 : {2048, 2048}
 IMAGES_RESOLUTION: Vec2 : {4096, 4096}
 
 @(private = "file")
-DEPTH_BIAS_CONSTANT: f32 = 1.25
+DEPTH_BIAS_CONSTANT: f32 : 1.25
 
 @(private = "file")
-DEPTH_BIAS_SLOPE: f32 = 1.75
+DEPTH_BIAS_SLOPE: f32 : 1.75
 
 // ###################################################################
 // #                         Data Structures                         #
