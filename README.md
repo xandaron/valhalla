@@ -34,10 +34,7 @@ odin build . -out:build/build.exe
 ./build/build.exe
 ```
 
-> **Note:** On Linux, you will need to install the GLFW library separately. You can do this using your package manager. For example, on Ubuntu, you can run:
-> ```sh
-> sudo apt-get install libglfw3-dev
-> ```
+> **Note:** On Linux, you will need to install the GLFW 3.4+ library separately. It's important you install GLFW 3.4 or later as anything earlier will cause crashes.
 
 ## Demo
 
