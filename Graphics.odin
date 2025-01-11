@@ -328,7 +328,7 @@ Camera :: struct {
 GraphicsContext :: struct {
 	// GLFW + IMGUI
 	window:                glfw.WindowHandle,
-	imgImguiData:          ImguiData,
+	imguiData:             ImguiData,
 
 	// Vulkan Data
 	instance:              vk.Instance,
@@ -390,17 +390,16 @@ GraphicsContext :: struct {
 
 
 initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
-	glfw.SetErrorCallback(glfwErrorCallback)
-
+	when ODIN_DEBUG {
+		glfw.SetErrorCallback(glfwErrorCallback)
+	}
 	if !glfw.Init() {
 		log.log(.Fatal, "Failed to initalize glfw, quitting application.")
 		return
 	}
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-
-	window = glfw.CreateWindow(800, 600, "Valhalla", nil, nil)
-	if window == nil {
+	if window = glfw.CreateWindow(800, 600, "Valhalla", nil, nil); window == nil {
 		log.log(.Fatal, "Failed to create window, quitting application.")
 		return
 	}
@@ -416,7 +415,6 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	framebufferResized = false
 	currentFrame = 0
 
-	// Init
 	createInstance(graphicsContext)
 	when ODIN_DEBUG {
 		vkSetupDebugMessenger(graphicsContext)
@@ -424,35 +422,19 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	createSurface(graphicsContext)
 	pickPhysicalDevice(graphicsContext)
 	createLogicalDevice(graphicsContext)
-
-	// Swapchain
-	getSwapchainInfo(graphicsContext)
 	createSwapchain(graphicsContext)
-
-	// Commands
 	createCommandBuffers(graphicsContext)
-
-	// Shader buffers
 	createUniformBuffer(graphicsContext)
-
-
-	// Frame Resources
-	createStorageImages(graphicsContext)
 	createSyncObjects(graphicsContext)
-
-	// Pipeline
 	pipelines = make([]Pipeline, len(PipelineIndex))
 	createRenderPass(graphicsContext)
 	createFramebuffers(graphicsContext)
-
 	createGraphicsDescriptorSets(graphicsContext)
 	createComputeDescriptorSets(graphicsContext)
 	updateGraphicsDescriptorSets(graphicsContext)
 	updateComputeDescriptorSets(graphicsContext)
-
 	createGraphicsPipelines(graphicsContext)
 	createComputePipelines(graphicsContext)
-
 	initImgui(graphicsContext)
 	updateImgui(graphicsContext)
 }
@@ -918,19 +900,6 @@ createLogicalDevice :: proc(using graphicsContext: ^GraphicsContext) {
 
 
 @(private = "file")
-getSwapchainInfo :: proc(using graphicsContext: ^GraphicsContext) {
-	swapchainSupport := querySwapchainSupport(physicalDevice, graphicsContext)
-	delete(swapchainSupport.formats)
-	delete(swapchainSupport.modes)
-
-	ideal: u32 = 2
-	max := swapchainSupport.capabilities.maxImageCount
-	min := swapchainSupport.capabilities.minImageCount
-	swapchainImageCount = max if max > 0 && ideal > max else ideal if ideal >= min else min
-	swapchainTransform = swapchainSupport.capabilities.currentTransform
-}
-
-@(private = "file")
 createSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	chooseFormat :: proc(formats: []vk.SurfaceFormatKHR) -> vk.SurfaceFormatKHR {
 		for format in formats {
@@ -974,6 +943,12 @@ createSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 
 	swapchainSupport := querySwapchainSupport(physicalDevice, graphicsContext)
+
+	max := swapchainSupport.capabilities.maxImageCount
+	min := swapchainSupport.capabilities.minImageCount
+	swapchainImageCount = max if max == 1 else (2 if 2 >= min else min)
+	swapchainTransform = swapchainSupport.capabilities.currentTransform
+
 	swapchainFormat = chooseFormat(swapchainSupport.formats)
 	swapchainMode = choosePresentMode(swapchainSupport.modes)
 	swapchainExtent = chooseExtent(swapchainSupport.capabilities, graphicsContext)
@@ -995,7 +970,7 @@ createSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 		imageArrayLayers      = 1,
 		imageUsage            = {.TRANSFER_DST, .COLOR_ATTACHMENT},
 		imageSharingMode      = oneQueueFamily ? .EXCLUSIVE : .CONCURRENT,
-		queueFamilyIndexCount = oneQueueFamily ? 0 : 2,
+		queueFamilyIndexCount = oneQueueFamily ? 0 : 3,
 		pQueueFamilyIndices   = oneQueueFamily ? nil : raw_data([]u32{queueFamilies.graphicsFamily, queueFamilies.presentFamily, queueFamilies.computeFamily}),
 		preTransform          = swapchainTransform,
 		compositeAlpha        = {.OPAQUE},
@@ -1040,7 +1015,6 @@ recreateSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	cleanupSwapchain(graphicsContext)
 
 	createSwapchain(graphicsContext)
-	createStorageImages(graphicsContext)
 	updateComputeDescriptorSets(graphicsContext)
 
 	cleanupImgui(graphicsContext)
@@ -1487,7 +1461,7 @@ createImageView :: proc(
 	imageView: vk.ImageView,
 ) {
 	viewInfo: vk.ImageViewCreateInfo = {
-		sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+		sType = .IMAGE_VIEW_CREATE_INFO,
 		pNext = nil,
 		flags = {},
 		image = image,
@@ -3057,28 +3031,20 @@ createComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 
 		for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-			descriptorWrite: []vk.WriteDescriptorSet = {
-				{
-					sType = .WRITE_DESCRIPTOR_SET,
-					pNext = nil,
-					dstSet = pipelines[PipelineIndex.POST].descriptorSets[index],
-					dstBinding = 2,
-					dstArrayElement = 0,
-					descriptorCount = 1,
-					descriptorType = .COMBINED_IMAGE_SAMPLER,
-					pImageInfo = &sceneDepth,
-					pBufferInfo = nil,
-					pTexelBufferView = nil,
-				},
+			descriptorWrite: vk.WriteDescriptorSet = {
+				sType            = .WRITE_DESCRIPTOR_SET,
+				pNext            = nil,
+				dstSet           = pipelines[PipelineIndex.POST].descriptorSets[index],
+				dstBinding       = 2,
+				dstArrayElement  = 0,
+				descriptorCount  = 1,
+				descriptorType   = .COMBINED_IMAGE_SAMPLER,
+				pImageInfo       = &sceneDepth,
+				pBufferInfo      = nil,
+				pTexelBufferView = nil,
 			}
 
-			vk.UpdateDescriptorSets(
-				device,
-				u32(len(descriptorWrite)),
-				raw_data(descriptorWrite),
-				0,
-				nil,
-			)
+			vk.UpdateDescriptorSets(device, 1, &descriptorWrite, 0, nil)
 		}
 	}
 }
@@ -3087,6 +3053,60 @@ createComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 updateComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 	// POST PROCESSING
 	{
+		inImage.format = .R8G8B8A8_UNORM
+		createImage(
+			graphicsContext,
+			&inImage,
+			{},
+			.D2,
+			swapchainExtent.width,
+			swapchainExtent.height,
+			1,
+			{._1},
+			.OPTIMAL,
+			{.TRANSFER_SRC, .TRANSFER_DST, .STORAGE},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
+
+		inImage.view = createImageView(
+			graphicsContext,
+			inImage.image,
+			.D2,
+			inImage.format,
+			{.COLOR},
+			1,
+		)
+
+		outImage.format = .R8G8B8A8_UNORM
+		createImage(
+			graphicsContext,
+			&outImage,
+			{},
+			.D2,
+			swapchainExtent.width,
+			swapchainExtent.height,
+			1,
+			{._1},
+			.OPTIMAL,
+			{.TRANSFER_SRC, .STORAGE},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
+
+		outImage.view = createImageView(
+			graphicsContext,
+			outImage.image,
+			.D2,
+			outImage.format,
+			{.COLOR},
+			1,
+		)
+
 		inImageInfo: vk.DescriptorImageInfo = {
 			sampler     = inImage.sampler,
 			imageView   = inImage.view,
@@ -3353,116 +3373,6 @@ updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, scene
 
 
 @(private = "file")
-createStorageImages :: proc(using graphicsContext: ^GraphicsContext) {
-	inImage.format = .R8G8B8A8_UNORM
-	createImage(
-		graphicsContext,
-		&inImage,
-		{},
-		.D2,
-		swapchainExtent.width,
-		swapchainExtent.height,
-		1,
-		{._1},
-		.OPTIMAL,
-		{.TRANSFER_DST, .STORAGE},
-		{.DEVICE_LOCAL},
-		.EXCLUSIVE,
-		0,
-		nil,
-	)
-
-	inImage.view = createImageView(
-		graphicsContext,
-		inImage.image,
-		.D2,
-		inImage.format,
-		{.COLOR},
-		1,
-	)
-
-	outImage.format = .R8G8B8A8_UNORM
-	createImage(
-		graphicsContext,
-		&outImage,
-		{},
-		.D2,
-		swapchainExtent.width,
-		swapchainExtent.height,
-		1,
-		{._1},
-		.OPTIMAL,
-		{.TRANSFER_SRC, .STORAGE},
-		{.DEVICE_LOCAL},
-		.EXCLUSIVE,
-		0,
-		nil,
-	)
-
-	outImage.view = createImageView(
-		graphicsContext,
-		outImage.image,
-		.D2,
-		outImage.format,
-		{.COLOR},
-		1,
-	)
-
-	commandBuffer := beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
-	barriers: []vk.ImageMemoryBarrier = {
-		{
-			sType = .IMAGE_MEMORY_BARRIER,
-			pNext = nil,
-			srcAccessMask = {},
-			dstAccessMask = {},
-			oldLayout = .UNDEFINED,
-			newLayout = .GENERAL,
-			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			image = inImage.image,
-			subresourceRange = vk.ImageSubresourceRange {
-				aspectMask = {.COLOR},
-				baseMipLevel = 0,
-				levelCount = 1,
-				baseArrayLayer = 0,
-				layerCount = 1,
-			},
-		},
-		{
-			sType = .IMAGE_MEMORY_BARRIER,
-			pNext = nil,
-			srcAccessMask = {},
-			dstAccessMask = {},
-			oldLayout = .UNDEFINED,
-			newLayout = .TRANSFER_SRC_OPTIMAL,
-			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			image = outImage.image,
-			subresourceRange = vk.ImageSubresourceRange {
-				aspectMask = {.COLOR},
-				baseMipLevel = 0,
-				levelCount = 1,
-				baseArrayLayer = 0,
-				layerCount = 1,
-			},
-		},
-	}
-	vk.CmdPipelineBarrier(
-		commandBuffer,
-		{.TOP_OF_PIPE},
-		{.ALL_COMMANDS},
-		{},
-		0,
-		nil,
-		0,
-		nil,
-		2,
-		raw_data(barriers),
-	)
-	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
-}
-
-@(private = "file")
 createSyncObjects :: proc(using graphicsContext: ^GraphicsContext) {
 	inFlightFrames = make([]vk.Fence, MAX_FRAMES_IN_FLIGHT)
 	rendersFinished = make([]vk.Semaphore, MAX_FRAMES_IN_FLIGHT)
@@ -3636,7 +3546,7 @@ createRenderPass :: proc(using graphicsContext: ^GraphicsContext) {
 
 	// MAIN
 	{
-		pipelines[PipelineIndex.MAIN].colour.format = swapchainFormat.format
+		pipelines[PipelineIndex.MAIN].colour.format = .R8G8B8A8_UNORM
 
 		createImage(
 			graphicsContext,
@@ -4327,7 +4237,7 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		   device,
 		   &descriptorPoolCreateInfo,
 		   nil,
-		   &imgImguiData.descriptorPool,
+		   &imguiData.descriptorPool,
 	   ) !=
 	   .SUCCESS {
 		log.log(.Fatal, "Failed to create imgui descriptor pool!")
@@ -4337,7 +4247,7 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 
 @(private = "file")
 updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
-	imgImguiData.uiContext = imgui.CreateContext()
+	imguiData.uiContext = imgui.CreateContext()
 
 	implVulkan.LoadFunctions(
 		proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
@@ -4352,11 +4262,11 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 	// RenderPass
 	{
-		imgImguiData.colour.format = swapchainFormat.format
+		imguiData.colour.format = .R8G8B8A8_UNORM
 
 		createImage(
 			graphicsContext,
-			&imgImguiData.colour,
+			&imguiData.colour,
 			{},
 			.D2,
 			u32(swapchainExtent.width),
@@ -4371,18 +4281,18 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 			nil,
 		)
 
-		imgImguiData.colour.view = createImageView(
+		imguiData.colour.view = createImageView(
 			graphicsContext,
-			imgImguiData.colour.image,
+			imguiData.colour.image,
 			.D2,
-			imgImguiData.colour.format,
+			imguiData.colour.format,
 			{.COLOR},
 			1,
 		)
 
 		attachment: vk.AttachmentDescription = {
 			flags          = {},
-			format         = imgImguiData.colour.format,
+			format         = imguiData.colour.format,
 			samples        = {._1},
 			loadOp         = .LOAD,
 			storeOp        = .STORE,
@@ -4422,8 +4332,7 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 			pDependencies   = nil,
 		}
 
-		if vk.CreateRenderPass(device, &renderPassInfo, nil, &imgImguiData.renderPass) !=
-		   .SUCCESS {
+		if vk.CreateRenderPass(device, &renderPassInfo, nil, &imguiData.renderPass) != .SUCCESS {
 			log.log(.Error, "Unable to create render pass!")
 			panic("Unable to create render pass!")
 		}
@@ -4435,21 +4344,21 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 			sType           = .FRAMEBUFFER_CREATE_INFO,
 			pNext           = nil,
 			flags           = {},
-			renderPass      = imgImguiData.renderPass,
+			renderPass      = imguiData.renderPass,
 			attachmentCount = 1,
-			pAttachments    = &imgImguiData.colour.view,
+			pAttachments    = &imguiData.colour.view,
 			width           = u32(swapchainExtent.width),
 			height          = u32(swapchainExtent.height),
 			layers          = 1,
 		}
 
-		imgImguiData.frameBuffers = make([]vk.Framebuffer, len(swapchainImageViews))
+		imguiData.frameBuffers = make([]vk.Framebuffer, len(swapchainImageViews))
 		for index in 0 ..< len(swapchainImageViews) {
 			if vk.CreateFramebuffer(
 				   device,
 				   &frameBufferInfo,
 				   nil,
-				   &imgImguiData.frameBuffers[index],
+				   &imguiData.frameBuffers[index],
 			   ) !=
 			   .SUCCESS {
 				log.log(.Error, "Failed to create frame buffer!")
@@ -4464,8 +4373,8 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		Device                      = device,
 		QueueFamily                 = queueFamilies.graphicsFamily,
 		Queue                       = graphicsQueue,
-		DescriptorPool              = imgImguiData.descriptorPool,
-		RenderPass                  = imgImguiData.renderPass,
+		DescriptorPool              = imguiData.descriptorPool,
+		RenderPass                  = imguiData.renderPass,
 		MinImageCount               = 2,
 		ImageCount                  = 2,
 		MSAASamples                 = ._1,
@@ -5031,7 +4940,7 @@ recordComputeBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		imgImguiData.colour.image,
+		imguiData.colour.image,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
 		{.COLOR},
@@ -5042,7 +4951,7 @@ recordComputeBuffer :: proc(
 		commandBuffer,
 		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 1},
 		outImage.image,
-		imgImguiData.colour.image,
+		imguiData.colour.image,
 		.TRANSFER_SRC_OPTIMAL,
 		.TRANSFER_DST_OPTIMAL,
 	)
@@ -5073,8 +4982,8 @@ recordUIBuffer :: proc(
 	renderPassInfo: vk.RenderPassBeginInfo = {
 		sType = .RENDER_PASS_BEGIN_INFO,
 		pNext = nil,
-		renderPass = imgImguiData.renderPass,
-		framebuffer = imgImguiData.frameBuffers[imageIndex],
+		renderPass = imguiData.renderPass,
+		framebuffer = imguiData.frameBuffers[imageIndex],
 		renderArea = vk.Rect2D{offset = {0, 0}, extent = swapchainExtent},
 		clearValueCount = 0,
 		pClearValues = nil,
@@ -5097,13 +5006,36 @@ recordUIBuffer :: proc(
 		1,
 	)
 
-	copyImage(
+	vk.CmdBlitImage(
 		commandBuffer,
-		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 1},
-		imgImguiData.colour.image,
-		swapchainImages[imageIndex],
+		imguiData.colour.image,
 		.TRANSFER_SRC_OPTIMAL,
+		swapchainImages[imageIndex],
 		.TRANSFER_DST_OPTIMAL,
+		1,
+		&vk.ImageBlit {
+			srcSubresource = {
+				aspectMask = {.COLOR},
+				mipLevel = 0,
+				baseArrayLayer = 0,
+				layerCount = 1,
+			},
+			srcOffsets = {
+				{x = 0, y = 0, z = 0},
+				{x = i32(swapchainExtent.width), y = i32(swapchainExtent.height), z = 1},
+			},
+			dstSubresource = {
+				aspectMask = {.COLOR},
+				mipLevel = 0,
+				baseArrayLayer = 0,
+				layerCount = 1,
+			},
+			dstOffsets = {
+				{x = 0, y = 0, z = 0},
+				{x = i32(swapchainExtent.width), y = i32(swapchainExtent.height), z = 1},
+			},
+		},
+		.NEAREST,
 	)
 
 	transitionImageLayout(
@@ -5422,19 +5354,19 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	implVulkan.Shutdown()
 
-	for frameBuffer in imgImguiData.frameBuffers {
+	for frameBuffer in imguiData.frameBuffers {
 		vk.DestroyFramebuffer(device, frameBuffer, nil)
 	}
-	delete(imgImguiData.frameBuffers)
+	delete(imguiData.frameBuffers)
 
-	vk.DestroyImageView(device, imgImguiData.colour.view, nil)
-	vk.DestroyImage(device, imgImguiData.colour.image, nil)
-	vk.FreeMemory(device, imgImguiData.colour.memory, nil)
+	vk.DestroyImageView(device, imguiData.colour.view, nil)
+	vk.DestroyImage(device, imguiData.colour.image, nil)
+	vk.FreeMemory(device, imguiData.colour.memory, nil)
 
-	vk.DestroyRenderPass(device, imgImguiData.renderPass, nil)
+	vk.DestroyRenderPass(device, imguiData.renderPass, nil)
 
 	implGLFW.Shutdown()
-	imgui.DestroyContext(imgImguiData.uiContext)
+	imgui.DestroyContext(imguiData.uiContext)
 }
 
 clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
@@ -5448,7 +5380,7 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	delete(scenes)
 
 	cleanupImgui(graphicsContext)
-	vk.DestroyDescriptorPool(device, imgImguiData.descriptorPool, nil)
+	vk.DestroyDescriptorPool(device, imguiData.descriptorPool, nil)
 
 	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(mainCommandBuffers))
 	vk.FreeCommandBuffers(device, computeCommandPool, 2, raw_data(computeCommandBuffers))
