@@ -88,6 +88,7 @@ DEPTH_BIAS_CONSTANT: f32 : 1.25
 @(private = "file")
 DEPTH_BIAS_SLOPE: f32 : 1.75
 
+
 // ###################################################################
 // #                         Data Structures                         #
 // ###################################################################
@@ -924,7 +925,8 @@ getSwapchainInfo :: proc(using graphicsContext: ^GraphicsContext) {
 
 	ideal: u32 = 2
 	max := swapchainSupport.capabilities.maxImageCount
-	swapchainImageCount = max if max > 0 && ideal > max else ideal
+	min := swapchainSupport.capabilities.minImageCount
+	swapchainImageCount = max if max > 0 && ideal > max else ideal if ideal >= min else min
 	swapchainTransform = swapchainSupport.capabilities.currentTransform
 }
 
@@ -2398,7 +2400,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 		u32(len(scenes[sceneIndex].pointLights)),
 		{._1},
 		.OPTIMAL,
-		{.TRANSFER_DST, .SAMPLED, .STORAGE},
+		{.TRANSFER_DST, .SAMPLED},
 		{.DEVICE_LOCAL},
 		.EXCLUSIVE,
 		0,
@@ -3352,7 +3354,7 @@ updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, scene
 
 @(private = "file")
 createStorageImages :: proc(using graphicsContext: ^GraphicsContext) {
-	inImage.format = swapchainFormat.format
+	inImage.format = .R8G8B8A8_UNORM
 	createImage(
 		graphicsContext,
 		&inImage,
@@ -3363,7 +3365,7 @@ createStorageImages :: proc(using graphicsContext: ^GraphicsContext) {
 		1,
 		{._1},
 		.OPTIMAL,
-		{.TRANSFER_DST, .SAMPLED, .STORAGE},
+		{.TRANSFER_DST, .STORAGE},
 		{.DEVICE_LOCAL},
 		.EXCLUSIVE,
 		0,
@@ -3379,7 +3381,7 @@ createStorageImages :: proc(using graphicsContext: ^GraphicsContext) {
 		1,
 	)
 
-	outImage.format = swapchainFormat.format
+	outImage.format = .R8G8B8A8_UNORM
 	createImage(
 		graphicsContext,
 		&outImage,
@@ -3390,7 +3392,7 @@ createStorageImages :: proc(using graphicsContext: ^GraphicsContext) {
 		1,
 		{._1},
 		.OPTIMAL,
-		{.TRANSFER_SRC, .SAMPLED, .STORAGE},
+		{.TRANSFER_SRC, .STORAGE},
 		{.DEVICE_LOCAL},
 		.EXCLUSIVE,
 		0,
@@ -3467,24 +3469,26 @@ createSyncObjects :: proc(using graphicsContext: ^GraphicsContext) {
 	computeFinished = make([]vk.Semaphore, MAX_FRAMES_IN_FLIGHT)
 	uiFinished = make([]vk.Semaphore, MAX_FRAMES_IN_FLIGHT)
 	imagesAvailable = make([]vk.Semaphore, MAX_FRAMES_IN_FLIGHT)
-	semaphoreInfo: vk.SemaphoreCreateInfo = {
-		sType = .SEMAPHORE_CREATE_INFO,
-		pNext = nil,
-		flags = {},
-	}
+
 	fenceInfo: vk.FenceCreateInfo = {
 		sType = .FENCE_CREATE_INFO,
 		pNext = nil,
 		flags = {.SIGNALED},
 	}
 
+	semaphoreInfo: vk.SemaphoreCreateInfo = {
+		sType = .SEMAPHORE_CREATE_INFO,
+		pNext = nil,
+		flags = {},
+	}
+
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		result :=
+			vk.CreateFence(device, &fenceInfo, nil, &inFlightFrames[index]) |
 			vk.CreateSemaphore(device, &semaphoreInfo, nil, &rendersFinished[index]) |
 			vk.CreateSemaphore(device, &semaphoreInfo, nil, &computeFinished[index]) |
 			vk.CreateSemaphore(device, &semaphoreInfo, nil, &uiFinished[index]) |
-			vk.CreateSemaphore(device, &semaphoreInfo, nil, &imagesAvailable[index]) |
-			vk.CreateFence(device, &fenceInfo, nil, &inFlightFrames[index])
+			vk.CreateSemaphore(device, &semaphoreInfo, nil, &imagesAvailable[index])
 		if result != .SUCCESS {
 			log.log(.Error, "Failed to create sync objects!")
 			panic("Failed to create sync objects!")
@@ -4294,6 +4298,8 @@ createComputePipelines :: proc(
 
 @(private = "file")
 initImgui :: proc(using graphicsContext: ^GraphicsContext) {
+	imgui.CHECKVERSION()
+
 	poolSizes: []vk.DescriptorPoolSize = {
 		{.SAMPLER, 1000},
 		{.COMBINED_IMAGE_SAMPLER, 1000},
@@ -5308,7 +5314,6 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 		pResults           = nil,
 	}
 
-	// Causes a seg fault on my wsl instance... issue unique to wsl or all linux?
 	if result := vk.QueuePresentKHR(presentQueue, &presentInfo);
 	   result == .ERROR_OUT_OF_DATE_KHR || result == .SUBOPTIMAL_KHR || framebufferResized {
 		framebufferResized = false
