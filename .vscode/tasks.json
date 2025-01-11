@@ -4,12 +4,21 @@
     "args": [],
     "tasks": [
         {
-            "label": "mkdir",
+            "label": "Windows mkdir",
             "type": "shell",
             "command": "cmd",
             "args": [
                 "/C",
                 "if not exist ./build mkdir ./build"
+            ]
+        },
+        {
+            "label": "Linux mkdir",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "if [ ! -d './build' ]; then mkdir ./build; fi;"
             ]
         },
         {
@@ -32,8 +41,16 @@
         {
             "label": "Build",
             "dependsOn": [
-                "mkdir",
+                "Windows mkdir",
                 "compile_shaders",
+                "debug",
+                "build"
+            ]
+        },
+        {
+            "label": "Build Linux",
+            "dependsOn": [
+                "Linux mkdir",
                 "debug",
                 "build"
             ]

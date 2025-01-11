@@ -2,6 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
+            // Windows
             "type": "cppvsdbg",
             "request": "launch",
             "preLaunchTask": "Build",
@@ -15,10 +16,8 @@
             "name": "Linux Debug",
             "type": "cppdbg",
             "request": "launch",
-            "preLaunchTask": "Build",
+            "preLaunchTask": "Build Linux",
             "program": "${workspaceFolder}/build/debug.exe",
-            "MIMode": "gdb",
-            "miDebuggerPath": "/usr/bin/gdb",
             "args": [],
             "cwd": "${workspaceFolder}",
         }
