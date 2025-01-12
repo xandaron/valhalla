@@ -158,6 +158,7 @@ imguiCheckVkResult :: proc "c" (err: vk.Result) {
 	if int(err) == 0 { return }
 	if int(err) < 0 {
 		log.logf(.Fatal, "Imgui-Vulkan: VkResult = {}", err)
+		panic("Imgui error")
 	}
 	log.logf(.Error, "Imgui-Vulkan: VkResult = {}", err)
 }

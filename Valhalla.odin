@@ -32,10 +32,6 @@ cameraMove: Vec3 = {0, 0, 0}
 logger: runtime.Logger
 showDemo := false
 
-EngineState :: struct {
-	graphicsContext: ^GraphicsContext,
-}
-
 main :: proc() {
 	// Sets the current dir to the folder above the dir of the exe file
 	{
@@ -93,15 +89,13 @@ main :: proc() {
 		}
 	}
 
-	using engineState: EngineState = {
-		graphicsContext = &{},
-	}
-	initVkGraphics(graphicsContext)
-	defer clanupVkGraphics(graphicsContext)
+	graphicsContext: GraphicsContext
+	initVkGraphics(&graphicsContext)
+	defer clanupVkGraphics(&graphicsContext)
 
-	glfw.SetWindowUserPointer(graphicsContext.window, &engineState)
+	glfw.SetWindowUserPointer(graphicsContext.window, &graphicsContext)
 
-	if err := loadScene(graphicsContext, "./assets/scenes/shambler.json"); err != .None {
+	if err := loadScene(&graphicsContext, "./assets/scenes/shambler.json"); err != .None {
 		log.logf(.Fatal, "Failed to load scene: {}", err)
 		panic("Failed to load scene")
 	}
@@ -111,7 +105,7 @@ main :: proc() {
 	// 	panic("Failed to load scene")
 	// }
 
-	setActiveScene(graphicsContext, 0)
+	setActiveScene(&graphicsContext, 0)
 
 	for !glfw.WindowShouldClose(graphicsContext.window) {
 		glfw.PollEvents()
@@ -166,7 +160,7 @@ main :: proc() {
 
 		delta := f32(time.duration_seconds(time.since(lastFrameTime)))
 		lastFrameTime = time.now()
-		drawFrame(graphicsContext, delta if !paused else 0.0)
+		drawFrame(&graphicsContext, delta if !paused else 0.0)
 		calcFrameRate(graphicsContext.window)
 
 		// I'm not using the temp allocatior so this shouldn't do anything
@@ -238,8 +232,8 @@ keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods:
 		}
 	}
 	if key == glfw.KEY_C && action == glfw.PRESS {
-		engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
-		scene := &engineState.graphicsContext.scenes[engineState.graphicsContext.activeScene]
+		graphicsContext := (^GraphicsContext)(glfw.GetWindowUserPointer(window))
+		scene := &graphicsContext.scenes[graphicsContext.activeScene]
 		camera := scene.cameras[scene.activeCamera]
 		log.logf(
 			.Debug,
@@ -283,6 +277,6 @@ glfwScrollCallback :: proc "c" (window: glfw.WindowHandle, xoffset, yoffset: f64
 }
 
 framebufferResizeCallback :: proc "c" (window: glfw.WindowHandle, width: i32, height: i32) {
-	engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
-	engineState^.graphicsContext.framebufferResized = true
+	graphicsContext := (^GraphicsContext)(glfw.GetWindowUserPointer(window))
+	graphicsContext.framebufferResized = true
 }

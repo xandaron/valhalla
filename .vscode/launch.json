@@ -3,10 +3,10 @@
     "configurations": [
         {
             // Windows
+            "name": "Debug Windows",
             "type": "cppvsdbg",
             "request": "launch",
-            "preLaunchTask": "Build",
-            "name": "Debug",
+            "preLaunchTask": "Build Windows",
             "program": "${workspaceFolder}/build/debug.exe",
             "args": [],
             "cwd": "${workspaceFolder}"

@@ -39,7 +39,7 @@
             "group": "build"
         },
         {
-            "label": "Build",
+            "label": "Build Windows",
             "dependsOn": [
                 "Windows mkdir",
                 "compile_shaders",

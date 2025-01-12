@@ -274,18 +274,6 @@ Instance :: struct {
 }
 
 @(private = "file")
-SceneFile :: struct {
-	name:         cstring,
-	clearColour:  [4]i32,
-	cameras:      []Camera,
-	pointLights:  []PointLight,
-	modelPaths:   []cstring,
-	texturePaths: []cstring,
-	normalPaths:  []cstring,
-	instances:    []Instance,
-}
-
-@(private = "file")
 Scene :: struct {
 	name:            cstring,
 	clearColour:     [4]i32,
@@ -297,9 +285,12 @@ Scene :: struct {
 	activeCamera:    u32,
 
 	// Assets
+	modelPaths:      []cstring,
 	models:          []Model,
-	albidos:         Image,
-	albidosCount:    u32,
+	texturePaths:    []cstring,
+	textures:        Image,
+	textureCount:    u32,
+	normalPaths:     []cstring,
 	normals:         Image,
 	normalsCount:    u32,
 	vertices:        []Vertex,
@@ -358,7 +349,6 @@ GraphicsContext :: struct {
 	pipelines:             []Pipeline,
 
 	// Frame Resources
-	imageSampler:          vk.Sampler,
 	inImage:               Image,
 	outImage:              Image,
 	inFlightFrames:        []vk.Fence,
@@ -1772,6 +1762,7 @@ loadModels :: proc(
 					mesh,
 					face,
 				)
+
 				if err.did_panic {
 					errMessage := transmute(string)err.message[0:err.message_length]
 					log.log(.Error, errMessage)
@@ -1974,17 +1965,32 @@ loadModels :: proc(
 		}
 	}
 
-	scenes[sceneIndex].models = make([]Model, len(modelPaths))
 	verticesDynamic: [dynamic]Vertex
+	vertexCount := u32(len(scenes[sceneIndex].vertices))
+	reserve(&verticesDynamic, vertexCount)
+	append(&verticesDynamic, ..scenes[sceneIndex].vertices)
+
 	indicesDynamic: [dynamic]u32
-	vertexCount: u32 = 0
-	indexCount: u32 = 0
+	indexCount := u32(len(scenes[sceneIndex].indices))
+	reserve(&indicesDynamic, indexCount)
+	append(&indicesDynamic, ..scenes[sceneIndex].indices)
+
+	newModels := make([]Model, len(scenes[sceneIndex].models) + len(modelPaths))
+	modelOffset := len(scenes[sceneIndex].models)
+	for &model, index in scenes[sceneIndex].models {
+		newModels[index] = model
+	}
+	scenes[sceneIndex].models = newModels
+
 	for path, index in modelPaths {
-		scenes[sceneIndex].models[index].vertexOffset = vertexCount
-		scenes[sceneIndex].models[index].indexOffset = indexCount
+		scenes[sceneIndex].models[modelOffset + index].vertexOffset = vertexCount
+		scenes[sceneIndex].models[modelOffset + index].indexOffset = indexCount
+
 		loadFBX(graphicsContext, &scenes[sceneIndex].models[index], path)
+
 		append(&verticesDynamic, ..scenes[sceneIndex].models[index].vertices)
 		append(&indicesDynamic, ..scenes[sceneIndex].models[index].indices)
+
 		vertexCount = u32(len(verticesDynamic))
 		indexCount = u32(len(indicesDynamic))
 	}
@@ -2193,6 +2199,7 @@ addTextures :: proc(
 		{.COLOR},
 		textureCount^,
 	)
+
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
@@ -2202,6 +2209,7 @@ addTextures :: proc(
 		{.COLOR},
 		textureCount^ + newTexturesCount,
 	)
+	
 	vk.CopyImageToImage(
 		device,
 		&vk.CopyImageToImageInfo {
@@ -2433,19 +2441,17 @@ LoadSceneError :: enum {
 loadSceneAssets :: proc(
 	using graphicsContext: ^GraphicsContext,
 	sceneIndex: u32,
-	sceneData: SceneFile,
 ) -> (
 	err: LoadSceneError = .None,
 ) {
-	loadModels(graphicsContext, sceneIndex, sceneData.modelPaths)
+	loadModels(graphicsContext, sceneIndex, scenes[sceneIndex].modelPaths)
 
 	createVertexBuffer(graphicsContext, sceneIndex)
 	createIndexBuffer(graphicsContext, sceneIndex)
 
-	loadTextures(graphicsContext, &scenes[sceneIndex].albidos, sceneData.texturePaths)
-	loadTextures(graphicsContext, &scenes[sceneIndex].normals, sceneData.normalPaths)
+	loadTextures(graphicsContext, &scenes[sceneIndex].textures, scenes[sceneIndex].texturePaths)
+	loadTextures(graphicsContext, &scenes[sceneIndex].normals, scenes[sceneIndex].normalPaths)
 
-	scenes[sceneIndex].instances = sceneData.instances
 	for &instance in scenes[sceneIndex].instances {
 		skeletonLength := len(scenes[sceneIndex].models[instance.modelID].skeleton)
 		scenes[sceneIndex].boneCount += skeletonLength
@@ -2454,7 +2460,6 @@ loadSceneAssets :: proc(
 		instance.scaleKeys = make([]u32, skeletonLength)
 		instance.animTimer = 0.0
 	}
-	scenes[sceneIndex].pointLights = sceneData.pointLights
 	scenes[sceneIndex].boneCount += 1
 
 	createInstanceBuffer(graphicsContext, sceneIndex)
@@ -2470,7 +2475,7 @@ loadScene :: proc(
 ) -> (
 	err: LoadSceneError = .None,
 ) {
-	parseJSON :: proc(sceneFile: string) -> (sceneData: SceneFile, err: LoadSceneError = .None) {
+	parseJSON :: proc(sceneFile: string) -> (scene: Scene, err: LoadSceneError = .None) {
 		data, ok := os.read_entire_file_from_filename(sceneFile)
 		if !ok {
 			log.logf(.Error, "Failed to load scene file: {}", sceneFile)
@@ -2489,10 +2494,10 @@ loadScene :: proc(
 
 		root := jsonData.(json.Object)
 
-		sceneData.name = strings.clone_to_cstring(root["name"].(json.String))
+		scene.name = strings.clone_to_cstring(root["name"].(json.String))
 
 		clearColour := root["clear_colour"].(json.Array)
-		sceneData.clearColour = {
+		scene.clearColour = {
 			i32(clearColour[0].(json.Float)),
 			i32(clearColour[1].(json.Float)),
 			i32(clearColour[2].(json.Float)),
@@ -2500,13 +2505,13 @@ loadScene :: proc(
 		}
 
 		cameras := root["cameras"].(json.Array)
-		sceneData.cameras = make([]Camera, len(cameras))
+		scene.cameras = make([]Camera, len(cameras))
 		for camera, i in cameras {
 			camera := camera.(json.Object)
 			eye := camera["eye"].(json.Array)
 			center := camera["center"].(json.Array)
 			up := camera["up"].(json.Array)
-			sceneData.cameras[i] = {
+			scene.cameras[i] = {
 				name     = strings.clone_to_cstring(camera["name"].(json.String)),
 				eye      = Vec3 {
 					f32(eye[0].(json.Float)),
@@ -2530,14 +2535,14 @@ loadScene :: proc(
 		}
 
 		lights := root["lights"].(json.Array)
-		sceneData.pointLights = make([]PointLight, len(lights))
+		scene.pointLights = make([]PointLight, len(lights))
 		for light, i in lights {
 			light := light.(json.Object)
 			position := light["position"].(json.Array)
 			direction := light["direction"].(json.Array)
 			colour := light["colour"].(json.Array)
 			rotationAxis := light["rotation_axis"].(json.Array)
-			sceneData.pointLights[i] = {
+			scene.pointLights[i] = {
 				name            = strings.clone_to_cstring(light["name"].(json.String)),
 				position        = Vec3 {
 					f32(position[0].(json.Float)),
@@ -2563,31 +2568,31 @@ loadScene :: proc(
 		}
 
 		models := root["models"].(json.Array)
-		sceneData.modelPaths = make([]cstring, len(models))
+		scene.modelPaths = make([]cstring, len(models))
 		for model, i in models {
-			sceneData.modelPaths[i] = strings.clone_to_cstring(model.(json.String))
+			scene.modelPaths[i] = strings.clone_to_cstring(model.(json.String))
 		}
 
 		albedos := root["albedos"].(json.Array)
-		sceneData.texturePaths = make([]cstring, len(albedos))
+		scene.texturePaths = make([]cstring, len(albedos))
 		for texture, i in albedos {
-			sceneData.texturePaths[i] = strings.clone_to_cstring(texture.(json.String))
+			scene.texturePaths[i] = strings.clone_to_cstring(texture.(json.String))
 		}
 
 		normals := root["normals"].(json.Array)
-		sceneData.normalPaths = make([]cstring, len(normals))
+		scene.normalPaths = make([]cstring, len(normals))
 		for normal, i in normals {
-			sceneData.normalPaths[i] = strings.clone_to_cstring(normal.(json.String))
+			scene.normalPaths[i] = strings.clone_to_cstring(normal.(json.String))
 		}
 
 		instances := root["instances"].(json.Array)
-		sceneData.instances = make([]Instance, len(instances))
+		scene.instances = make([]Instance, len(instances))
 		for instance, i in instances {
 			instance := instance.(json.Object)
 			position := instance["position"].(json.Array)
 			rotation := instance["rotation"].(json.Array)
 			scale := instance["scale"].(json.Array)
-			sceneData.instances[i] = {
+			scene.instances[i] = {
 				name      = strings.clone_to_cstring(instance["name"].(json.String)),
 				modelID   = u32(instance["model"].(json.Float)),
 				animID    = 0,
@@ -2613,21 +2618,6 @@ loadScene :: proc(
 		return
 	}
 
-	cleanupSceneFileData :: proc(sceneData: SceneFile) {
-		for &modelPath in sceneData.modelPaths {
-			delete(modelPath)
-		}
-		delete(sceneData.modelPaths)
-		for &texturePath in sceneData.texturePaths {
-			delete(texturePath)
-		}
-		delete(sceneData.texturePaths)
-		for &normalPath in sceneData.normalPaths {
-			delete(normalPath)
-		}
-		delete(sceneData.normalPaths)
-	}
-
 	sceneCount := len(scenes)
 
 	newScenes := make([]Scene, sceneCount + 1)
@@ -2637,20 +2627,13 @@ loadScene :: proc(
 	delete(scenes)
 	scenes = newScenes
 
-	sceneData: SceneFile
-	if sceneData, err = parseJSON(sceneFile); err != .None {
+	if scenes[sceneCount], err = parseJSON(sceneFile); err != .None {
 		panic("Couldn't parse file")
 	}
 
-	if err = loadSceneAssets(graphicsContext, u32(sceneCount), sceneData); err != .None {
+	if err = loadSceneAssets(graphicsContext, u32(sceneCount)); err != .None {
 		panic("Load error")
 	}
-
-	scenes[sceneCount].name = sceneData.name
-	scenes[sceneCount].clearColour = sceneData.clearColour
-	scenes[sceneCount].cameras = sceneData.cameras
-	scenes[sceneCount].activeCamera = 0
-	cleanupSceneFileData(sceneData)
 	return
 }
 
@@ -3220,8 +3203,8 @@ updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, scene
 	}
 
 	textureInfo: vk.DescriptorImageInfo = {
-		sampler     = scenes[sceneIndex].albidos.sampler,
-		imageView   = scenes[sceneIndex].albidos.view,
+		sampler     = scenes[sceneIndex].textures.sampler,
+		imageView   = scenes[sceneIndex].textures.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
 
@@ -4421,20 +4404,16 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 	lightData := make([]LightData, len(scenes[activeScene].pointLights))
 	defer delete(lightData)
 	for &light, i in scenes[activeScene].pointLights {
-		position: Vec3
 		direction: Vec3
 		lookAtVector: Vec3
 
 		if light.rotationAxis != {0, 0, 0} {
-			position =
+			light.position =
 				rotation3(f32(radians(light.rotationAngle * delta)), light.rotationAxis) *
 				light.position
-			light.position = position
-		} else {
-			position = light.position
 		}
 
-		direction = normalize(Vec3{0, 0, 0} - position)
+		direction = normalize(Vec3{0, 0, 0} - light.position)
 		lookAtVector = Vec3{0, 0, 0}
 		up: Vec3
 		dot := dot(direction, Vec3{0, 1, 0})
@@ -4449,7 +4428,7 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 				1,
 				0.01,
 				100,
-			) * lookAt(position, lookAtVector, up),
+			) * lookAt(light.position, lookAtVector, up),
 			position        = Vec4{light.position.x, light.position.y, light.position.z, 1},
 			colourIntensity = Vec4 {
 				light.colourIntensity.x,
@@ -4637,9 +4616,9 @@ updateInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext, delta: f32
 			finalBoneTransforms[boneOffset] *= skeleton[0].inverseBind
 		}
 		for boneIndex in 1 ..< u32(len(skeleton)) {
+			parentIndex := skeleton[boneIndex].parentIndex
 			localBoneTransforms[boneIndex] =
-				localBoneTransforms[skeleton[boneIndex].parentIndex] *
-				localBoneTransforms[boneIndex]
+				localBoneTransforms[parentIndex] * localBoneTransforms[boneIndex]
 			finalBoneTransforms[boneOffset + boneIndex] = localBoneTransforms[boneIndex]
 			if localBoneTransforms[boneIndex] != IMat4 {
 				finalBoneTransforms[boneOffset + boneIndex] *= skeleton[boneIndex].inverseBind
@@ -4688,7 +4667,7 @@ recordGraphicsBuffer :: proc(
 		u32(len(scenes[activeScene].pointLights)),
 	)
 
-	for i: u32 = 0; i < u32(len(scenes[activeScene].pointLights)); i += 1 {
+	for index: u32 = 0; index < u32(len(scenes[activeScene].pointLights)); index += 1 {
 		renderPassInfo: vk.RenderPassBeginInfo = {
 			sType = .RENDER_PASS_BEGIN_INFO,
 			pNext = nil,
@@ -4723,7 +4702,7 @@ recordGraphicsBuffer :: proc(
 			{.VERTEX},
 			0,
 			4,
-			&i,
+			&index,
 		)
 
 		vk.CmdBindVertexBuffers(
@@ -4736,14 +4715,14 @@ recordGraphicsBuffer :: proc(
 
 		vk.CmdBindIndexBuffer(commandBuffer, scenes[activeScene].indexBuffer.buffer, 0, .UINT32)
 
-		for &instance, i in scenes[activeScene].instances {
+		for &inst, j in scenes[activeScene].instances {
 			vk.CmdDrawIndexed(
 				commandBuffer,
-				scenes[activeScene].models[instance.modelID].indexCount,
+				scenes[activeScene].models[inst.modelID].indexCount,
 				1,
-				scenes[activeScene].models[instance.modelID].indexOffset,
-				i32(scenes[activeScene].models[instance.modelID].vertexOffset),
-				u32(i),
+				scenes[activeScene].models[inst.modelID].indexOffset,
+				i32(scenes[activeScene].models[inst.modelID].vertexOffset),
+				u32(j),
 			)
 		}
 
@@ -4767,7 +4746,7 @@ recordGraphicsBuffer :: proc(
 				dstSubresource = vk.ImageSubresourceLayers {
 					aspectMask = {.DEPTH},
 					mipLevel = 0,
-					baseArrayLayer = i,
+					baseArrayLayer = index,
 					layerCount = 1,
 				},
 				dstOffset = {0, 0, 0},
@@ -4840,13 +4819,13 @@ recordGraphicsBuffer :: proc(
 			raw_data([]vk.DeviceSize{0}),
 		)
 		vk.CmdBindIndexBuffer(commandBuffer, scenes[activeScene].indexBuffer.buffer, 0, .UINT32)
-		for &instance, index in scenes[activeScene].instances {
+		for &inst, index in scenes[activeScene].instances {
 			vk.CmdDrawIndexed(
 				commandBuffer,
-				scenes[activeScene].models[instance.modelID].indexCount,
+				scenes[activeScene].models[inst.modelID].indexCount,
 				1,
-				scenes[activeScene].models[instance.modelID].indexOffset,
-				i32(scenes[activeScene].models[instance.modelID].vertexOffset),
+				scenes[activeScene].models[inst.modelID].indexOffset,
+				i32(scenes[activeScene].models[inst.modelID].vertexOffset),
 				u32(index),
 			)
 		}
@@ -4891,7 +4870,7 @@ recordComputeBuffer :: proc(
 		commandBuffer,
 		pipelines[PipelineIndex.MAIN].colour.image,
 		inImage.image,
-		vk.Extent3D{u32(RENDER_SIZE.x), u32(RENDER_SIZE.y), 1},
+		vk.Extent3D{u32(RENDER_SIZE.x), u32(RENDER_SIZE.y), 0},
 		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 0},
 	)
 
@@ -4964,8 +4943,7 @@ recordComputeBuffer :: proc(
 			.TRANSFER_SRC_OPTIMAL,
 			.TRANSFER_DST_OPTIMAL,
 		)
-	}
-	else {
+	} else {
 		transitionImageLayout(
 			graphicsContext,
 			commandBuffer,
@@ -4975,7 +4953,7 @@ recordComputeBuffer :: proc(
 			{.COLOR},
 			1,
 		)
-	
+
 		vk.CmdBlitImage(
 			commandBuffer,
 			outImage.image,
@@ -5007,7 +4985,7 @@ recordComputeBuffer :: proc(
 			},
 			.NEAREST,
 		)
-	
+
 		transitionImageLayout(
 			graphicsContext,
 			commandBuffer,
@@ -5273,10 +5251,7 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 		waitDstStageMasks = {{.COMPUTE_SHADER}}
 	} else {
 		waitSemaphoresCount = 2
-		waitSemaphores = {
-			rendersFinished[currentFrame],
-			imagesAvailable[currentFrame],
-		}
+		waitSemaphores = {rendersFinished[currentFrame], imagesAvailable[currentFrame]}
 		waitDstStageMasks = {{.COMPUTE_SHADER}, {.BOTTOM_OF_PIPE}}
 	}
 
@@ -5384,19 +5359,19 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	vk.DestroyBuffer(device, scenes[sceneIndex].vertexBuffer.buffer, nil)
 	vk.FreeMemory(device, scenes[sceneIndex].vertexBuffer.memory, nil)
 
-	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyBuffer(device, scenes[sceneIndex].instanceBuffers[i].buffer, nil)
-		vk.FreeMemory(device, scenes[sceneIndex].instanceBuffers[i].memory, nil)
-		vk.DestroyBuffer(device, scenes[sceneIndex].boneBuffers[i].buffer, nil)
-		vk.FreeMemory(device, scenes[sceneIndex].boneBuffers[i].memory, nil)
-		vk.DestroyBuffer(device, scenes[sceneIndex].lightBuffers[i].buffer, nil)
-		vk.FreeMemory(device, scenes[sceneIndex].lightBuffers[i].memory, nil)
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		vk.DestroyBuffer(device, scenes[sceneIndex].instanceBuffers[index].buffer, nil)
+		vk.FreeMemory(device, scenes[sceneIndex].instanceBuffers[index].memory, nil)
+		vk.DestroyBuffer(device, scenes[sceneIndex].boneBuffers[index].buffer, nil)
+		vk.FreeMemory(device, scenes[sceneIndex].boneBuffers[index].memory, nil)
+		vk.DestroyBuffer(device, scenes[sceneIndex].lightBuffers[index].buffer, nil)
+		vk.FreeMemory(device, scenes[sceneIndex].lightBuffers[index].memory, nil)
 	}
 
-	vk.DestroyImageView(device, scenes[sceneIndex].albidos.view, nil)
-	vk.DestroyImage(device, scenes[sceneIndex].albidos.image, nil)
-	vk.FreeMemory(device, scenes[sceneIndex].albidos.memory, nil)
-	vk.DestroySampler(device, scenes[sceneIndex].albidos.sampler, nil)
+	vk.DestroyImageView(device, scenes[sceneIndex].textures.view, nil)
+	vk.DestroyImage(device, scenes[sceneIndex].textures.image, nil)
+	vk.FreeMemory(device, scenes[sceneIndex].textures.memory, nil)
+	vk.DestroySampler(device, scenes[sceneIndex].textures.sampler, nil)
 
 	vk.DestroyImageView(device, scenes[sceneIndex].normals.view, nil)
 	vk.DestroyImage(device, scenes[sceneIndex].normals.image, nil)
@@ -5408,12 +5383,22 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	vk.FreeMemory(device, scenes[sceneIndex].shadowImages.memory, nil)
 	vk.DestroySampler(device, scenes[sceneIndex].shadowImages.sampler, nil)
 
+	for &texturePath in scenes[sceneIndex].texturePaths {
+		delete(texturePath)
+	}
+	delete(scenes[sceneIndex].texturePaths)
+
+	for &normalPath in scenes[sceneIndex].normalPaths {
+		delete(normalPath)
+	}
+	delete(scenes[sceneIndex].normalPaths)
+
 	for &model in scenes[sceneIndex].models {
 		delete(model.vertices)
 		delete(model.indices)
 		delete(model.skeleton)
 		for &animation in model.animations {
-			for node in animation.nodes {
+			for &node in animation.nodes {
 				delete(node.keyPositions)
 				delete(node.keyRotations)
 				delete(node.keyScales)
@@ -5425,6 +5410,11 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	delete(scenes[sceneIndex].vertices)
 	delete(scenes[sceneIndex].indices)
 	delete(scenes[sceneIndex].models)
+
+	for &modelPath in scenes[sceneIndex].modelPaths {
+		delete(modelPath)
+	}
+	delete(scenes[sceneIndex].modelPaths)
 
 	for &instance in scenes[sceneIndex].instances {
 		delete(instance.name)
