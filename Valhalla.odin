@@ -37,6 +37,7 @@ EngineState :: struct {
 }
 
 main :: proc() {
+	// Sets the current dir to the folder above the dir of the exe file
 	{
 		dashCount: u32 = 0
 		filePath, _ := filepath.abs(os.args[0])
@@ -105,10 +106,10 @@ main :: proc() {
 		panic("Failed to load scene")
 	}
 
-	if err := loadScene(graphicsContext, "./assets/scenes/bunny_box.json"); err != .None {
-		log.logf(.Fatal, "Failed to load scene: {}", err)
-		panic("Failed to load scene")
-	}
+	// if err := loadScene(graphicsContext, "./assets/scenes/bunny_box.json"); err != .None {
+	// 	log.logf(.Fatal, "Failed to load scene: {}", err)
+	// 	panic("Failed to load scene")
+	// }
 
 	setActiveScene(graphicsContext, 0)
 

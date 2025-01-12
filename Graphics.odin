@@ -88,6 +88,9 @@ DEPTH_BIAS_CONSTANT: f32 : 1.25
 @(private = "file")
 DEPTH_BIAS_SLOPE: f32 : 1.75
 
+@(private = "file")
+UI_ENABLED: bool : false
+
 
 // ###################################################################
 // #                         Data Structures                         #
@@ -435,8 +438,11 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	updateComputeDescriptorSets(graphicsContext)
 	createGraphicsPipelines(graphicsContext)
 	createComputePipelines(graphicsContext)
-	initImgui(graphicsContext)
-	updateImgui(graphicsContext)
+
+	when UI_ENABLED {
+		initImgui(graphicsContext)
+		updateImgui(graphicsContext)
+	}
 }
 
 @(private = "file")
@@ -1017,8 +1023,10 @@ recreateSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	createSwapchain(graphicsContext)
 	updateComputeDescriptorSets(graphicsContext)
 
-	cleanupImgui(graphicsContext)
-	updateImgui(graphicsContext)
+	when UI_ENABLED {
+		cleanupImgui(graphicsContext)
+		updateImgui(graphicsContext)
+	}
 }
 
 
@@ -2471,15 +2479,15 @@ loadScene :: proc(
 		}
 		defer delete(data)
 
-		json_data, error := json.parse(data)
+		jsonData, error := json.parse(data)
 		if error != .None {
 			log.logf(.Error, "Failed to parse json: {}", error)
 			err = .FailedToParseJson
 			return
 		}
-		defer json.destroy_value(json_data)
+		defer json.destroy_value(jsonData)
 
-		root := json_data.(json.Object)
+		root := jsonData.(json.Object)
 
 		sceneData.name = strings.clone_to_cstring(root["name"].(json.String))
 
@@ -2622,23 +2630,22 @@ loadScene :: proc(
 
 	sceneCount := len(scenes)
 
-	if sceneCount > 0 {
-		oldScenes := scenes
-		scenes = make([]Scene, sceneCount + 1)
-		for &scene, index in oldScenes {
-			scenes[index] = scene
-		}
-		delete(oldScenes)
-	} else {
-		scenes = make([]Scene, 1)
+	newScenes := make([]Scene, sceneCount + 1)
+	for &scene, index in scenes {
+		newScenes[index] = scene
 	}
+	delete(scenes)
+	scenes = newScenes
 
 	sceneData: SceneFile
 	if sceneData, err = parseJSON(sceneFile); err != .None {
 		panic("Couldn't parse file")
 	}
 
-	loadSceneAssets(graphicsContext, u32(sceneCount), sceneData)
+	if err = loadSceneAssets(graphicsContext, u32(sceneCount), sceneData); err != .None {
+		panic("Load error")
+	}
+
 	scenes[sceneCount].name = sceneData.name
 	scenes[sceneCount].clearColour = sceneData.clearColour
 	scenes[sceneCount].cameras = sceneData.cameras
@@ -4260,6 +4267,7 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		log.log(.Fatal, "Failed to initialize imgui for vulkan, quitting application.")
 		return
 	}
+
 	// RenderPass
 	{
 		imguiData.colour.format = .R8G8B8A8_UNORM
@@ -4937,24 +4945,79 @@ recordComputeBuffer :: proc(
 		1,
 	)
 
-	transitionImageLayout(
-		graphicsContext,
-		commandBuffer,
-		imguiData.colour.image,
-		.UNDEFINED,
-		.TRANSFER_DST_OPTIMAL,
-		{.COLOR},
-		1,
-	)
+	when UI_ENABLED {
+		transitionImageLayout(
+			graphicsContext,
+			commandBuffer,
+			imguiData.colour.image,
+			.UNDEFINED,
+			.TRANSFER_DST_OPTIMAL,
+			{.COLOR},
+			1,
+		)
 
-	copyImage(
-		commandBuffer,
-		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 1},
-		outImage.image,
-		imguiData.colour.image,
-		.TRANSFER_SRC_OPTIMAL,
-		.TRANSFER_DST_OPTIMAL,
-	)
+		copyImage(
+			commandBuffer,
+			vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 1},
+			outImage.image,
+			imguiData.colour.image,
+			.TRANSFER_SRC_OPTIMAL,
+			.TRANSFER_DST_OPTIMAL,
+		)
+	}
+	else {
+		transitionImageLayout(
+			graphicsContext,
+			commandBuffer,
+			swapchainImages[imageIndex],
+			.UNDEFINED,
+			.TRANSFER_DST_OPTIMAL,
+			{.COLOR},
+			1,
+		)
+	
+		vk.CmdBlitImage(
+			commandBuffer,
+			outImage.image,
+			.TRANSFER_SRC_OPTIMAL,
+			swapchainImages[imageIndex],
+			.TRANSFER_DST_OPTIMAL,
+			1,
+			&vk.ImageBlit {
+				srcSubresource = {
+					aspectMask = {.COLOR},
+					mipLevel = 0,
+					baseArrayLayer = 0,
+					layerCount = 1,
+				},
+				srcOffsets = {
+					{x = 0, y = 0, z = 0},
+					{x = i32(swapchainExtent.width), y = i32(swapchainExtent.height), z = 1},
+				},
+				dstSubresource = {
+					aspectMask = {.COLOR},
+					mipLevel = 0,
+					baseArrayLayer = 0,
+					layerCount = 1,
+				},
+				dstOffsets = {
+					{x = 0, y = 0, z = 0},
+					{x = i32(swapchainExtent.width), y = i32(swapchainExtent.height), z = 1},
+				},
+			},
+			.NEAREST,
+		)
+	
+		transitionImageLayout(
+			graphicsContext,
+			commandBuffer,
+			swapchainImages[imageIndex],
+			.TRANSFER_DST_OPTIMAL,
+			.PRESENT_SRC_KHR,
+			{.COLOR},
+			1,
+		)
+	}
 
 	if vk.EndCommandBuffer(commandBuffer) != .SUCCESS {
 		log.log(.Error, "Failed to record compute command buffer!")
@@ -5181,7 +5244,9 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 
 	recordGraphicsBuffer(graphicsContext, mainCommandBuffers[currentFrame], imageIndex)
 	recordComputeBuffer(graphicsContext, computeCommandBuffers[currentFrame], imageIndex)
-	recordUIBuffer(graphicsContext, uiCommandBuffers[currentFrame], imageIndex)
+	when UI_ENABLED {
+		recordUIBuffer(graphicsContext, uiCommandBuffers[currentFrame], imageIndex)
+	}
 
 	submitInfo: vk.SubmitInfo = {
 		sType                = .SUBMIT_INFO,
@@ -5199,47 +5264,78 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 		panic("Failed to submit draw command buffer!")
 	}
 
-	submitInfo = {
-		sType                = .SUBMIT_INFO,
-		pNext                = nil,
-		waitSemaphoreCount   = 1,
-		pWaitSemaphores      = &rendersFinished[currentFrame],
-		pWaitDstStageMask    = &vk.PipelineStageFlags{.COMPUTE_SHADER},
-		commandBufferCount   = 1,
-		pCommandBuffers      = &computeCommandBuffers[currentFrame],
-		signalSemaphoreCount = 1,
-		pSignalSemaphores    = &computeFinished[currentFrame],
-	}
-	if vk.QueueSubmit(computeQueue, 1, &submitInfo, 0) != .SUCCESS {
-		log.log(.Error, "Failed to submit compute command buffer!")
-		panic("Failed to submit compute command buffer!")
+	waitSemaphoresCount: u32
+	waitSemaphores: []vk.Semaphore
+	waitDstStageMasks: []vk.PipelineStageFlags
+	when UI_ENABLED {
+		waitSemaphoresCount = 1
+		waitSemaphores = {rendersFinished[currentFrame]}
+		waitDstStageMasks = {{.COMPUTE_SHADER}}
+	} else {
+		waitSemaphoresCount = 2
+		waitSemaphores = {
+			rendersFinished[currentFrame],
+			imagesAvailable[currentFrame],
+		}
+		waitDstStageMasks = {{.COMPUTE_SHADER}, {.BOTTOM_OF_PIPE}}
 	}
 
 	submitInfo = {
 		sType                = .SUBMIT_INFO,
 		pNext                = nil,
-		waitSemaphoreCount   = 2,
-		pWaitSemaphores      = raw_data(
-			[]vk.Semaphore{computeFinished[currentFrame], imagesAvailable[currentFrame]},
-		),
-		pWaitDstStageMask    = raw_data(
-			[]vk.PipelineStageFlags{{.TOP_OF_PIPE}, {.BOTTOM_OF_PIPE}},
-		),
+		waitSemaphoreCount   = waitSemaphoresCount,
+		pWaitSemaphores      = raw_data(waitSemaphores),
+		pWaitDstStageMask    = raw_data(waitDstStageMasks),
 		commandBufferCount   = 1,
-		pCommandBuffers      = &uiCommandBuffers[currentFrame],
+		pCommandBuffers      = &computeCommandBuffers[currentFrame],
 		signalSemaphoreCount = 1,
-		pSignalSemaphores    = &uiFinished[currentFrame],
+		pSignalSemaphores    = &computeFinished[currentFrame],
 	}
-	if vk.QueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFrames[currentFrame]) != .SUCCESS {
-		log.log(.Error, "Failed to submit ui command buffer!")
-		panic("Failed to submit ui command buffer!")
+	fence: vk.Fence
+	when !UI_ENABLED {
+		fence = inFlightFrames[currentFrame]
+	}
+
+	if vk.QueueSubmit(computeQueue, 1, &submitInfo, fence) != .SUCCESS {
+		log.log(.Error, "Failed to submit compute command buffer!")
+		panic("Failed to submit compute command buffer!")
+	}
+
+	when UI_ENABLED {
+		submitInfo = {
+			sType                = .SUBMIT_INFO,
+			pNext                = nil,
+			waitSemaphoreCount   = 2,
+			pWaitSemaphores      = raw_data(
+				[]vk.Semaphore{computeFinished[currentFrame], imagesAvailable[currentFrame]},
+			),
+			pWaitDstStageMask    = raw_data(
+				[]vk.PipelineStageFlags{{.TOP_OF_PIPE}, {.BOTTOM_OF_PIPE}},
+			),
+			commandBufferCount   = 1,
+			pCommandBuffers      = &uiCommandBuffers[currentFrame],
+			signalSemaphoreCount = 1,
+			pSignalSemaphores    = &uiFinished[currentFrame],
+		}
+		if vk.QueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFrames[currentFrame]) !=
+		   .SUCCESS {
+			log.log(.Error, "Failed to submit ui command buffer!")
+			panic("Failed to submit ui command buffer!")
+		}
+	}
+
+	waitSemaphore: ^vk.Semaphore
+	when UI_ENABLED {
+		waitSemaphore = &uiFinished[currentFrame]
+	} else {
+		waitSemaphore = &computeFinished[currentFrame]
 	}
 
 	presentInfo: vk.PresentInfoKHR = {
 		sType              = .PRESENT_INFO_KHR,
 		pNext              = nil,
 		waitSemaphoreCount = 1,
-		pWaitSemaphores    = &uiFinished[currentFrame],
+		pWaitSemaphores    = waitSemaphore,
 		swapchainCount     = 1,
 		pSwapchains        = &swapchain,
 		pImageIndices      = &imageIndex,
@@ -5370,6 +5466,7 @@ cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
 }
 
 clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
+	graphicsContext := graphicsContext
 	if vk.DeviceWaitIdle(device) != .SUCCESS {
 		panic("Failed to wait for device idle!")
 	}
@@ -5379,8 +5476,10 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 	delete(scenes)
 
-	cleanupImgui(graphicsContext)
-	vk.DestroyDescriptorPool(device, imguiData.descriptorPool, nil)
+	when UI_ENABLED {
+		cleanupImgui(graphicsContext)
+		vk.DestroyDescriptorPool(device, imguiData.descriptorPool, nil)
+	}
 
 	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(mainCommandBuffers))
 	vk.FreeCommandBuffers(device, computeCommandPool, 2, raw_data(computeCommandBuffers))
@@ -5458,12 +5557,12 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	delete(pipelines)
 
 	vk.DestroyDevice(device, nil)
+	vk.DestroySurfaceKHR(instance, surface, nil)
 
 	when ODIN_DEBUG {
 		vk.DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nil)
 	}
 
-	vk.DestroySurfaceKHR(instance, surface, nil)
 	vk.DestroyInstance(instance, nil)
 
 	glfw.DestroyWindow(window)
