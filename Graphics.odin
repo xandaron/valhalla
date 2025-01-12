@@ -5,7 +5,6 @@ import "core:log"
 import "core:mem"
 import "core:os"
 import "core:strings"
-import "core:time"
 import "imgui"
 import implGLFW "imgui/imgui_impl_glfw"
 import implVulkan "imgui/imgui_impl_vulkan"
@@ -1739,26 +1738,69 @@ loadModels :: proc(
 	modelPaths: []cstring,
 ) {
 	loadFBX :: proc(graphicsContext: ^GraphicsContext, model: ^Model, filename: cstring) {
-		loadMesh :: proc(
-			mesh: ^fbx.Mesh,
-			skeleton: ^Skeleton,
-			vertices: ^[dynamic]Vertex,
-			indices: ^[dynamic]u32,
-		) -> (
-			indexCount: u32,
-		) {
-			indexCount = u32(3 * mesh.num_triangles)
-			indexOffset := u32(len(vertices))
-			for index in 0 ..< mesh.faces.count {
-				face := mesh.faces.data[index]
-				triangulatedIndices := make([]u32, (face.num_indices - 2) * 3)
-				defer delete(triangulatedIndices)
+		opts: fbx.Load_Opts = {
+			target_axes = fbx.Coordinate_Axes {
+				right = .POSITIVE_X,
+				up = .POSITIVE_Y,
+				front = .POSITIVE_Z,
+			},
+		}
+		err: fbx.Error
+		scene := fbx.load_file(filename, &opts, &err)
+		if err.type != .NONE || scene == nil {
+			log.logf(.Error, "Failed to load FBX file! Reason\n{}", err.description.data)
+			panic("Failed to load FBX file!")
+		}
+		defer fbx.free_scene(scene)
+
+		model.skeleton = make([]Bone, scene.bones.count)
+		boneIndex := 0
+		for index in 0 ..< scene.nodes.count {
+			node := scene.nodes.data[index]
+			if node.attrib_type != .BONE {
+				continue
+			}
+
+			parentIndex: u32 = 0
+			if !node.parent.is_root {
+				for bone, index in model.skeleton {
+					if bone.name == node.parent.element.name.data {
+						parentIndex = u32(index)
+						break
+					}
+				}
+			}
+			model.skeleton[boneIndex] = {
+				name        = node.bone.element.name.data,
+				isRoot      = node.parent.is_root,
+				parentIndex = parentIndex,
+			}
+			boneIndex += 1
+		}
+
+		vertexCount: uint = 0
+		indexCount: uint = 0
+		for index in 0 ..< scene.meshes.count {
+			vertexCount += scene.meshes.data[index].num_indices
+			indexCount += scene.meshes.data[index].num_triangles * 3
+		}
+
+		model.vertices = make([]Vertex, vertexCount)
+		model.indices = make([]u32, indexCount)
+		model.indexCount = u32(indexCount)
+
+		vertexOffset, indexOffset, meshIndexOffset: u32 = 0, 0, 0
+		for meshIndex in 0 ..< scene.meshes.count {
+			mesh := scene.meshes.data[meshIndex]
+			for faceIndex in 0 ..< mesh.faces.count {
+				face := mesh.faces.data[faceIndex]
+				triangulatedIndexCount := (face.num_indices - 2) * 3
 
 				err: fbx.Panic
 				tris := fbx.catch_triangulate_face(
 					&err,
-					raw_data(triangulatedIndices),
-					uint(indexCount),
+					raw_data(model.indices[indexOffset:indexOffset + triangulatedIndexCount]),
+					uint(triangulatedIndexCount),
 					mesh,
 					face,
 				)
@@ -1769,126 +1811,76 @@ loadModels :: proc(
 					panic(errMessage)
 				}
 
-				count := 3 * tris
-				for &indice in triangulatedIndices {
-					indice += indexOffset
+				for &index in model.indices[indexOffset:indexOffset + triangulatedIndexCount] {
+					index += meshIndexOffset
 				}
-				append(indices, ..triangulatedIndices)
+				indexOffset += triangulatedIndexCount
 			}
 
-			vertexCount := mesh.num_indices
-			reserve(vertices, uint(len(vertices)) + vertexCount)
-			for index in 0 ..< vertexCount {
-				vertexIndex := mesh.vertex_position.indices.data[index]
+			for indiceIndex in 0 ..< mesh.num_indices {
+				indiceIndex := u32(indiceIndex)
+				vertexIndex := mesh.vertex_position.indices.data[indiceIndex]
 				pos := mesh.vertex_position.values.data[vertexIndex]
+
 				uv := [2]f64{0, 0}
 				if mesh.vertex_uv.values.count != 0 {
-					uv = mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[index]]
-				}
-				norm := [3]f64{0, 1, 0}
-				if mesh.vertex_normal.values.count != 0 {
-					norm = mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[index]]
+					uv = mesh.vertex_uv.values.data[mesh.vertex_uv.indices.data[indiceIndex]]
 				}
 
-				vertex: Vertex = {
+				norm := [3]f64{0, 1, 0}
+				if mesh.vertex_normal.values.count != 0 {
+					norm =
+						mesh.vertex_normal.values.data[mesh.vertex_normal.indices.data[indiceIndex]]
+				}
+
+				model.vertices[indiceIndex + vertexOffset] = {
 					position = {f32(pos.x), f32(pos.y), f32(pos.z)},
 					texCoord = {f32(uv.x), 1 - f32(uv.y)},
 					normal   = {f32(norm.x), f32(norm.y), f32(norm.z)},
-					weights  = {1, 0, 0, 0},
+					weights  = {1.0, 0.0, 0.0, 0.0},
 					bones    = {0, 0, 0, 0},
 				}
-				if len(skeleton) != 0 && mesh.skin_deformers.count != 0 {
+
+				if mesh.skin_deformers.count != 0 {
 					deformer := mesh.skin_deformers.data[0]
-					numWeights := deformer.vertices.data[vertexIndex].num_weights
-					if numWeights > 4 {
-						numWeights = 4
-					}
+					numWeights := 
+						deformer.vertices.data[vertexIndex].num_weights if deformer.vertices.data[vertexIndex].num_weights <= 4 else 4
 					firstWeightIndex := deformer.vertices.data[vertexIndex].weight_begin
-					totalWeight: f32 = 0
-					for j in 0 ..< numWeights {
-						skinWeight := deformer.weights.data[firstWeightIndex + j]
+
+					for weightIndex in 0 ..< numWeights {
+						skinWeight := deformer.weights.data[firstWeightIndex + weightIndex]
 						boneName :=
 							deformer.clusters.data[skinWeight.cluster_index].bone_node.element.name
-						for bone, k in skeleton^ {
+
+						for &bone, boneIndex in model.skeleton {
 							if bone.name == boneName.data {
-								vertex.bones[j] = u32(k)
+								model.vertices[indiceIndex + vertexOffset].bones[weightIndex] = u32(boneIndex)
 								break
 							}
 						}
-						vertex.weights[j] = f32(skinWeight.weight)
-						totalWeight += f32(skinWeight.weight)
-					}
-					if totalWeight != 1.0 {
-						for j in 0 ..< numWeights {
-							vertex.weights[j] /= totalWeight
-						}
-					}
-				}
-				append(vertices, vertex)
-			}
-			return
-		}
 
-		loadBone :: proc(skeleton: ^[dynamic]Bone, node: ^fbx.Node) {
-			parentIndex: u32 = 0
-			if !node.parent.is_root {
-				for bone, index in skeleton {
-					if bone.name == node.parent.element.name.data {
-						parentIndex = u32(index)
-						break
+						model.vertices[indiceIndex + vertexOffset].weights[weightIndex] = f32(skinWeight.weight)
+					}
+
+					if numWeights != 0 {
+						model.vertices[indiceIndex + vertexOffset].weights = normalize(
+							model.vertices[indiceIndex + vertexOffset].weights,
+						)
 					}
 				}
 			}
-			bone: Bone = {
-				name        = node^.bone^.element.name.data,
-				isRoot      = node^.parent^.is_root,
-				parentIndex = parentIndex,
-			}
-			append(skeleton, bone)
+
+			vertexOffset += u32(mesh.num_indices)
+			meshIndexOffset = indexOffset
 		}
 
-		opts: fbx.Load_Opts = {
-			target_axes = fbx.Coordinate_Axes {
-				right = .POSITIVE_X,
-				up = .POSITIVE_Y,
-				front = .NEGATIVE_Z,
-			},
-		}
-		err: fbx.Error = {}
-		scene := fbx.load_file(filename, &opts, &err)
-		defer fbx.free_scene(scene)
-		if scene == nil {
-			log.logf(.Error, "Failed to load FBX file! Reason\n{}", err.description.data)
-			panic("Failed to load FBX file!")
-		}
-
-		meshes: [dynamic]^fbx.Mesh
-		defer delete(meshes)
-		skeleton: [dynamic]Bone
-		for index in 0 ..< scene.nodes.count {
-			node := scene^.nodes.data[index]
-			if node.is_root do continue
-			if node.mesh != nil do append(&meshes, node.mesh)
-			if node.bone != nil do loadBone(&skeleton, node)
-		}
-		model.skeleton = skeleton[:]
-
-		vertices: [dynamic]Vertex
-		indices: [dynamic]u32
-		indexCount: u32 = 0
-		for mesh in meshes {
-			indexCount += loadMesh(mesh, &model.skeleton, &vertices, &indices)
-		}
-		model.vertices = vertices[:]
-		model.indices = indices[:]
-		model.indexCount = indexCount
-
-		for index in 0 ..< scene.skin_cluster.count {
-			skinCluster := scene.skin_cluster.data[index]^
-			for &bone, index in model^.skeleton {
+		for clusterIndex in 0 ..< scene.skin_cluster.count {
+			skinCluster := scene.skin_cluster.data[clusterIndex]^
+			for &bone in model^.skeleton {
 				if bone.name != skinCluster.bone_node.element.name.data {
 					continue
 				}
+
 				m := skinCluster.geometry_to_bone.cols
 				bone.inverseBind = {
 					f32(m[0][0]),
@@ -1915,20 +1907,30 @@ loadModels :: proc(
 		model.animations = make([]Anim, scene.anim_stacks.count)
 		for animIndex in 0 ..< scene.anim_stacks.count {
 			stack := scene.anim_stacks.data[animIndex]
+
+			err: fbx.Error
 			bakedAnim := fbx.bake_anim(scene, stack.anim, nil, &err)
+			if err.type != .NONE {
+				log.logf(.Error, "Error baking animation: {}", err.description.data)
+				continue
+			}
 			defer fbx.free_baked_anim(bakedAnim)
+
 			animation := &model.animations[animIndex]
-			animation^.duration = bakedAnim^.playback_duration
-			animation^.nodes = make([]AnimNode, bakedAnim.nodes.count)
+			animation.duration = bakedAnim^.playback_duration
+			animation.nodes = make([]AnimNode, bakedAnim.nodes.count)
+
 			for bakedIndex in 0 ..< bakedAnim.nodes.count {
 				bakedNode := bakedAnim.nodes.data[bakedIndex]
 				sceneNode := scene.nodes.data[bakedNode.typed_id]
-				for bone, index in model.skeleton {
+
+				for bone, boneIndex in model.skeleton {
 					if bone.name != sceneNode.element.name.data {
 						continue
 					}
+
 					animNode := AnimNode {
-						bone            = u32(index),
+						bone            = u32(boneIndex),
 						keyPositions    = make([]KeyVector, bakedNode.translation_keys.count),
 						keyRotations    = make([]KeyQuat, bakedNode.rotation_keys.count),
 						keyScales       = make([]KeyVector, bakedNode.scale_keys.count),
@@ -1936,6 +1938,7 @@ loadModels :: proc(
 						numKeyRotations = bakedNode.rotation_keys.count,
 						numKeyScales    = bakedNode.scale_keys.count,
 					}
+
 					for index in 0 ..< bakedNode.translation_keys.count {
 						data := bakedNode.translation_keys.data[index]
 						animNode.keyPositions[index].time = data.time
@@ -1943,6 +1946,7 @@ loadModels :: proc(
 						animNode.keyPositions[index].value.y = f32(data.value[1])
 						animNode.keyPositions[index].value.z = f32(data.value[2])
 					}
+
 					for index in 0 ..< bakedNode.rotation_keys.count {
 						data := bakedNode.rotation_keys.data[index]
 						animNode.keyRotations[index].time = data.time
@@ -1951,6 +1955,7 @@ loadModels :: proc(
 						animNode.keyRotations[index].value.z = f32(data.value[2])
 						animNode.keyRotations[index].value.w = f32(data.value[3])
 					}
+
 					for index in 0 ..< bakedNode.scale_keys.count {
 						data := bakedNode.scale_keys.data[index]
 						animNode.keyScales[index].time = data.time
@@ -1958,6 +1963,7 @@ loadModels :: proc(
 						animNode.keyScales[index].value.y = f32(data.value[1])
 						animNode.keyScales[index].value.z = f32(data.value[2])
 					}
+
 					animation^.nodes[bakedIndex] = animNode
 					break
 				}
@@ -2209,7 +2215,7 @@ addTextures :: proc(
 		{.COLOR},
 		textureCount^ + newTexturesCount,
 	)
-	
+
 	vk.CopyImageToImage(
 		device,
 		&vk.CopyImageToImageInfo {
@@ -4484,7 +4490,6 @@ updateInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext, delta: f32
 	defer delete(instanceData)
 	finalBoneTransforms[0] = IMat4
 	boneOffset: u32 = 1
-	now := time.now()
 	for &instance, instanceIndex in scenes[activeScene].instances {
 		instanceData[instanceIndex] = {
 			model                = translate(
@@ -5180,7 +5185,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 	implGLFW.NewFrame()
 	imgui.NewFrame()
 	if showDemo {
-		imgui.ShowDemoWindow()
+		imgui.ShowMetricsWindow()
 	}
 
 	if imgui.Begin("Scene Editor") {
@@ -5439,8 +5444,10 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 @(private = "file")
 cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	implVulkan.Shutdown()
+	implGLFW.Shutdown()
+	imgui.DestroyContext(imguiData.uiContext)
 
-	for frameBuffer in imguiData.frameBuffers {
+	for &frameBuffer in imguiData.frameBuffers {
 		vk.DestroyFramebuffer(device, frameBuffer, nil)
 	}
 	delete(imguiData.frameBuffers)
@@ -5450,9 +5457,6 @@ cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.FreeMemory(device, imguiData.colour.memory, nil)
 
 	vk.DestroyRenderPass(device, imguiData.renderPass, nil)
-
-	implGLFW.Shutdown()
-	imgui.DestroyContext(imguiData.uiContext)
 }
 
 clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
