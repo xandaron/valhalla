@@ -1843,7 +1843,7 @@ loadModels :: proc(
 
 				if mesh.skin_deformers.count != 0 {
 					deformer := mesh.skin_deformers.data[0]
-					numWeights := 
+					numWeights :=
 						deformer.vertices.data[vertexIndex].num_weights if deformer.vertices.data[vertexIndex].num_weights <= 4 else 4
 					firstWeightIndex := deformer.vertices.data[vertexIndex].weight_begin
 
@@ -1854,12 +1854,15 @@ loadModels :: proc(
 
 						for &bone, boneIndex in model.skeleton {
 							if bone.name == boneName.data {
-								model.vertices[indiceIndex + vertexOffset].bones[weightIndex] = u32(boneIndex)
+								model.vertices[indiceIndex + vertexOffset].bones[weightIndex] =
+									u32(boneIndex)
 								break
 							}
 						}
 
-						model.vertices[indiceIndex + vertexOffset].weights[weightIndex] = f32(skinWeight.weight)
+						model.vertices[indiceIndex + vertexOffset].weights[weightIndex] = f32(
+							skinWeight.weight,
+						)
 					}
 
 					if numWeights != 0 {
