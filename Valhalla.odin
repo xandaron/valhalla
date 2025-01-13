@@ -100,10 +100,10 @@ main :: proc() {
 		panic("Failed to load scene")
 	}
 
-	// if err := loadScene(graphicsContext, "./assets/scenes/bunny_box.json"); err != .None {
-	// 	log.logf(.Fatal, "Failed to load scene: {}", err)
-	// 	panic("Failed to load scene")
-	// }
+	if err := loadScene(&graphicsContext, "./assets/scenes/bunny_box.json"); err != .None {
+		log.logf(.Fatal, "Failed to load scene: {}", err)
+		panic("Failed to load scene")
+	}
 
 	setActiveScene(&graphicsContext, 0)
 

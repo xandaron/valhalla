@@ -2001,14 +2001,14 @@ loadModels :: proc(
 	for &vertex, index in scene.vertices {
 		newVertices[index] = vertex
 	}
-	// delete(scene.vertices)
+	delete(scene.vertices)
 	scene.vertices = newVertices
 	
 	newIndices := make([]u32, indexCount)
 	for &indice, index in scene.indices {
 		newIndices[index] = indice
 	}
-	// delete(scene.indices)
+	delete(scene.indices)
 	scene.indices = newIndices
 
 
@@ -2652,7 +2652,7 @@ loadScene :: proc(
 	for &scene, index in scenes {
 		newScenes[index] = scene
 	}
-	// delete(scenes)
+	delete(scenes)
 	scenes = newScenes
 
 	if scenes[sceneCount], err = parseJSON(sceneFile); err != .None {
@@ -5058,7 +5058,6 @@ recordUIBuffer :: proc(
 	}
 	vk.CmdBeginRenderPass(commandBuffer, &renderPassInfo, .INLINE)
 
-	drawUI(graphicsContext)
 	imgui.Render()
 	implVulkan.RenderDrawData(imgui.GetDrawData(), commandBuffer)
 
@@ -5239,6 +5238,10 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 	vk.ResetCommandBuffer(mainCommandBuffers[currentFrame], {})
 	vk.ResetCommandBuffer(computeCommandBuffers[currentFrame], {})
 	vk.ResetCommandBuffer(uiCommandBuffers[currentFrame], {})
+
+	when UI_ENABLED {
+		drawUI(graphicsContext)
+	}
 
 	updateUniformBuffer(
 		graphicsContext,
