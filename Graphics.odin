@@ -88,7 +88,7 @@ DEPTH_BIAS_CONSTANT: f32 : 1.25
 DEPTH_BIAS_SLOPE: f32 : 1.75
 
 @(private = "file")
-UI_ENABLED: bool : false
+UI_ENABLED: bool : true
 
 
 // ###################################################################
@@ -1974,37 +1974,57 @@ loadModels :: proc(
 		}
 	}
 
-	verticesDynamic: [dynamic]Vertex
-	vertexCount := u32(len(scenes[sceneIndex].vertices))
-	reserve(&verticesDynamic, vertexCount)
-	append(&verticesDynamic, ..scenes[sceneIndex].vertices)
-
-	indicesDynamic: [dynamic]u32
-	indexCount := u32(len(scenes[sceneIndex].indices))
-	reserve(&indicesDynamic, indexCount)
-	append(&indicesDynamic, ..scenes[sceneIndex].indices)
-
-	newModels := make([]Model, len(scenes[sceneIndex].models) + len(modelPaths))
-	modelOffset := len(scenes[sceneIndex].models)
-	for &model, index in scenes[sceneIndex].models {
+	scene := &scenes[sceneIndex]
+	
+	modelOffset := len(scene.models)
+	modelCount := modelOffset + len(modelPaths)
+	newModels := make([]Model, modelCount)
+	for &model, index in scene.models {
 		newModels[index] = model
 	}
-	scenes[sceneIndex].models = newModels
-
+	scene.models = newModels
+	
+	vertexCount, indexCount := u32(len(scene.vertices)), u32(len(scene.indices))
+	vertexIndex, indiceIndex := vertexCount, indexCount
 	for path, index in modelPaths {
-		scenes[sceneIndex].models[modelOffset + index].vertexOffset = vertexCount
-		scenes[sceneIndex].models[modelOffset + index].indexOffset = indexCount
+		loadFBX(graphicsContext, &scene.models[modelOffset + index], path)
 
-		loadFBX(graphicsContext, &scenes[sceneIndex].models[index], path)
+		scene.models[modelOffset + index].vertexOffset = vertexCount
+		scene.models[modelOffset + index].indexOffset = indexCount
 
-		append(&verticesDynamic, ..scenes[sceneIndex].models[index].vertices)
-		append(&indicesDynamic, ..scenes[sceneIndex].models[index].indices)
-
-		vertexCount = u32(len(verticesDynamic))
-		indexCount = u32(len(indicesDynamic))
+		vertexCount += u32(len(scene.models[modelOffset + index].vertices))
+		indexCount += u32(len(scene.models[modelOffset + index].indices))
 	}
-	scenes[sceneIndex].vertices = verticesDynamic[:]
-	scenes[sceneIndex].indices = indicesDynamic[:]
+
+	newVertices := make([]Vertex, vertexCount)
+	
+	for &vertex, index in scene.vertices {
+		newVertices[index] = vertex
+	}
+	// delete(scene.vertices)
+	scene.vertices = newVertices
+	
+	newIndices := make([]u32, indexCount)
+	for &indice, index in scene.indices {
+		newIndices[index] = indice
+	}
+	// delete(scene.indices)
+	scene.indices = newIndices
+
+
+	for modelIndex in modelOffset ..< modelCount {
+		model := &scene.models[modelIndex]
+
+		for &vertex in model.vertices {
+			scene.vertices[vertexIndex] = vertex
+			vertexIndex += 1
+		}
+
+		for &indice in model.indices {
+			scene.indices[indiceIndex] = indice
+			indiceIndex += 1
+		}
+	}
 }
 
 @(private = "file")
@@ -2628,12 +2648,11 @@ loadScene :: proc(
 	}
 
 	sceneCount := len(scenes)
-
 	newScenes := make([]Scene, sceneCount + 1)
 	for &scene, index in scenes {
 		newScenes[index] = scene
 	}
-	delete(scenes)
+	// delete(scenes)
 	scenes = newScenes
 
 	if scenes[sceneCount], err = parseJSON(sceneFile); err != .None {
