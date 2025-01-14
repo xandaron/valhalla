@@ -4531,7 +4531,6 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		// (Optional)
 		PipelineCache               = {},
 		Subpass                     = 0,
-
 		DescriptorPoolSize          = 0,
 
 		// (Optional) Dynamic Rendering
@@ -4552,7 +4551,7 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		panic("Failed to init vulkan impl.")
 	}
 
-	ImFD.init(ImFDCreateImage, ImFDDeleteImage)
+	ImFD.Init(ImFDCreateImage, ImFDDeleteImage)
 }
 
 
@@ -5312,7 +5311,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			if imgui.BeginMenu("File") {
 				imgui.SeparatorText("Scene Files")
 				if imgui.MenuItem("Load") {
-					ImFD.open(
+					ImFD.Open(
 						"TextureOpenDialog",
 						"Open a scene",
 						"JSON file (*.json){.json},.*",
@@ -5372,9 +5371,9 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 		constructSceneEditor(graphicsContext)
 	}
 	imgui.End()
-	
-	if ImFD.is_done("TextureOpenDialog") {
-		ImFD.close()
+
+	if ImFD.IsDone("TextureOpenDialog") {
+		ImFD.Close()
 	}
 }
 
@@ -5631,7 +5630,7 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 
 @(private = "file")
 cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
-	ImFD.shutdown()
+	ImFD.Shutdown()
 	implVulkan.Shutdown()
 	implGLFW.Shutdown()
 	imgui.DestroyContext(imguiData.uiContext)
