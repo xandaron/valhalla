@@ -33,6 +33,12 @@ logger: runtime.Logger
 showDemo := false
 showMetrics := false
 
+EngineState :: struct {
+	graphicsContext: ^GraphicsContext,
+}
+
+engineState: EngineState
+
 main :: proc() {
 	// Sets the current dir to the folder above the dir of the exe file
 	{
@@ -91,6 +97,7 @@ main :: proc() {
 	}
 
 	graphicsContext: GraphicsContext
+	engineState.graphicsContext = &graphicsContext
 	initVkGraphics(&graphicsContext)
 	defer clanupVkGraphics(&graphicsContext)
 

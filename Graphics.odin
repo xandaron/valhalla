@@ -1,5 +1,8 @@
 package Valhalla
 
+import ImFD "ImFileDialog"
+import "base:runtime"
+import "core:c"
 import "core:encoding/json"
 import "core:log"
 import "core:mem"
@@ -158,11 +161,17 @@ Model :: struct {
 
 @(private = "file")
 Image :: struct {
-	image:   vk.Image,
+	vkImage: vk.Image,
 	memory:  vk.DeviceMemory,
 	view:    vk.ImageView,
 	format:  vk.Format,
 	sampler: vk.Sampler,
+}
+
+@(private = "file")
+ImplVulkanImageData :: struct {
+	image:         Image,
+	descriptorSet: vk.DescriptorSet,
 }
 
 // Use Vec4 becuse of alignment issues when using Vec3
@@ -382,8 +391,6 @@ GraphicsContext :: struct {
 
 
 initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
-	context.user_ptr = graphicsContext
-
 	when ODIN_DEBUG {
 		glfw.SetErrorCallback(glfwErrorCallback)
 	}
@@ -1172,7 +1179,8 @@ createBuffer :: proc(
 		queueFamilyIndexCount = 0,
 		pQueueFamilyIndices   = nil,
 	}
-	if vk.CreateBuffer(device, &bufferInfo, nil, buffer) != .SUCCESS {
+	vkDevice := graphicsContext.device
+	if vk.CreateBuffer(vkDevice, &bufferInfo, nil, buffer) != .SUCCESS {
 		log.log(.Error, "Failed to create buffer!")
 		panic("Failed to create buffer!")
 	}
@@ -1421,13 +1429,13 @@ createImage :: proc(
 		initialLayout         = .UNDEFINED,
 	}
 
-	if vk.CreateImage(device, &imageInfo, nil, &image^.image) != .SUCCESS {
+	if vk.CreateImage(device, &imageInfo, nil, &image.vkImage) != .SUCCESS {
 		log.log(.Error, "Failed to create texture!")
 		panic("Failed to create texture!")
 	}
 
 	memRequirements: vk.MemoryRequirements
-	vk.GetImageMemoryRequirements(device, image^.image, &memRequirements)
+	vk.GetImageMemoryRequirements(device, image.vkImage, &memRequirements)
 	allocInfo: vk.MemoryAllocateInfo = {
 		sType           = .MEMORY_ALLOCATE_INFO,
 		pNext           = nil,
@@ -1442,7 +1450,7 @@ createImage :: proc(
 		log.log(.Error, "Failed to allocate image memory!")
 		panic("Failed to allocate image memory!")
 	}
-	if vk.BindImageMemory(device, image.image, image.memory, 0) != .SUCCESS {
+	if vk.BindImageMemory(device, image.vkImage, image.memory, 0) != .SUCCESS {
 		log.log(.Error, "Failed to bind image memory!")
 		panic("Failed to bind image memory!")
 	}
@@ -1977,7 +1985,7 @@ loadModels :: proc(
 	}
 
 	scene := &scenes[sceneIndex]
-	
+
 	modelOffset := len(scene.models)
 	modelCount := modelOffset + len(modelPaths)
 	newModels := make([]Model, modelCount)
@@ -1985,7 +1993,7 @@ loadModels :: proc(
 		newModels[index] = model
 	}
 	scene.models = newModels
-	
+
 	vertexCount, indexCount := u32(len(scene.vertices)), u32(len(scene.indices))
 	vertexIndex, indiceIndex := vertexCount, indexCount
 	for path, index in modelPaths {
@@ -1999,13 +2007,13 @@ loadModels :: proc(
 	}
 
 	newVertices := make([]Vertex, vertexCount)
-	
+
 	for &vertex, index in scene.vertices {
 		newVertices[index] = vertex
 	}
 	delete(scene.vertices)
 	scene.vertices = newVertices
-	
+
 	newIndices := make([]u32, indexCount)
 	for &indice, index in scene.indices {
 		newIndices[index] = indice
@@ -2058,7 +2066,7 @@ loadTextures :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		texture^.image,
+		texture.vkImage,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
 		{.COLOR},
@@ -2114,7 +2122,7 @@ loadTextures :: proc(
 			nil,
 		)
 		defer {
-			vk.DestroyImage(device, stagingImage.image, nil)
+			vk.DestroyImage(device, stagingImage.vkImage, nil)
 			vk.FreeMemory(device, stagingImage.memory, nil)
 		}
 
@@ -2122,7 +2130,7 @@ loadTextures :: proc(
 		transitionImageLayout(
 			graphicsContext,
 			commandBuffer,
-			stagingImage.image,
+			stagingImage.vkImage,
 			.UNDEFINED,
 			.TRANSFER_DST_OPTIMAL,
 			{.COLOR},
@@ -2133,7 +2141,7 @@ loadTextures :: proc(
 			graphicsContext,
 			commandBuffer,
 			stagingBuffer.buffer,
-			stagingImage.image,
+			stagingImage.vkImage,
 			u32(width),
 			u32(height),
 		)
@@ -2141,7 +2149,7 @@ loadTextures :: proc(
 		transitionImageLayout(
 			graphicsContext,
 			commandBuffer,
-			stagingImage.image,
+			stagingImage.vkImage,
 			.TRANSFER_DST_OPTIMAL,
 			.TRANSFER_SRC_OPTIMAL,
 			{.COLOR},
@@ -2150,8 +2158,8 @@ loadTextures :: proc(
 
 		upscaleImage(
 			commandBuffer,
-			stagingImage.image,
-			texture.image,
+			stagingImage.vkImage,
+			texture.vkImage,
 			{u32(width), u32(height), 0},
 			{u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y), u32(index)},
 		)
@@ -2162,7 +2170,7 @@ loadTextures :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		texture^.image,
+		texture.vkImage,
 		.TRANSFER_DST_OPTIMAL,
 		.SHADER_READ_ONLY_OPTIMAL,
 		{.COLOR},
@@ -2172,7 +2180,7 @@ loadTextures :: proc(
 
 	texture.view = createImageView(
 		graphicsContext,
-		texture.image,
+		texture.vkImage,
 		.D2_ARRAY,
 		texture.format,
 		{.COLOR},
@@ -2224,7 +2232,7 @@ addTextures :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		texture.image,
+		texture.vkImage,
 		.SHADER_READ_ONLY_OPTIMAL,
 		.TRANSFER_SRC_OPTIMAL,
 		{.COLOR},
@@ -2234,7 +2242,7 @@ addTextures :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		newTexture.image,
+		newTexture.vkImage,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
 		{.COLOR},
@@ -2247,9 +2255,9 @@ addTextures :: proc(
 			sType = .COPY_IMAGE_TO_IMAGE_INFO,
 			pNext = nil,
 			flags = {},
-			srcImage = texture.image,
+			srcImage = texture.vkImage,
 			srcImageLayout = .TRANSFER_SRC_OPTIMAL,
-			dstImage = newTexture.image,
+			dstImage = newTexture.vkImage,
 			dstImageLayout = .TRANSFER_DST_OPTIMAL,
 			regionCount = 1,
 			pRegions = &vk.ImageCopy2 {
@@ -2280,7 +2288,7 @@ addTextures :: proc(
 	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 
 	vk.DestroyImageView(device, texture.view, nil)
-	vk.DestroyImage(device, texture.image, nil)
+	vk.DestroyImage(device, texture.vkImage, nil)
 	vk.FreeMemory(device, texture.memory, nil)
 
 	newTexture.sampler = texture.sampler
@@ -2334,7 +2342,7 @@ addTextures :: proc(
 			nil,
 		)
 		defer {
-			vk.DestroyImage(device, stagingImage.image, nil)
+			vk.DestroyImage(device, stagingImage.vkImage, nil)
 			vk.FreeMemory(device, stagingImage.memory, nil)
 		}
 
@@ -2342,7 +2350,7 @@ addTextures :: proc(
 		transitionImageLayout(
 			graphicsContext,
 			commandBuffer,
-			stagingImage.image,
+			stagingImage.vkImage,
 			.UNDEFINED,
 			.TRANSFER_DST_OPTIMAL,
 			{.COLOR},
@@ -2353,7 +2361,7 @@ addTextures :: proc(
 			graphicsContext,
 			commandBuffer,
 			stagingBuffer.buffer,
-			stagingImage.image,
+			stagingImage.vkImage,
 			u32(width),
 			u32(height),
 		)
@@ -2361,7 +2369,7 @@ addTextures :: proc(
 		transitionImageLayout(
 			graphicsContext,
 			commandBuffer,
-			stagingImage.image,
+			stagingImage.vkImage,
 			.TRANSFER_DST_OPTIMAL,
 			.TRANSFER_SRC_OPTIMAL,
 			{.COLOR},
@@ -2370,8 +2378,8 @@ addTextures :: proc(
 
 		upscaleImage(
 			commandBuffer,
-			stagingImage.image,
-			texture.image,
+			stagingImage.vkImage,
+			texture.vkImage,
 			{u32(width), u32(height), 0},
 			{u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y), textureCount^ + u32(index)},
 		)
@@ -2384,7 +2392,7 @@ addTextures :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		texture^.image,
+		texture.vkImage,
 		.TRANSFER_DST_OPTIMAL,
 		.SHADER_READ_ONLY_OPTIMAL,
 		{.COLOR},
@@ -2394,7 +2402,7 @@ addTextures :: proc(
 
 	texture.view = createImageView(
 		graphicsContext,
-		texture.image,
+		texture.vkImage,
 		.D2_ARRAY,
 		texture.format,
 		{.COLOR},
@@ -2432,7 +2440,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		scenes[sceneIndex].shadowImages.image,
+		scenes[sceneIndex].shadowImages.vkImage,
 		.UNDEFINED,
 		.SHADER_READ_ONLY_OPTIMAL,
 		{.DEPTH},
@@ -2442,7 +2450,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 
 	scenes[sceneIndex].shadowImages.view = createImageView(
 		graphicsContext,
-		scenes[sceneIndex].shadowImages.image,
+		scenes[sceneIndex].shadowImages.vkImage,
 		.D2_ARRAY,
 		scenes[sceneIndex].shadowImages.format,
 		{.DEPTH},
@@ -3093,7 +3101,7 @@ updateComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 
 		inImage.view = createImageView(
 			graphicsContext,
-			inImage.image,
+			inImage.vkImage,
 			.D2,
 			inImage.format,
 			{.COLOR},
@@ -3120,7 +3128,7 @@ updateComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 
 		outImage.view = createImageView(
 			graphicsContext,
-			outImage.image,
+			outImage.vkImage,
 			.D2,
 			outImage.format,
 			{.COLOR},
@@ -3482,7 +3490,7 @@ createRenderPass :: proc(using graphicsContext: ^GraphicsContext) {
 
 		pipelines[PipelineIndex.SHADOW].depth.view = createImageView(
 			graphicsContext,
-			pipelines[PipelineIndex.SHADOW].depth.image,
+			pipelines[PipelineIndex.SHADOW].depth.vkImage,
 			.D2,
 			pipelines[PipelineIndex.SHADOW].depth.format,
 			{.DEPTH},
@@ -3587,7 +3595,7 @@ createRenderPass :: proc(using graphicsContext: ^GraphicsContext) {
 
 		pipelines[PipelineIndex.MAIN].colour.view = createImageView(
 			graphicsContext,
-			pipelines[PipelineIndex.MAIN].colour.image,
+			pipelines[PipelineIndex.MAIN].colour.vkImage,
 			.D2,
 			pipelines[PipelineIndex.MAIN].colour.format,
 			{.COLOR},
@@ -3620,7 +3628,7 @@ createRenderPass :: proc(using graphicsContext: ^GraphicsContext) {
 
 		pipelines[PipelineIndex.MAIN].depth.view = createImageView(
 			graphicsContext,
-			pipelines[PipelineIndex.MAIN].depth.image,
+			pipelines[PipelineIndex.MAIN].depth.vkImage,
 			.D2,
 			pipelines[PipelineIndex.MAIN].depth.format,
 			{.DEPTH},
@@ -4267,6 +4275,123 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 
 @(private = "file")
 updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
+	ImFDCreateImage: ImFD.CreateTexture : proc "system" (
+		data: ^c.uint8_t,
+		width, height: c.int,
+		format: c.char,
+	) -> rawptr {
+		context = runtime.default_context()
+		using graphicsContext := engineState.graphicsContext
+
+		textureSize := int(width * height * 4)
+		stagingBuffer: Buffer
+		createBuffer(
+			graphicsContext,
+			textureSize,
+			{.TRANSFER_SRC},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&stagingBuffer.buffer,
+			&stagingBuffer.memory,
+		)
+		defer {
+			vk.DestroyBuffer(device, stagingBuffer.buffer, nil)
+			vk.FreeMemory(device, stagingBuffer.memory, nil)
+		}
+
+		bufferData: rawptr
+		vk.MapMemory(device, stagingBuffer.memory, 0, vk.DeviceSize(textureSize), {}, &bufferData)
+		mem.copy(bufferData, data, textureSize)
+		vk.UnmapMemory(device, stagingBuffer.memory)
+
+		imageData: ImplVulkanImageData
+		imageData.image.format = .B8G8R8A8_SRGB if format == 0 else .R8G8B8A8_SRGB
+		createImage(
+			graphicsContext,
+			&imageData.image,
+			{},
+			.D2,
+			u32(width),
+			u32(height),
+			1,
+			{._1},
+			.OPTIMAL,
+			{.TRANSFER_DST, .TRANSFER_SRC},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
+
+		commandBuffer := beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
+		transitionImageLayout(
+			graphicsContext,
+			commandBuffer,
+			imageData.image.vkImage,
+			.UNDEFINED,
+			.TRANSFER_DST_OPTIMAL,
+			{.COLOR},
+			1,
+		)
+
+		copyBufferToImage(
+			graphicsContext,
+			commandBuffer,
+			stagingBuffer.buffer,
+			imageData.image.vkImage,
+			u32(width),
+			u32(height),
+		)
+
+		transitionImageLayout(
+			graphicsContext,
+			commandBuffer,
+			imageData.image.vkImage,
+			.TRANSFER_DST_OPTIMAL,
+			.SHADER_READ_ONLY_OPTIMAL,
+			{.COLOR},
+			1,
+		)
+		endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
+
+		imageData.image.view = createImageView(
+			graphicsContext,
+			imageData.image.vkImage,
+			.D2,
+			imageData.image.format,
+			{.COLOR},
+			1,
+		)
+
+		imageData.image.sampler = createSampler(
+			graphicsContext,
+			.LINEAR,
+			.LINEAR,
+			.REPEAT,
+			false,
+			1,
+			.INT_OPAQUE_WHITE,
+		)
+
+		imageData.descriptorSet = implVulkan.AddTexture(
+			imageData.image.sampler,
+			imageData.image.view,
+			.SHADER_READ_ONLY_OPTIMAL,
+		)
+		return (rawptr)(&imageData)
+	}
+
+	ImFDDeleteImage: ImFD.DeleteTexture : proc "system" (imagePtr: rawptr) {
+		context = runtime.default_context()
+		using graphicsContext := engineState.graphicsContext
+		imagePtr := (^ImplVulkanImageData)(imagePtr)
+
+		implVulkan.RemoveTexture(imagePtr.descriptorSet)
+		vk.DestroyImageView(device, imagePtr.image.view, nil)
+		vk.DestroyImage(device, imagePtr.image.vkImage, nil)
+		vk.FreeMemory(device, imagePtr.image.memory, nil)
+		vk.DestroySampler(device, imagePtr.image.sampler, nil)
+	}
+
 	imguiData.uiContext = imgui.CreateContext()
 	io := imgui.GetIO()
 	imgui.StyleColorsDark()
@@ -4306,7 +4431,7 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 
 		imguiData.colour.view = createImageView(
 			graphicsContext,
-			imguiData.colour.image,
+			imguiData.colour.vkImage,
 			.D2,
 			imguiData.colour.format,
 			{.COLOR},
@@ -4390,7 +4515,8 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 	}
 
-	implInitInfo: implVulkan.InitInfo = {
+	implInitInfo: implVulkan.InitInfo = {}
+	implInitInfo = {
 		Instance                    = instance,
 		PhysicalDevice              = physicalDevice,
 		Device                      = device,
@@ -4425,6 +4551,8 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		log.log(.Fatal, "Failed to init vulkan impl.")
 		panic("Failed to init vulkan impl.")
 	}
+
+	ImFD.init(ImFDCreateImage, ImFDDeleteImage)
 }
 
 
@@ -4693,7 +4821,7 @@ recordGraphicsBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		scenes[activeScene].shadowImages.image,
+		scenes[activeScene].shadowImages.vkImage,
 		.SHADER_READ_ONLY_OPTIMAL,
 		.TRANSFER_DST_OPTIMAL,
 		{.DEPTH},
@@ -4763,9 +4891,9 @@ recordGraphicsBuffer :: proc(
 
 		vk.CmdCopyImage(
 			commandBuffer,
-			pipelines[PipelineIndex.SHADOW].depth.image,
+			pipelines[PipelineIndex.SHADOW].depth.vkImage,
 			.TRANSFER_SRC_OPTIMAL,
-			scenes[activeScene].shadowImages.image,
+			scenes[activeScene].shadowImages.vkImage,
 			.TRANSFER_DST_OPTIMAL,
 			1,
 			&vk.ImageCopy {
@@ -4795,7 +4923,7 @@ recordGraphicsBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		scenes[activeScene].shadowImages.image,
+		scenes[activeScene].shadowImages.vkImage,
 		.TRANSFER_DST_OPTIMAL,
 		.SHADER_READ_ONLY_OPTIMAL,
 		{.DEPTH},
@@ -4892,7 +5020,7 @@ recordComputeBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		inImage.image,
+		inImage.vkImage,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
 		{.COLOR},
@@ -4901,8 +5029,8 @@ recordComputeBuffer :: proc(
 
 	upscaleImage(
 		commandBuffer,
-		pipelines[PipelineIndex.MAIN].colour.image,
-		inImage.image,
+		pipelines[PipelineIndex.MAIN].colour.vkImage,
+		inImage.vkImage,
 		vk.Extent3D{u32(RENDER_SIZE.x), u32(RENDER_SIZE.y), 0},
 		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 0},
 	)
@@ -4910,7 +5038,7 @@ recordComputeBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		inImage.image,
+		inImage.vkImage,
 		.TRANSFER_DST_OPTIMAL,
 		.GENERAL,
 		{.COLOR},
@@ -4920,7 +5048,7 @@ recordComputeBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		outImage.image,
+		outImage.vkImage,
 		.UNDEFINED,
 		.GENERAL,
 		{.COLOR},
@@ -4950,7 +5078,7 @@ recordComputeBuffer :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		outImage.image,
+		outImage.vkImage,
 		.UNDEFINED,
 		.TRANSFER_SRC_OPTIMAL,
 		{.COLOR},
@@ -4961,7 +5089,7 @@ recordComputeBuffer :: proc(
 		transitionImageLayout(
 			graphicsContext,
 			commandBuffer,
-			imguiData.colour.image,
+			imguiData.colour.vkImage,
 			.UNDEFINED,
 			.TRANSFER_DST_OPTIMAL,
 			{.COLOR},
@@ -4971,8 +5099,8 @@ recordComputeBuffer :: proc(
 		copyImage(
 			commandBuffer,
 			vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 1},
-			outImage.image,
-			imguiData.colour.image,
+			outImage.vkImage,
+			imguiData.colour.vkImage,
 			.TRANSFER_SRC_OPTIMAL,
 			.TRANSFER_DST_OPTIMAL,
 		)
@@ -5081,7 +5209,7 @@ recordUIBuffer :: proc(
 
 	vk.CmdBlitImage(
 		commandBuffer,
-		imguiData.colour.image,
+		imguiData.colour.vkImage,
 		.TRANSFER_SRC_OPTIMAL,
 		swapchainImages[imageIndex],
 		.TRANSFER_DST_OPTIMAL,
@@ -5180,6 +5308,26 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 
 	constructSceneEditor :: proc(using graphicsContext: ^GraphicsContext) {
+		if imgui.BeginMenuBar() {
+			if imgui.BeginMenu("File") {
+				imgui.SeparatorText("Scene Files")
+				if imgui.MenuItem("Load") {
+					ImFD.open(
+						"TextureOpenDialog",
+						"Open a scene",
+						"JSON file (*.json){.json},.*",
+						true,
+						"./assets/",
+					)
+				}
+				if imgui.MenuItem("Save") {
+
+				}
+				imgui.EndMenu()
+			}
+			imgui.EndMenuBar()
+		}
+
 		if imgui.Button("Toggle Time", {100, 20}) {
 			paused = !paused
 		}
@@ -5224,6 +5372,10 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 		constructSceneEditor(graphicsContext)
 	}
 	imgui.End()
+	
+	if ImFD.is_done("TextureOpenDialog") {
+		ImFD.close()
+	}
 }
 
 drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
@@ -5386,10 +5538,10 @@ cleanupSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 
 	vk.DestroySwapchainKHR(device, swapchain, nil)
 	vk.DestroyImageView(device, inImage.view, nil)
-	vk.DestroyImage(device, inImage.image, nil)
+	vk.DestroyImage(device, inImage.vkImage, nil)
 	vk.FreeMemory(device, inImage.memory, nil)
 	vk.DestroyImageView(device, outImage.view, nil)
-	vk.DestroyImage(device, outImage.image, nil)
+	vk.DestroyImage(device, outImage.vkImage, nil)
 	vk.FreeMemory(device, outImage.memory, nil)
 }
 
@@ -5410,17 +5562,17 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	}
 
 	vk.DestroyImageView(device, scenes[sceneIndex].textures.view, nil)
-	vk.DestroyImage(device, scenes[sceneIndex].textures.image, nil)
+	vk.DestroyImage(device, scenes[sceneIndex].textures.vkImage, nil)
 	vk.FreeMemory(device, scenes[sceneIndex].textures.memory, nil)
 	vk.DestroySampler(device, scenes[sceneIndex].textures.sampler, nil)
 
 	vk.DestroyImageView(device, scenes[sceneIndex].normals.view, nil)
-	vk.DestroyImage(device, scenes[sceneIndex].normals.image, nil)
+	vk.DestroyImage(device, scenes[sceneIndex].normals.vkImage, nil)
 	vk.FreeMemory(device, scenes[sceneIndex].normals.memory, nil)
 	vk.DestroySampler(device, scenes[sceneIndex].normals.sampler, nil)
 
 	vk.DestroyImageView(device, scenes[sceneIndex].shadowImages.view, nil)
-	vk.DestroyImage(device, scenes[sceneIndex].shadowImages.image, nil)
+	vk.DestroyImage(device, scenes[sceneIndex].shadowImages.vkImage, nil)
 	vk.FreeMemory(device, scenes[sceneIndex].shadowImages.memory, nil)
 	vk.DestroySampler(device, scenes[sceneIndex].shadowImages.sampler, nil)
 
@@ -5479,6 +5631,7 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 
 @(private = "file")
 cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
+	ImFD.shutdown()
 	implVulkan.Shutdown()
 	implGLFW.Shutdown()
 	imgui.DestroyContext(imguiData.uiContext)
@@ -5489,7 +5642,7 @@ cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	delete(imguiData.frameBuffers)
 
 	vk.DestroyImageView(device, imguiData.colour.view, nil)
-	vk.DestroyImage(device, imguiData.colour.image, nil)
+	vk.DestroyImage(device, imguiData.colour.vkImage, nil)
 	vk.FreeMemory(device, imguiData.colour.memory, nil)
 
 	vk.DestroyRenderPass(device, imguiData.renderPass, nil)
@@ -5550,11 +5703,11 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 
 	// MAIN
 	vk.DestroyImageView(device, pipelines[PipelineIndex.MAIN].colour.view, nil)
-	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].colour.image, nil)
+	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].colour.vkImage, nil)
 	vk.FreeMemory(device, pipelines[PipelineIndex.MAIN].colour.memory, nil)
 
 	vk.DestroyImageView(device, pipelines[PipelineIndex.MAIN].depth.view, nil)
-	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].depth.image, nil)
+	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].depth.vkImage, nil)
 	vk.FreeMemory(device, pipelines[PipelineIndex.MAIN].depth.memory, nil)
 	vk.DestroySampler(device, pipelines[PipelineIndex.MAIN].depth.sampler, nil)
 
@@ -5574,7 +5727,7 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 
 	// LIGHT
 	vk.DestroyImageView(device, pipelines[PipelineIndex.SHADOW].depth.view, nil)
-	vk.DestroyImage(device, pipelines[PipelineIndex.SHADOW].depth.image, nil)
+	vk.DestroyImage(device, pipelines[PipelineIndex.SHADOW].depth.vkImage, nil)
 	vk.FreeMemory(device, pipelines[PipelineIndex.SHADOW].depth.memory, nil)
 
 	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.SHADOW].descriptorPool, nil)
