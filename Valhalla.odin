@@ -31,6 +31,7 @@ cameraMove: Vec3 = {0, 0, 0}
 // Debug
 logger: runtime.Logger
 showDemo := false
+showMetrics := false
 
 main :: proc() {
 	// Sets the current dir to the folder above the dir of the exe file
@@ -251,6 +252,9 @@ keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods:
 	}
 	if key == glfw.KEY_H && action == glfw.PRESS {
 		showDemo = !showDemo
+	}
+	if key == glfw.KEY_M && action == glfw.PRESS {
+		showMetrics = !showMetrics
 	}
 }
 

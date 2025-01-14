@@ -39,4 +39,7 @@ foreign lib {
 	KeyCallback         :: proc(window: glfw.WindowHandle, key: c.int, scancode: c.int, action: c.int, mods: c.int) ---
 	CharCallback        :: proc(window: glfw.WindowHandle, c: c.uint) ---
 	MonitorCallback     :: proc(monitor: glfw.MonitorHandle, event: c.int) ---
+
+	// GLFW helpers
+	Sleep :: proc(milliseconds: i32) --- 
 }

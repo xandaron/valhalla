@@ -382,6 +382,8 @@ GraphicsContext :: struct {
 
 
 initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
+	context.user_ptr = graphicsContext
+
 	when ODIN_DEBUG {
 		glfw.SetErrorCallback(glfwErrorCallback)
 	}
@@ -391,7 +393,7 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-	if window = glfw.CreateWindow(800, 600, "Valhalla", nil, nil); window == nil {
+	if window = glfw.CreateWindow(1600, 800, "Valhalla", nil, nil); window == nil {
 		log.log(.Fatal, "Failed to create window, quitting application.")
 		return
 	}
@@ -4266,6 +4268,8 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 @(private = "file")
 updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	imguiData.uiContext = imgui.CreateContext()
+	io := imgui.GetIO()
+	imgui.StyleColorsDark()
 
 	implVulkan.LoadFunctions(
 		proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
@@ -4401,6 +4405,8 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		// (Optional)
 		PipelineCache               = {},
 		Subpass                     = 0,
+
+		DescriptorPoolSize          = 0,
 
 		// (Optional) Dynamic Rendering
 		// Need to explicitly enable VK_KHR_dynamic_rendering extension to use this, even for Vulkan 1.3.
@@ -5180,7 +5186,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 
 		if imgui.BeginCombo("Scene Selection", scenes[activeScene].name) {
 			for &scene, index in scenes {
-				if imgui.Selectable(scene.name, activeScene == u32(index)) {
+				if activeScene != u32(index) && imgui.Selectable(scene.name, false) {
 					setActiveScene(graphicsContext, u32(index))
 				}
 			}
@@ -5205,11 +5211,16 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 	implVulkan.NewFrame()
 	implGLFW.NewFrame()
 	imgui.NewFrame()
-	if showDemo {
+
+	if showMetrics {
 		imgui.ShowMetricsWindow()
 	}
 
-	if imgui.Begin("Scene Editor") {
+	if showDemo {
+		imgui.ShowDemoWindow()
+	}
+
+	if imgui.Begin("Scene Editor", nil, {.MenuBar}) {
 		constructSceneEditor(graphicsContext)
 	}
 	imgui.End()

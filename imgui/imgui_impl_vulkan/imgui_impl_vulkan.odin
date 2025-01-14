@@ -33,12 +33,15 @@ InitInfo :: struct {
 	PipelineCache: vk.PipelineCache,
 	Subpass:       u32,
 
+	// (Optional) Set to create internal descriptor pool instead of using DescriptorPool
+	DescriptorPoolSize: u32,
+
 	// (Optional) Dynamic Rendering
 	// Need to explicitly enable VK_KHR_dynamic_rendering extension to use this, even for Vulkan 1.3.
 	UseDynamicRendering:         bool,
 	// NOTE: Odin-imgui: this field if #ifdef'd out in the Dear ImGui side if the struct is not defined.
 	// Keeping the field is a pretty safe bet, but make sure to check this if you have issues!
-	PipelineRenderingCreateInfo: vk.PipelineRenderingCreateInfo,
+	PipelineRenderingCreateInfo: vk.PipelineRenderingCreateInfoKHR,
 
 	// (Optional) Allocation, Debugging
 	Allocator:         ^vk.AllocationCallbacks,
