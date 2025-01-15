@@ -374,7 +374,7 @@ GraphicsContext :: struct {
 	computeCommandBuffers: []vk.CommandBuffer,
 
 	// Scene Data
-	scenes:                []Scene,
+	scenes:                [dynamic]Scene,
 	activeScene:           u32,
 
 	// Buffer
@@ -414,9 +414,6 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 
 	vk.load_proc_addresses(rawptr(glfw.GetInstanceProcAddress))
 
-	framebufferResized = false
-	currentFrame = 0
-
 	createInstance(graphicsContext)
 	when ODIN_DEBUG {
 		vkSetupDebugMessenger(graphicsContext)
@@ -442,6 +439,10 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 		initImgui(graphicsContext)
 		updateImgui(graphicsContext)
 	}
+
+	framebufferResized = false
+	currentFrame = 0
+	scenes = make([dynamic]Scene)
 }
 
 @(private = "file")
@@ -2659,16 +2660,13 @@ loadScene :: proc(
 	}
 
 	index = u32(len(scenes))
-	newScenes := make([]Scene, index + 1)
-	for &scene, index in scenes {
-		newScenes[index] = scene
-	}
-	delete(scenes)
-	scenes = newScenes
+	scene: Scene
 
-	if scenes[index], err = parseJSON(sceneFile); err != .None {
+	if scene, err = parseJSON(sceneFile); err != .None {
 		panic("Couldn't parse file")
 	}
+
+	append(&scenes, scene)
 
 	if err = loadSceneAssets(graphicsContext, index); err != .None {
 		panic("Load error")
@@ -5316,6 +5314,10 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 				if imgui.MenuItem("Save") {
 
 				}
+				if imgui.MenuItem("Close") {
+					cleanupScene(graphicsContext, activeScene)
+					setActiveScene(graphicsContext, 0)
+				}
 				imgui.EndMenu()
 			}
 			imgui.EndMenuBar()
@@ -5625,6 +5627,12 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	}
 	delete(scenes[sceneIndex].cameras)
 	delete(scenes[sceneIndex].name)
+
+	unordered_remove(&scenes, sceneIndex)
+
+	if len(scenes) == 0 {
+		// TODO: Need some sort of "empty"/"new" scene
+	}
 }
 
 @(private = "file")
