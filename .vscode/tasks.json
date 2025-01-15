@@ -9,7 +9,7 @@
             "command": "cmd",
             "args": [
                 "/C",
-                "if not exist ./build mkdir ./build"
+                "if not exist \"./bin\" mkdir \"./bin\""
             ]
         },
         {
@@ -18,40 +18,60 @@
             "command": "bash",
             "args": [
                 "-c",
-                "if [ ! -d './build' ]; then mkdir ./build; fi;"
+                "if [ ! -d './bin' ]; then mkdir ./bin; fi;"
             ]
         },
         {
-            "label": "compile_shaders",
+            "label": "compile shaders windows",
             "type": "shell",
             "command": "./assets/shaders/compile.bat"
         },
         {
+            "label": "compile shaders linux",
+            "type": "shell",
+            "command": "./assets/shaders/compile.sh"
+        },
+        {
             "label": "debug",
             "type": "shell",
-            "command": "odin build . -debug -out:build/debug.exe",
+            "command": "odin build . -debug -out:bin/debug.exe",
             "group": "build"
         },
         {
             "label": "build",
             "type": "shell",
-            "command": "odin build . -out:build/build.exe",
+            "command": "odin build . -out:bin/build.exe",
             "group": "build"
         },
         {
-            "label": "Build Windows",
+            "label": "Debug Windows",
             "dependsOn": [
                 "Windows mkdir",
-                "compile_shaders",
-                "debug",
+                "compile shaders windows",
+                "debug"
+            ]
+        },
+        {
+            "label": "Release Windows",
+            "dependsOn": [
+                "Windows mkdir",
+                "compile shaders windows",
                 "build"
             ]
         },
         {
-            "label": "Build Linux",
+            "label": "Debug Linux",
             "dependsOn": [
                 "Linux mkdir",
-                "debug",
+                "compile shaders linux",
+                "debug"
+            ]
+        },
+        {
+            "label": "Release Linux",
+            "dependsOn": [
+                "Linux mkdir",
+                "compile shaders linux",
                 "build"
             ]
         }

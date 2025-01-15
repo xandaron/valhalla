@@ -4073,7 +4073,7 @@ createGraphicsPipelines :: proc(
 		panic("Failed to create pipeline layout!")
 	}
 
-	shadowShaderFiles := "./assets/shaders/light_vert.spv"
+	shadowShaderFiles := "./assets/shaders/light.vert.spv"
 
 	shadowShaderStagesInfo: vk.PipelineShaderStageCreateInfo = {
 		sType               = .PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -4224,8 +4224,8 @@ createGraphicsPipelines :: proc(
 
 	mainShaderStages := [?]vk.ShaderStageFlag{.VERTEX, .FRAGMENT}
 	mainShaderFiles := [?]string {
-		"./assets/shaders/main_vert.spv",
-		"./assets/shaders/main_frag.spv",
+		"./assets/shaders/main.vert.spv",
+		"./assets/shaders/main.frag.spv",
 	}
 
 	mainShaderStagesInfo := make([]vk.PipelineShaderStageCreateInfo, len(mainShaderFiles))
@@ -4410,7 +4410,7 @@ createComputePipelines :: proc(
 		stage               = {.COMPUTE},
 		module              = createShaderModule(
 			graphicsContext,
-			"./assets/shaders/post_comp.spv",
+			"./assets/shaders/post.comp.spv",
 		),
 		pName               = "main",
 		pSpecializationInfo = nil,
@@ -5490,6 +5490,50 @@ recordUIBuffer :: proc(
 
 @(private = "file")
 drawUI :: proc(using graphicsContext: ^GraphicsContext) {
+	constructMenuBar :: proc(using graphicsContext: ^GraphicsContext) {
+		if imgui.BeginMenu("File") {
+			imgui.SeparatorText("Scene Files")
+			if imgui.MenuItem("New") {
+				createNewScene(graphicsContext)
+				setActiveScene(graphicsContext, u32(len(scenes) - 1))
+			}
+			if imgui.MenuItem("Load") {
+				ImFD.Open(
+					"SceneOpenDialog",
+					"Open a scene",
+					"JSON file (*.json){.json},.*",
+					true,
+					"./assets/scenes/",
+				)
+			}
+			if imgui.MenuItem("Save") {
+				if scenes[activeScene].filePath == "" {
+					ImFD.Save(
+						"SceneSaveDialog",
+						"Save Scene",
+						"JSON file (*.json){.json},.*",
+						"./assets/scenes/",
+					)
+				} else {
+					saveScene(graphicsContext, activeScene)
+				}
+			}
+			if imgui.MenuItem("Save AS...") {
+				ImFD.Save(
+					"SceneSaveDialog",
+					"Save Scene",
+					"JSON file (*.json){.json},.*",
+					"./assets/scenes/",
+				)
+			}
+			if imgui.MenuItem("Close") {
+				closeScene(graphicsContext, activeScene)
+				setActiveScene(graphicsContext, 0)
+			}
+			imgui.EndMenu()
+		}
+	}
+
 	constructCamerasHeader :: proc(using graphicsContext: ^GraphicsContext) {
 		for &camera, index in scenes[activeScene].cameras {
 			if !imgui.TreeNode(camera.name) {
@@ -5542,47 +5586,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 
 	constructSceneEditor :: proc(using graphicsContext: ^GraphicsContext) {
 		if imgui.BeginMenuBar() {
-			if imgui.BeginMenu("File") {
-				imgui.SeparatorText("Scene Files")
-				if imgui.MenuItem("New") {
-					createNewScene(graphicsContext)
-					setActiveScene(graphicsContext, u32(len(scenes) - 1))
-				}
-				if imgui.MenuItem("Load") {
-					ImFD.Open(
-						"SceneOpenDialog",
-						"Open a scene",
-						"JSON file (*.json){.json},.*",
-						true,
-						"./assets/",
-					)
-				}
-				if imgui.MenuItem("Save") {
-					if scenes[activeScene].filePath == "" {
-						ImFD.Save(
-							"SceneSaveDialog",
-							"Save Scene",
-							"JSON file (*.json){.json},.*",
-							"./assets/",
-						)
-					} else {
-						saveScene(graphicsContext, activeScene)
-					}
-				}
-				if imgui.MenuItem("Save AS...") {
-					ImFD.Save(
-						"SceneSaveDialog",
-						"Save Scene",
-						"JSON file (*.json){.json},.*",
-						"./assets/",
-					)
-				}
-				if imgui.MenuItem("Close") {
-					closeScene(graphicsContext, activeScene)
-					setActiveScene(graphicsContext, 0)
-				}
-				imgui.EndMenu()
-			}
+			constructMenuBar(graphicsContext)
 			imgui.EndMenuBar()
 		}
 
