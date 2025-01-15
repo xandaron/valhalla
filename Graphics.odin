@@ -284,6 +284,7 @@ Instance :: struct {
 
 @(private = "file")
 Scene :: struct {
+	filePath:        string,
 	name:            cstring,
 	clearColour:     [4]i32,
 	ambientLight:    f32,
@@ -2499,40 +2500,42 @@ createNewScene :: proc(using graphicsContext: ^GraphicsContext) {
 
 	scene: Scene
 
+	scene.filePath = ""
 	scene.name = strings.clone_to_cstring("New Scene")
 	scene.clearColour = {150, 150, 150, 255}
+	scene.ambientLight = 0.01
 
 	scene.instances = make([dynamic]Instance, 1)
 	scene.instances[0] = {
-		name = strings.clone_to_cstring("cube"),
-		modelID = 0,
+		name      = strings.clone_to_cstring("cube"),
+		modelID   = 0,
 		textureID = 0,
-		normalID = 0,
-		position = {0, 0, 0},
-		rotation = {0, 0, 0},
-		scale = {0.2, 0.2, 0.2},
+		normalID  = 0,
+		position  = {0, 0, 0},
+		rotation  = {0, 0, 0},
+		scale     = {0.2, 0.2, 0.2},
 	}
 
 	scene.pointLights = make([dynamic]PointLight, 1)
 	scene.pointLights[0] = {
-		name = strings.clone_to_cstring("white light"),
-		position = {0, 2, 0},
-		direction = {0, -1, 0},
+		name            = strings.clone_to_cstring("white light"),
+		position        = {0, 2, 0},
+		direction       = {0, -1, 0},
 		colourIntensity = {0.4, 0.4, 0.4},
-		fov = 120.0,
-		rotationAngle = 0,
-		rotationAxis = {0, 1, 0},
+		fov             = 120.0,
+		rotationAngle   = 0,
+		rotationAxis    = {0, 1, 0},
 	}
 
 	scene.cameras = make([dynamic]Camera, 1)
 	scene.cameras[0] = {
-		name = strings.clone_to_cstring("main"),
-		eye = {0.0, 0.2, -0.4},
-		center = {0.0, 0.0, 0.0},
-		up = {0.0, 1.0, 0.0},
+		name     = strings.clone_to_cstring("main"),
+		eye      = {0.0, 0.2, -0.4},
+		center   = {0.0, 0.0, 0.0},
+		up       = {0.0, 1.0, 0.0},
 		distance = 1.0,
-		fov = 45.0,
-		mode = .PERSPECTIVE,
+		fov      = 45.0,
+		mode     = .PERSPECTIVE,
 	}
 	scene.activeCamera = 0
 
@@ -2732,6 +2735,7 @@ loadScene :: proc(
 		panic("Couldn't parse file")
 	}
 
+	scene.filePath = sceneFile
 	append(&scenes, scene)
 
 	if err = loadSceneAssets(graphicsContext, index); err != .None {
@@ -5400,7 +5404,10 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 					)
 				}
 				if imgui.MenuItem("Save") {
-
+					// Write scene json to file that was originally loaded from
+				}
+				if imgui.MenuItem("Save AS...") {
+					// Write scene json to new file
 				}
 				if imgui.MenuItem("Close") {
 					cleanupScene(graphicsContext, activeScene, false)
@@ -5715,7 +5722,7 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32, f
 	delete(scenes[sceneIndex].cameras)
 	delete(scenes[sceneIndex].name)
 
-	
+
 	if !finalCleanup && len(scenes) == 0 {
 		unordered_remove(&scenes, sceneIndex)
 		createNewScene(graphicsContext)

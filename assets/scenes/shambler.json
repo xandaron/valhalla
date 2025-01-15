@@ -1,7 +1,7 @@
 {
     "name": "Shambler",
     "clear_colour": [150, 150, 150, 255],
-    "ambient_light": 0.2,
+    "ambient_light": 0.01,
     "cameras": [
         {
             "name": "Main",
