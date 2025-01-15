@@ -616,10 +616,7 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	cleanupSwapchain(graphicsContext)
 
 	// MAIN
-	vk.DestroyImageView(device, pipelines[PipelineIndex.MAIN].colour.view, nil)
-	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].colour.vkImage, nil)
-	vk.FreeMemory(device, pipelines[PipelineIndex.MAIN].colour.memory, nil)
-
+	cleanupImage(graphicsContext, &pipelines[PipelineIndex.MAIN].colour)
 	cleanupImage(graphicsContext, &pipelines[PipelineIndex.MAIN].depth)
 
 	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.MAIN].descriptorPool, nil)
@@ -637,9 +634,7 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.POST].layout, nil)
 
 	// LIGHT
-	vk.DestroyImageView(device, pipelines[PipelineIndex.SHADOW].depth.view, nil)
-	vk.DestroyImage(device, pipelines[PipelineIndex.SHADOW].depth.vkImage, nil)
-	vk.FreeMemory(device, pipelines[PipelineIndex.SHADOW].depth.memory, nil)
+	cleanupImage(graphicsContext, &pipelines[PipelineIndex.SHADOW].depth)
 
 	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.SHADOW].descriptorPool, nil)
 	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.SHADOW].descriptorSetLayout, nil)
@@ -1161,12 +1156,8 @@ cleanupSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	delete(swapchainImageViews)
 
 	vk.DestroySwapchainKHR(device, swapchain, nil)
-	vk.DestroyImageView(device, inImage.view, nil)
-	vk.DestroyImage(device, inImage.vkImage, nil)
-	vk.FreeMemory(device, inImage.memory, nil)
-	vk.DestroyImageView(device, outImage.view, nil)
-	vk.DestroyImage(device, outImage.vkImage, nil)
-	vk.FreeMemory(device, outImage.memory, nil)
+	cleanupImage(graphicsContext, &inImage)
+	cleanupImage(graphicsContext, &outImage)
 }
 
 
@@ -2391,9 +2382,7 @@ addTextures :: proc(
 	)
 	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 
-	vk.DestroyImageView(device, texture.view, nil)
-	vk.DestroyImage(device, texture.vkImage, nil)
-	vk.FreeMemory(device, texture.memory, nil)
+	cleanupImage(graphicsContext, texture)
 
 	newTexture.sampler = texture.sampler
 	texture^ = newTexture
@@ -2565,7 +2554,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 }
 
 @(private = "file")
-cleanupImage :: #force_inline proc(using graphicsContext: ^GraphicsContext, image: ^Image) {
+cleanupImage :: proc(using graphicsContext: ^GraphicsContext, image: ^Image) {
 	vk.DestroyImageView(device, image.view, nil)
 	vk.DestroyImage(device, image.vkImage, nil)
 	vk.FreeMemory(device, image.memory, nil)
@@ -4836,9 +4825,7 @@ cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 	delete(imguiData.frameBuffers)
 
-	vk.DestroyImageView(device, imguiData.colour.view, nil)
-	vk.DestroyImage(device, imguiData.colour.vkImage, nil)
-	vk.FreeMemory(device, imguiData.colour.memory, nil)
+	cleanupImage(graphicsContext, &imguiData.colour)
 
 	vk.DestroyRenderPass(device, imguiData.renderPass, nil)
 }
