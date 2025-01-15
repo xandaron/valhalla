@@ -64,6 +64,7 @@ odin build . -out:build/build.exe
 - [ ] Add support to store scenes
 - [ ] HDR support
 - [ ] Raytracer
+- [ ] Implement my own file dialog
 
 ## Contributing
 
