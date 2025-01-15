@@ -165,13 +165,13 @@ Image :: struct {
 	memory:  vk.DeviceMemory,
 	view:    vk.ImageView,
 	format:  vk.Format,
-	sampler: vk.Sampler,
+	sampler: u32,
 }
 
 @(private = "file")
 ImFDImageData :: struct {
-	descriptorSet: vk.DescriptorSet,
 	using image:   Image,
+	descriptorSet: vk.DescriptorSet,
 }
 
 // Use Vec4 becuse of alignment issues when using Vec3
@@ -378,6 +378,7 @@ GraphicsContext :: struct {
 	// Scene Data
 	scenes:                [dynamic]Scene,
 	activeScene:           u32,
+	samplers:              []vk.Sampler,
 
 	// Buffer
 	uniformBuffers:        [MAX_FRAMES_IN_FLIGHT]Buffer,
@@ -432,6 +433,7 @@ initVkGraphics :: proc(
 	createCommandBuffers(graphicsContext)
 	createUniformBuffer(graphicsContext)
 	createSyncObjects(graphicsContext)
+	createSamplers(graphicsContext)
 	pipelines = make([]Pipeline, len(PipelineIndex))
 	createRenderPass(graphicsContext)
 	createFramebuffers(graphicsContext)
@@ -848,7 +850,7 @@ createLogicalDevice :: proc(using graphicsContext: ^GraphicsContext) {
 		largePoints                             = false,
 		alphaToOne                              = false,
 		multiViewport                           = false,
-		samplerAnisotropy                       = false,
+		samplerAnisotropy                       = true,
 		textureCompressionETC2                  = false,
 		textureCompressionASTC_LDR              = false,
 		textureCompressionBC                    = false,
@@ -1046,6 +1048,23 @@ recreateSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 		cleanupImgui(graphicsContext)
 		updateImgui(graphicsContext)
 	}
+}
+
+@(private = "file")
+cleanupSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
+	for imageView in swapchainImageViews {
+		vk.DestroyImageView(device, imageView, nil)
+	}
+	delete(swapchainImages)
+	delete(swapchainImageViews)
+
+	vk.DestroySwapchainKHR(device, swapchain, nil)
+	vk.DestroyImageView(device, inImage.view, nil)
+	vk.DestroyImage(device, inImage.vkImage, nil)
+	vk.FreeMemory(device, inImage.memory, nil)
+	vk.DestroyImageView(device, outImage.view, nil)
+	vk.DestroyImage(device, outImage.vkImage, nil)
+	vk.FreeMemory(device, outImage.memory, nil)
 }
 
 
@@ -1512,45 +1531,6 @@ createImageView :: proc(
 }
 
 @(private = "file")
-createSampler :: proc(
-	using graphicsContext: ^GraphicsContext,
-	filter: vk.Filter,
-	mipMode: vk.SamplerMipmapMode,
-	addressMode: vk.SamplerAddressMode,
-	anistropyEnabled: b32,
-	maxAnistropy: f32,
-	borderColour: vk.BorderColor,
-) -> (
-	sampler: vk.Sampler,
-) {
-	samplerInfo: vk.SamplerCreateInfo = {
-		sType                   = .SAMPLER_CREATE_INFO,
-		pNext                   = nil,
-		flags                   = {},
-		magFilter               = filter,
-		minFilter               = filter,
-		mipmapMode              = mipMode,
-		addressModeU            = addressMode,
-		addressModeV            = addressMode,
-		addressModeW            = addressMode,
-		mipLodBias              = 0,
-		anisotropyEnable        = anistropyEnabled,
-		maxAnisotropy           = maxAnistropy,
-		compareEnable           = false,
-		compareOp               = .ALWAYS,
-		minLod                  = 0,
-		maxLod                  = vk.LOD_CLAMP_NONE,
-		borderColor             = borderColour,
-		unnormalizedCoordinates = false,
-	}
-	if vk.CreateSampler(device, &samplerInfo, nil, &sampler) != .SUCCESS {
-		log.log(.Error, "Failed to create texture sampler!")
-		panic("Failed to create texture sampler!")
-	}
-	return
-}
-
-@(private = "file")
 transitionImageLayout :: proc(
 	using graphicsContext: ^GraphicsContext,
 	commandBuffer: vk.CommandBuffer,
@@ -1756,9 +1736,54 @@ upscaleImage :: proc(
 	)
 }
 
+@(private = "file")
+createSamplers :: proc(using graphicsContext: ^GraphicsContext) {
+	samplers = make([]vk.Sampler, 2)
+	samplerInfo: vk.SamplerCreateInfo = {
+		sType                   = .SAMPLER_CREATE_INFO,
+		pNext                   = nil,
+		flags                   = {},
+		magFilter               = .LINEAR,
+		minFilter               = .LINEAR,
+		mipmapMode              = .LINEAR,
+		addressModeU            = .CLAMP_TO_EDGE,
+		addressModeV            = .CLAMP_TO_EDGE,
+		addressModeW            = .CLAMP_TO_EDGE,
+		mipLodBias              = 0,
+		anisotropyEnable        = false,
+		maxAnisotropy           = 0.0,
+		compareEnable           = false,
+		compareOp               = .ALWAYS,
+		minLod                  = 0,
+		maxLod                  = vk.LOD_CLAMP_NONE,
+		borderColor             = .INT_OPAQUE_WHITE,
+		unnormalizedCoordinates = false,
+	}
+	if vk.CreateSampler(device, &samplerInfo, nil, &samplers[0]) != .SUCCESS {
+		log.log(.Error, "Failed to create texture sampler!")
+		panic("Failed to create texture sampler!")
+	}
+
+	properties: vk.PhysicalDeviceProperties
+	vk.GetPhysicalDeviceProperties(physicalDevice, &properties)
+	samplerInfo.anisotropyEnable = true
+	samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy
+	if vk.CreateSampler(device, &samplerInfo, nil, &samplers[1]) != .SUCCESS {
+		log.log(.Error, "Failed to create texture sampler!")
+		panic("Failed to create texture sampler!")
+	}
+}
+
+cleanupSamplers :: proc(using graphicsContext: ^GraphicsContext) {
+	for &sampler in samplers {
+		vk.DestroySampler(device, sampler, nil)
+	}
+	delete(samplers)
+}
+
 
 // ###################################################################
-// #                          Create Assets                          #
+// #                              Assets                             #
 // ###################################################################
 
 
@@ -2173,17 +2198,7 @@ loadTextures :: proc(
 		u32(textureCount),
 	)
 
-	properties: vk.PhysicalDeviceProperties
-	vk.GetPhysicalDeviceProperties(physicalDevice, &properties)
-	texture.sampler = createSampler(
-		graphicsContext,
-		.LINEAR,
-		.LINEAR,
-		.CLAMP_TO_EDGE,
-		false,
-		properties.limits.maxSamplerAnisotropy,
-		.INT_OPAQUE_WHITE,
-	)
+	texture.sampler = 1
 }
 
 // MAKE SURE TO UPDATE THE RELEVENT DESCRIPTOR SET
@@ -2443,16 +2458,21 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 		u32(len(scenes[sceneIndex].pointLights)),
 	)
 
-	scenes[sceneIndex].shadowImages.sampler = createSampler(
-		graphicsContext,
-		.LINEAR,
-		.LINEAR,
-		.CLAMP_TO_BORDER,
-		false,
-		1,
-		.FLOAT_OPAQUE_BLACK,
-	)
+	scenes[sceneIndex].shadowImages.sampler = 0
 }
+
+@(private = "file")
+cleanupImage :: #force_inline proc(using graphicsContext: ^GraphicsContext, image: ^Image) {
+	vk.DestroyImageView(device, image.view, nil)
+	vk.DestroyImage(device, image.vkImage, nil)
+	vk.FreeMemory(device, image.memory, nil)
+}
+
+
+// ###################################################################
+// #                             Scenes                              #
+// ###################################################################
+
 
 LoadSceneError :: enum {
 	None,
@@ -2745,15 +2765,6 @@ loadScene :: proc(
 	return
 }
 
-setActiveScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
-	if res := vk.DeviceWaitIdle(device); res != .SUCCESS {
-		panic("Failed to wait for device idle!")
-	}
-
-	activeScene = sceneIndex
-	updateSceneDescriptorSets(graphicsContext, sceneIndex)
-}
-
 closeScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	if vk.DeviceWaitIdle(device) != .SUCCESS {
 		panic("Failed to wait for device idle?")
@@ -2765,6 +2776,89 @@ closeScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 		createNewScene(graphicsContext)
 	}
 }
+
+setActiveScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	if res := vk.DeviceWaitIdle(device); res != .SUCCESS {
+		panic("Failed to wait for device idle!")
+	}
+
+	activeScene = sceneIndex
+	updateSceneDescriptorSets(graphicsContext, sceneIndex)
+}
+
+@(private = "file")
+cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	vk.DestroyBuffer(device, scenes[sceneIndex].indexBuffer.buffer, nil)
+	vk.FreeMemory(device, scenes[sceneIndex].indexBuffer.memory, nil)
+	vk.DestroyBuffer(device, scenes[sceneIndex].vertexBuffer.buffer, nil)
+	vk.FreeMemory(device, scenes[sceneIndex].vertexBuffer.memory, nil)
+
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		vk.DestroyBuffer(device, scenes[sceneIndex].instanceBuffers[index].buffer, nil)
+		vk.FreeMemory(device, scenes[sceneIndex].instanceBuffers[index].memory, nil)
+		vk.DestroyBuffer(device, scenes[sceneIndex].boneBuffers[index].buffer, nil)
+		vk.FreeMemory(device, scenes[sceneIndex].boneBuffers[index].memory, nil)
+		vk.DestroyBuffer(device, scenes[sceneIndex].lightBuffers[index].buffer, nil)
+		vk.FreeMemory(device, scenes[sceneIndex].lightBuffers[index].memory, nil)
+	}
+
+	cleanupImage(graphicsContext, &scenes[sceneIndex].textures)
+	cleanupImage(graphicsContext, &scenes[sceneIndex].normals)
+	cleanupImage(graphicsContext, &scenes[sceneIndex].shadowImages)
+
+	for &texturePath in scenes[sceneIndex].texturePaths {
+		delete(texturePath)
+	}
+	delete(scenes[sceneIndex].texturePaths)
+
+	for &normalPath in scenes[sceneIndex].normalPaths {
+		delete(normalPath)
+	}
+	delete(scenes[sceneIndex].normalPaths)
+
+	for &model in scenes[sceneIndex].models {
+		delete(model.vertices)
+		delete(model.indices)
+		delete(model.skeleton)
+		for &animation in model.animations {
+			for &node in animation.nodes {
+				delete(node.keyPositions)
+				delete(node.keyRotations)
+				delete(node.keyScales)
+			}
+			delete(animation.nodes)
+		}
+		delete(model.animations)
+	}
+	delete(scenes[sceneIndex].vertices)
+	delete(scenes[sceneIndex].indices)
+	delete(scenes[sceneIndex].models)
+
+	for &modelPath in scenes[sceneIndex].modelPaths {
+		delete(modelPath)
+	}
+	delete(scenes[sceneIndex].modelPaths)
+
+	for &instance in scenes[sceneIndex].instances {
+		delete(instance.name)
+		delete(instance.scaleKeys)
+		delete(instance.positionKeys)
+		delete(instance.rotationKeys)
+	}
+	delete(scenes[sceneIndex].instances)
+
+	for &light in scenes[sceneIndex].pointLights {
+		delete(light.name)
+	}
+	delete(scenes[sceneIndex].pointLights)
+
+	for &camera in scenes[sceneIndex].cameras {
+		delete(camera.name)
+	}
+	delete(scenes[sceneIndex].cameras)
+	delete(scenes[sceneIndex].name)
+}
+
 
 // ###################################################################
 // #                        Shader Descriptors                       #
@@ -3135,7 +3229,7 @@ createComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 
 		sceneDepth: vk.DescriptorImageInfo = {
-			sampler     = pipelines[PipelineIndex.MAIN].depth.sampler,
+			sampler     = samplers[pipelines[PipelineIndex.MAIN].depth.sampler],
 			imageView   = pipelines[PipelineIndex.MAIN].depth.view,
 			imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 		}
@@ -3218,19 +3312,19 @@ updateComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 		)
 
 		inImageInfo: vk.DescriptorImageInfo = {
-			sampler     = inImage.sampler,
+			sampler     = samplers[inImage.sampler],
 			imageView   = inImage.view,
 			imageLayout = .GENERAL,
 		}
 
 		outImageInfo: vk.DescriptorImageInfo = {
-			sampler     = outImage.sampler,
+			sampler     = samplers[outImage.sampler],
 			imageView   = outImage.view,
 			imageLayout = .GENERAL,
 		}
 
 		sceneDepth: vk.DescriptorImageInfo = {
-			sampler     = pipelines[PipelineIndex.MAIN].depth.sampler,
+			sampler     = samplers[pipelines[PipelineIndex.MAIN].depth.sampler],
 			imageView   = pipelines[PipelineIndex.MAIN].depth.view,
 			imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 		}
@@ -3323,19 +3417,19 @@ updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, scene
 	}
 
 	textureInfo: vk.DescriptorImageInfo = {
-		sampler     = scenes[sceneIndex].textures.sampler,
+		sampler     = samplers[scenes[sceneIndex].textures.sampler],
 		imageView   = scenes[sceneIndex].textures.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
 
 	normalInfo: vk.DescriptorImageInfo = {
-		sampler     = scenes[sceneIndex].normals.sampler,
+		sampler     = samplers[scenes[sceneIndex].normals.sampler],
 		imageView   = scenes[sceneIndex].normals.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
 
 	shadowInfo: vk.DescriptorImageInfo = {
-		sampler     = scenes[sceneIndex].shadowImages.sampler,
+		sampler     = samplers[scenes[sceneIndex].shadowImages.sampler],
 		imageView   = scenes[sceneIndex].shadowImages.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
@@ -3717,15 +3811,7 @@ createRenderPass :: proc(using graphicsContext: ^GraphicsContext) {
 			1,
 		)
 
-		pipelines[PipelineIndex.MAIN].depth.sampler = createSampler(
-			graphicsContext,
-			.LINEAR,
-			.LINEAR,
-			.CLAMP_TO_EDGE,
-			false,
-			0.0,
-			.INT_OPAQUE_WHITE,
-		)
+		pipelines[PipelineIndex.MAIN].depth.sampler = 0
 
 		attachments: []vk.AttachmentDescription = {
 			{
@@ -4399,18 +4485,10 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 			1,
 		)
 
-		imageData.sampler = createSampler(
-			graphicsContext,
-			.LINEAR,
-			.LINEAR,
-			.REPEAT,
-			false,
-			1,
-			.INT_OPAQUE_WHITE,
-		)
+		imageData.sampler = 0
 
 		imageData.descriptorSet = implVulkan.AddTexture(
-			imageData.image.sampler,
+			samplers[imageData.image.sampler],
 			imageData.image.view,
 			.SHADER_READ_ONLY_OPTIMAL,
 		)
@@ -4633,6 +4711,33 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 
 	ImFD.Init(ImFDCreateImage, ImFDDeleteImage)
 	imguiData.imfdImages = make([dynamic]ImFDImageData)
+}
+
+@(private = "file")
+cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
+	// This should probably be in ImFDDeleteImage but that causes issues so this is the best solution I have at the moment
+	for &imageData, index in imguiData.imfdImages {
+		cleanupImage(graphicsContext, &imageData.image)
+		implVulkan.RemoveTexture(imageData.descriptorSet)
+	}
+	delete(imguiData.imfdImages)
+	// ------------------------------------------------------------
+
+	ImFD.Shutdown()
+	implVulkan.Shutdown()
+	implGLFW.Shutdown()
+	imgui.DestroyContext(imguiData.uiContext)
+
+	for &frameBuffer in imguiData.frameBuffers {
+		vk.DestroyFramebuffer(device, frameBuffer, nil)
+	}
+	delete(imguiData.frameBuffers)
+
+	vk.DestroyImageView(device, imguiData.colour.view, nil)
+	vk.DestroyImage(device, imguiData.colour.vkImage, nil)
+	vk.FreeMemory(device, imguiData.colour.memory, nil)
+
+	vk.DestroyRenderPass(device, imguiData.renderPass, nil)
 }
 
 
@@ -5634,137 +5739,6 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 // ###################################################################
 
 
-@(private = "file")
-cleanupSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
-	for imageView in swapchainImageViews {
-		vk.DestroyImageView(device, imageView, nil)
-	}
-	delete(swapchainImages)
-	delete(swapchainImageViews)
-
-	vk.DestroySwapchainKHR(device, swapchain, nil)
-	vk.DestroyImageView(device, inImage.view, nil)
-	vk.DestroyImage(device, inImage.vkImage, nil)
-	vk.FreeMemory(device, inImage.memory, nil)
-	vk.DestroyImageView(device, outImage.view, nil)
-	vk.DestroyImage(device, outImage.vkImage, nil)
-	vk.FreeMemory(device, outImage.memory, nil)
-}
-
-@(private = "file")
-cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
-	vk.DestroyBuffer(device, scenes[sceneIndex].indexBuffer.buffer, nil)
-	vk.FreeMemory(device, scenes[sceneIndex].indexBuffer.memory, nil)
-	vk.DestroyBuffer(device, scenes[sceneIndex].vertexBuffer.buffer, nil)
-	vk.FreeMemory(device, scenes[sceneIndex].vertexBuffer.memory, nil)
-
-	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyBuffer(device, scenes[sceneIndex].instanceBuffers[index].buffer, nil)
-		vk.FreeMemory(device, scenes[sceneIndex].instanceBuffers[index].memory, nil)
-		vk.DestroyBuffer(device, scenes[sceneIndex].boneBuffers[index].buffer, nil)
-		vk.FreeMemory(device, scenes[sceneIndex].boneBuffers[index].memory, nil)
-		vk.DestroyBuffer(device, scenes[sceneIndex].lightBuffers[index].buffer, nil)
-		vk.FreeMemory(device, scenes[sceneIndex].lightBuffers[index].memory, nil)
-	}
-
-	vk.DestroyImageView(device, scenes[sceneIndex].textures.view, nil)
-	vk.DestroyImage(device, scenes[sceneIndex].textures.vkImage, nil)
-	vk.FreeMemory(device, scenes[sceneIndex].textures.memory, nil)
-	vk.DestroySampler(device, scenes[sceneIndex].textures.sampler, nil)
-
-	vk.DestroyImageView(device, scenes[sceneIndex].normals.view, nil)
-	vk.DestroyImage(device, scenes[sceneIndex].normals.vkImage, nil)
-	vk.FreeMemory(device, scenes[sceneIndex].normals.memory, nil)
-	vk.DestroySampler(device, scenes[sceneIndex].normals.sampler, nil)
-
-	vk.DestroyImageView(device, scenes[sceneIndex].shadowImages.view, nil)
-	vk.DestroyImage(device, scenes[sceneIndex].shadowImages.vkImage, nil)
-	vk.FreeMemory(device, scenes[sceneIndex].shadowImages.memory, nil)
-	vk.DestroySampler(device, scenes[sceneIndex].shadowImages.sampler, nil)
-
-	for &texturePath in scenes[sceneIndex].texturePaths {
-		delete(texturePath)
-	}
-	delete(scenes[sceneIndex].texturePaths)
-
-	for &normalPath in scenes[sceneIndex].normalPaths {
-		delete(normalPath)
-	}
-	delete(scenes[sceneIndex].normalPaths)
-
-	for &model in scenes[sceneIndex].models {
-		delete(model.vertices)
-		delete(model.indices)
-		delete(model.skeleton)
-		for &animation in model.animations {
-			for &node in animation.nodes {
-				delete(node.keyPositions)
-				delete(node.keyRotations)
-				delete(node.keyScales)
-			}
-			delete(animation.nodes)
-		}
-		delete(model.animations)
-	}
-	delete(scenes[sceneIndex].vertices)
-	delete(scenes[sceneIndex].indices)
-	delete(scenes[sceneIndex].models)
-
-	for &modelPath in scenes[sceneIndex].modelPaths {
-		delete(modelPath)
-	}
-	delete(scenes[sceneIndex].modelPaths)
-
-	for &instance in scenes[sceneIndex].instances {
-		delete(instance.name)
-		delete(instance.scaleKeys)
-		delete(instance.positionKeys)
-		delete(instance.rotationKeys)
-	}
-	delete(scenes[sceneIndex].instances)
-
-	for &light in scenes[sceneIndex].pointLights {
-		delete(light.name)
-	}
-	delete(scenes[sceneIndex].pointLights)
-
-	for &camera in scenes[sceneIndex].cameras {
-		delete(camera.name)
-	}
-	delete(scenes[sceneIndex].cameras)
-	delete(scenes[sceneIndex].name)
-}
-
-@(private = "file")
-cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
-	// This should probably be in ImFDDeleteImage but that causes issues so this is the best solution I have at the moment
-	for imageData, index in imguiData.imfdImages {
-		vk.DestroyImageView(device, imageData.view, nil)
-		vk.DestroyImage(device, imageData.vkImage, nil)
-		vk.FreeMemory(device, imageData.memory, nil)
-		vk.DestroySampler(device, imageData.sampler, nil)
-		implVulkan.RemoveTexture(imageData.descriptorSet)
-	}
-	delete(imguiData.imfdImages)
-	// ----------------------------------------------------
-
-	ImFD.Shutdown()
-	implVulkan.Shutdown()
-	implGLFW.Shutdown()
-	imgui.DestroyContext(imguiData.uiContext)
-
-	for &frameBuffer in imguiData.frameBuffers {
-		vk.DestroyFramebuffer(device, frameBuffer, nil)
-	}
-	delete(imguiData.frameBuffers)
-
-	vk.DestroyImageView(device, imguiData.colour.view, nil)
-	vk.DestroyImage(device, imguiData.colour.vkImage, nil)
-	vk.FreeMemory(device, imguiData.colour.memory, nil)
-
-	vk.DestroyRenderPass(device, imguiData.renderPass, nil)
-}
-
 clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	graphicsContext := graphicsContext
 	if vk.DeviceWaitIdle(device) != .SUCCESS {
@@ -5823,10 +5797,7 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].colour.vkImage, nil)
 	vk.FreeMemory(device, pipelines[PipelineIndex.MAIN].colour.memory, nil)
 
-	vk.DestroyImageView(device, pipelines[PipelineIndex.MAIN].depth.view, nil)
-	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].depth.vkImage, nil)
-	vk.FreeMemory(device, pipelines[PipelineIndex.MAIN].depth.memory, nil)
-	vk.DestroySampler(device, pipelines[PipelineIndex.MAIN].depth.sampler, nil)
+	cleanupImage(graphicsContext, &pipelines[PipelineIndex.MAIN].depth)
 
 	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.MAIN].descriptorPool, nil)
 	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.MAIN].descriptorSetLayout, nil)
@@ -5855,6 +5826,8 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	vk.DestroyRenderPass(device, pipelines[PipelineIndex.SHADOW].renderPass, nil)
 
 	delete(pipelines)
+
+	cleanupSamplers(graphicsContext)
 
 	vk.DestroyDevice(device, nil)
 	vk.DestroySurfaceKHR(instance, surface, nil)
