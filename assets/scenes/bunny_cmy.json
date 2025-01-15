@@ -1,68 +1,143 @@
 {
     "name": "Bunny CMY",
-    "clear_colour": [150, 150, 150, 255],
+    "clear_colour": [
+        150,
+        150,
+        150,
+        255
+    ],
     "ambient_light": 0.01,
     "cameras": [
         {
             "name": "Main",
-            "eye": [0.0, 0.2, -0.4],
-            "center": [0.0, 0.0, 0.0],
-            "up": [0.0, 1.0, 0.0],
+            "eye": [
+                0.0,
+                0.2,
+                -0.4
+            ],
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "up": [
+                0.0,
+                1.0,
+                0.0
+            ],
             "distance": 0.447214,
             "fov": 45.0,
-            "type": 0,
             "mode": 0
         },
         {
             "name": "Secondary",
-            "eye": [0.0, 0.2, 0.4],
-            "center": [0.0, 0.0, 0.0],
-            "up": [0.0, 1.0, 0.0],
+            "eye": [
+                0.0,
+                0.2,
+                0.4
+            ],
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "up": [
+                0.0,
+                1.0,
+                0.0
+            ],
             "distance": 0.447214,
             "fov": 45.0,
-            "type": 0,
             "mode": 0
         }
     ],
     "lights": [
         {
             "name": "Yellow",
-            "position": [0.0, 0.2, -0.3],
-            "direction": [0.0, -0.3, -0.2],
-            "colour": [1.0, 1.0, 0.0],
+            "position": [
+                0.0,
+                0.2,
+                -0.3
+            ],
+            "direction": [
+                0.0,
+                -0.3,
+                -0.2
+            ],
+            "colour": [
+                1.0,
+                1.0,
+                0.0
+            ],
             "intensity": 0.04,
             "fov": 120.0,
             "rotation_angle": 30.0,
-            "rotation_axis": [0.0, 0.0, 1.0],
+            "rotation_axis": [
+                0.0,
+                0.0,
+                1.0
+            ],
             "type": 0
         },
         {
             "name": "Magenta",
-            "position": [0.1732050808, -0.1, -0.3],
-            "direction": [-0.1732050808, -0.3, 0.1],
-            "colour": [1.0, 0.0, 1.0],
+            "position": [
+                0.1732050808,
+                -0.1,
+                -0.3
+            ],
+            "direction": [
+                -0.1732050808,
+                -0.3,
+                0.1
+            ],
+            "colour": [
+                1.0,
+                0.0,
+                1.0
+            ],
             "intensity": 0.04,
             "fov": 120.0,
             "rotation_angle": 30.0,
-            "rotation_axis": [0.0, 0.0, 1.0],
+            "rotation_axis": [
+                0.0,
+                0.0,
+                1.0
+            ],
             "type": 0
         },
         {
             "name": "Cyan",
-            "position": [-0.1732050808, -0.1, -0.3],
-            "direction": [0.1732050808, 0.3, 0.1],
-            "colour": [0.0, 1.0, 1.0],
+            "position": [
+                -0.1732050808,
+                -0.1,
+                -0.3
+            ],
+            "direction": [
+                0.1732050808,
+                0.3,
+                0.1
+            ],
+            "colour": [
+                0.0,
+                1.0,
+                1.0
+            ],
             "intensity": 0.04,
             "fov": 120.0,
             "rotation_angle": 30.0,
-            "rotation_axis": [0.0, 0.0, 1.0],
+            "rotation_axis": [
+                0.0,
+                0.0,
+                1.0
+            ],
             "type": 0
         }
     ],
     "models": [
         "./assets/models/bunny/bunny.fbx"
     ],
-    "albedos": [
+    "textures": [
         "./assets/textures/white.jpg"
     ],
     "normals": [
@@ -72,11 +147,23 @@
         {
             "name": "Bunny",
             "model": 0,
-            "albedo": 0,
+            "texture": 0,
             "normal": 0,
-            "position": [-0.02, -0.1, 0.0],
-            "rotation": [0.0, 180.0, 0.0],
-            "scale": [1.0, 1.0, 1.0]
+            "position": [
+                -0.02,
+                -0.1,
+                0.0
+            ],
+            "rotation": [
+                0.0,
+                180.0,
+                0.0
+            ],
+            "scale": [
+                1.0,
+                1.0,
+                1.0
+            ]
         }
     ]
 }

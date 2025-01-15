@@ -100,10 +100,12 @@ main :: proc() {
 	engineState.graphicsContext = &graphicsContext
 	if err := initVkGraphics(&graphicsContext, "./assets/scenes/shambler.json"); err != .None {
 		#partial switch err {
-			case .FailedToLoadSceneFile:
+			case .FailedToLoadSceneFile, .FailedToParseJson:
 				log.log(.Warning, "Failed to load scene file")
 			case .FailedToLoadModel:
+				log.log(.Warning, "Failed to load model file")
 			case .FailedToLoadTexture:
+				log.log(.Warning, "Failed to load texture file")
 		}
 	}
 	defer clanupVkGraphics(&graphicsContext)

@@ -271,8 +271,8 @@ Instance :: struct {
 	name:         cstring,
 	modelID:      u32,
 	animID:       u32,
-	textureID:    f32,
-	normalID:     f32,
+	textureID:    u32,
+	normalID:     u32,
 	position:     Vec3,
 	rotation:     Vec3,
 	scale:        Vec3,
@@ -445,7 +445,7 @@ initVkGraphics :: proc(
 		createNewScene(graphicsContext)
 	} else {
 		_, err = loadScene(graphicsContext, sceneFile)
-		if err == .FailedToLoadSceneFile {
+		if err == .FailedToLoadSceneFile || err == .FailedToParseJson {
 			createNewScene(graphicsContext)
 		}
 	}
@@ -2606,6 +2606,8 @@ loadSceneAssets :: proc(
 	return
 }
 
+// ATM we cant have a truly "empty" scene as we have to make buffers and images that must exist.
+// It might be possible to make the buffers optional to solve this?
 @(private = "file")
 createNewScene :: proc(using graphicsContext: ^GraphicsContext) {
 	index := u32(len(scenes))
@@ -2672,6 +2674,67 @@ createNewScene :: proc(using graphicsContext: ^GraphicsContext) {
 	loadSceneAssets(graphicsContext, index)
 }
 
+InstanceJSON :: struct {
+	name:     cstring,
+	model:    u32,
+	texture:  u32,
+	normal:   u32,
+	position: Vec3,
+	rotation: Vec3,
+	scale:    Vec3,
+}
+
+SceneJSON :: struct {
+	name:          cstring,
+	clear_colour:  [4]i32,
+	ambient_light: f32,
+	cameras:       []Camera,
+	lights:        []PointLight,
+	models:        []cstring,
+	textures:      []cstring,
+	normals:       []cstring,
+	instances:     []InstanceJSON,
+}
+
+@(private = "file")
+saveScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	scene := &scenes[sceneIndex]
+
+	sceneInfo: SceneJSON = {
+		name          = scene.name,
+		clear_colour  = scene.clearColour,
+		ambient_light = scene.ambientLight,
+		cameras       = scene.cameras[:],
+		lights        = scene.pointLights[:],
+		models        = scene.modelPaths[:],
+		textures      = scene.texturePaths[:],
+		normals       = scene.normalPaths[:],
+		instances     = make([]InstanceJSON, len(scene.instances)),
+	}
+
+	for &instance, index in scene.instances {
+		sceneInfo.instances[index] = {
+			name     = instance.name,
+			model    = instance.modelID,
+			texture  = instance.textureID,
+			normal   = instance.normalID,
+			position = instance.position,
+			rotation = instance.rotation,
+			scale    = instance.scale,
+		}
+	}
+
+	json_data, err := json.marshal(sceneInfo, {pretty = true, use_enum_names = true})
+	if err != nil {
+		panic("Couldn't marshal data")
+	}
+
+	werr := os.write_entire_file_or_err(scene.filePath, json_data)
+	if werr != nil {
+		panic("Couldn't write file")
+	}
+}
+
 loadScene :: proc(
 	using graphicsContext: ^GraphicsContext,
 	sceneFile: string,
@@ -2679,176 +2742,60 @@ loadScene :: proc(
 	index: u32,
 	err: LoadSceneError = .None,
 ) {
-	parseJSON :: proc(sceneFile: string) -> (scene: Scene, err: LoadSceneError = .None) {
-		data, ok := os.read_entire_file_from_filename(sceneFile)
-		if !ok {
-			log.logf(.Error, "Failed to load scene file: {}", sceneFile)
-			err = .FailedToLoadSceneFile
-			return
-		}
-		defer delete(data)
-
-		jsonData, error := json.parse(data)
-		if error != .None {
-			log.logf(.Error, "Failed to parse json: {}", error)
-			err = .FailedToParseJson
-			return
-		}
-		defer json.destroy_value(jsonData)
-
-		root := jsonData.(json.Object)
-
-		scene.name = strings.clone_to_cstring(root["name"].(json.String))
-
-		// TODO: Should do something like this for all values. Could return malformed json error instead of using default values.
-		if value, check := root["clear_colour"]; check {
-			clearColour := value.(json.Array)
-			scene.clearColour = {
-				i32(clearColour[0].(json.Float)),
-				i32(clearColour[1].(json.Float)),
-				i32(clearColour[2].(json.Float)),
-				i32(clearColour[3].(json.Float)),
-			}
-		} else {
-			scene.clearColour = {150 / 255, 150 / 255, 150 / 255, 255 / 255}
-		}
-
-		scene.ambientLight = f32(root["ambient_light"].(json.Float))
-
-		cameras := root["cameras"].(json.Array)
-		scene.cameras = make([dynamic]Camera, len(cameras))
-		for camera, i in cameras {
-			camera := camera.(json.Object)
-			eye := camera["eye"].(json.Array)
-			center := camera["center"].(json.Array)
-			up := camera["up"].(json.Array)
-			scene.cameras[i] = {
-				name     = strings.clone_to_cstring(camera["name"].(json.String)),
-				eye      = Vec3 {
-					f32(eye[0].(json.Float)),
-					f32(eye[1].(json.Float)),
-					f32(eye[2].(json.Float)),
-				},
-				center   = Vec3 {
-					f32(center[0].(json.Float)),
-					f32(center[1].(json.Float)),
-					f32(center[2].(json.Float)),
-				},
-				up       = Vec3 {
-					f32(up[0].(json.Float)),
-					f32(up[1].(json.Float)),
-					f32(up[2].(json.Float)),
-				},
-				distance = f32(camera["distance"].(json.Float)),
-				fov      = f32(camera["fov"].(json.Float)),
-				mode     = .PERSPECTIVE if camera["mode"].(json.Float) == 0 else .ORTHOGRAPHIC,
-			}
-		}
-
-		lights := root["lights"].(json.Array)
-		scene.pointLights = make([dynamic]PointLight, len(lights))
-		for light, i in lights {
-			light := light.(json.Object)
-			position := light["position"].(json.Array)
-			direction := light["direction"].(json.Array)
-			colour := light["colour"].(json.Array)
-			rotationAxis := light["rotation_axis"].(json.Array)
-			scene.pointLights[i] = {
-				name            = strings.clone_to_cstring(light["name"].(json.String)),
-				position        = Vec3 {
-					f32(position[0].(json.Float)),
-					f32(position[1].(json.Float)),
-					f32(position[2].(json.Float)),
-				},
-				direction       = Vec3 {
-					f32(direction[0].(json.Float)),
-					f32(direction[1].(json.Float)),
-					f32(direction[2].(json.Float)),
-				},
-				colourIntensity = f32(
-					light["intensity"].(json.Float),
-				) * Vec3{f32(colour[0].(json.Float)), f32(colour[1].(json.Float)), f32(colour[2].(json.Float))},
-				fov             = f32(light["fov"].(json.Float)),
-				rotationAngle   = f32(light["rotation_angle"].(json.Float)),
-				rotationAxis    = Vec3 {
-					f32(rotationAxis[0].(json.Float)),
-					f32(rotationAxis[1].(json.Float)),
-					f32(rotationAxis[2].(json.Float)),
-				},
-			}
-		}
-
-		models := root["models"].(json.Array)
-		scene.modelPaths = make([dynamic]cstring, len(models))
-		for model, i in models {
-			scene.modelPaths[i] = strings.clone_to_cstring(model.(json.String))
-		}
-
-		albedos := root["albedos"].(json.Array)
-		scene.texturePaths = make([dynamic]cstring, len(albedos))
-		for texture, i in albedos {
-			scene.texturePaths[i] = strings.clone_to_cstring(texture.(json.String))
-		}
-
-		normals := root["normals"].(json.Array)
-		scene.normalPaths = make([dynamic]cstring, len(normals))
-		for normal, i in normals {
-			scene.normalPaths[i] = strings.clone_to_cstring(normal.(json.String))
-		}
-
-		instances := root["instances"].(json.Array)
-		scene.instances = make([dynamic]Instance, len(instances))
-		for instance, i in instances {
-			instance := instance.(json.Object)
-			position := instance["position"].(json.Array)
-			rotation := instance["rotation"].(json.Array)
-			scale := instance["scale"].(json.Array)
-			scene.instances[i] = {
-				name      = strings.clone_to_cstring(instance["name"].(json.String)),
-				modelID   = u32(instance["model"].(json.Float)),
-				animID    = 0,
-				textureID = f32(instance["albedo"].(json.Float)),
-				normalID  = f32(instance["normal"].(json.Float)),
-				position  = Vec3 {
-					f32(position[0].(json.Float)),
-					f32(position[1].(json.Float)),
-					f32(position[2].(json.Float)),
-				},
-				rotation  = Vec3 {
-					f32(rotation[0].(json.Float)),
-					f32(rotation[1].(json.Float)),
-					f32(rotation[2].(json.Float)),
-				},
-				scale     = Vec3 {
-					f32(scale[0].(json.Float)),
-					f32(scale[1].(json.Float)),
-					f32(scale[2].(json.Float)),
-				},
-			}
-		}
-		return
-	}
-
 	index = u32(len(scenes))
-	scene: Scene
 
-	scene.instances = make([dynamic]Instance)
-	scene.pointLights = make([dynamic]PointLight)
-	scene.cameras = make([dynamic]Camera)
-	scene.modelPaths = make([dynamic]cstring)
-	scene.models = make([dynamic]Model)
-	scene.texturePaths = make([dynamic]cstring)
-	scene.normalPaths = make([dynamic]cstring)
-	scene.vertices = make([dynamic]Vertex)
-	scene.indices = make([dynamic]u32)
+	data, rerr := os.read_entire_file_or_err(sceneFile)
+	if rerr != nil {
+		return 0, .FailedToLoadSceneFile
+	}
+	defer delete(data)
 
-	if scene, err = parseJSON(sceneFile); err != .None {
-		// TODO: should load empty/new scene if json malformed/file doesnt exist.
-		panic("Couldn't parse file")
+	sceneJson: SceneJSON
+	merr := json.unmarshal(data, &sceneJson)
+	if merr != nil {
+		return 0, .FailedToParseJson
 	}
 
-	scene.filePath = sceneFile
+	scene: Scene = {
+		name         = sceneJson.name,
+		filePath     = sceneFile,
+		clearColour  = sceneJson.clear_colour,
+		ambientLight = sceneJson.ambient_light,
+		instances    = make([dynamic]Instance, len(sceneJson.instances)),
+		pointLights  = make([dynamic]PointLight),
+		cameras      = make([dynamic]Camera),
+		modelPaths   = make([dynamic]cstring),
+		models       = make([dynamic]Model),
+		texturePaths = make([dynamic]cstring),
+		normalPaths  = make([dynamic]cstring),
+		vertices     = make([dynamic]Vertex),
+		indices      = make([dynamic]u32),
+	}
+
+	for &instance, instanceIndex in sceneJson.instances {
+		scene.instances[instanceIndex] = {
+			name      = instance.name,
+			modelID   = instance.model,
+			textureID = instance.texture,
+			normalID  = instance.normal,
+			position  = instance.position,
+			rotation  = instance.rotation,
+			scale     = instance.scale,
+		}
+	}
+	append(&scene.pointLights, ..sceneJson.lights)
+	append(&scene.cameras, ..sceneJson.cameras)
+	append(&scene.modelPaths, ..sceneJson.models)
+	append(&scene.texturePaths, ..sceneJson.textures)
+	append(&scene.normalPaths, ..sceneJson.normals)
 	append(&scenes, scene)
+
+	delete(sceneJson.lights)
+	delete(sceneJson.cameras)
+	delete(sceneJson.models)
+	delete(sceneJson.textures)
+	delete(sceneJson.normals)
+	delete(sceneJson.instances)
 
 	if err = loadSceneAssets(graphicsContext, index); err != .None {
 		// TODO: This error should just be info not crashing. Should handle files not existing by using a replacement texture/model?
@@ -5603,7 +5550,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 				}
 				if imgui.MenuItem("Load") {
 					ImFD.Open(
-						"TextureOpenDialog",
+						"SceneOpenDialog",
 						"Open a scene",
 						"JSON file (*.json){.json},.*",
 						true,
@@ -5611,10 +5558,24 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 					)
 				}
 				if imgui.MenuItem("Save") {
-					// Write scene json to file that was originally loaded from
+					if scenes[activeScene].filePath == "" {
+						ImFD.Save(
+							"SceneSaveDialog",
+							"Save Scene",
+							"JSON file (*.json){.json},.*",
+							"./assets/",
+						)
+					} else {
+						saveScene(graphicsContext, activeScene)
+					}
 				}
 				if imgui.MenuItem("Save AS...") {
-					// Write scene json to new file
+					ImFD.Save(
+						"SceneSaveDialog",
+						"Save Scene",
+						"JSON file (*.json){.json},.*",
+						"./assets/",
+					)
 				}
 				if imgui.MenuItem("Close") {
 					closeScene(graphicsContext, activeScene)
@@ -5672,11 +5633,19 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 	imgui.End()
 
-	if ImFD.IsDone("TextureOpenDialog") {
+	if ImFD.IsDone("SceneOpenDialog") {
 		if ImFD.HasResult() {
 			file := ImFD.GetResult()
 			index, err := loadScene(graphicsContext, string(file))
 			setActiveScene(graphicsContext, index)
+		}
+		ImFD.Close()
+	}
+	if ImFD.IsDone("SceneSaveDialog") {
+		if ImFD.HasResult() {
+			file := ImFD.GetResult()
+			scenes[activeScene].filePath = string(file)
+			saveScene(graphicsContext, activeScene)
 		}
 		ImFD.Close()
 	}
