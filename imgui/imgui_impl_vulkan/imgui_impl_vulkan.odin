@@ -3,11 +3,9 @@ package imgui_impl_vulkan
 import imgui "../"
 import vk "vendor:vulkan"
 
-when      ODIN_OS == .Windows { foreign import lib "../imgui_windows_x64.lib" }
-else when ODIN_OS == .Linux   { foreign import lib "../imgui_linux_x64.a" }
-else when ODIN_OS == .Darwin  {
-	when ODIN_ARCH == .amd64 { foreign import lib "../imgui_darwin_x64.a" } else { foreign import lib "../imgui_darwin_arm64.a" }
-}
+when      ODIN_OS == .Windows { when ODIN_ARCH == .amd64 { foreign import lib "../imgui_windows_x64.lib" } else { foreign import lib "../imgui_windows_arm64.lib" } }
+else when ODIN_OS == .Linux   { when ODIN_ARCH == .amd64 { foreign import lib "../imgui_linux_x64.a" }     else { foreign import lib "../imgui_linux_arm64.a" } }
+else when ODIN_OS == .Darwin  { when ODIN_ARCH == .amd64 { foreign import lib "../imgui_darwin_x64.a" }    else { foreign import lib "../imgui_darwin_arm64.a" } }
 
 // imgui_impl_vulkan.h
 // Last checked `v1.91.1-docking` (6df1a0)
@@ -30,10 +28,8 @@ InitInfo :: struct {
 	MSAASamples:    vk.SampleCountFlag, // 0 defaults to VK_SAMPLE_COUNT_1_BIT
 
 	// (Optional)
-	PipelineCache: vk.PipelineCache,
-	Subpass:       u32,
-
-	// (Optional) Set to create internal descriptor pool instead of using DescriptorPool
+	PipelineCache:      vk.PipelineCache,
+	Subpass:            u32,
 	DescriptorPoolSize: u32,
 
 	// (Optional) Dynamic Rendering

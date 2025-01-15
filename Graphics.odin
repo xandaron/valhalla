@@ -169,9 +169,9 @@ Image :: struct {
 }
 
 @(private = "file")
-ImplVulkanImageData :: struct {
-	image:         Image,
+ImFDImageData :: struct {
 	descriptorSet: vk.DescriptorSet,
+	using image:   Image,
 }
 
 // Use Vec4 becuse of alignment issues when using Vec3
@@ -226,6 +226,7 @@ ImguiData :: struct {
 	descriptorPool: vk.DescriptorPool,
 	renderPass:     vk.RenderPass,
 	colour:         Image,
+	imfdImages:     [dynamic]ImFDImageData
 }
 
 @(private = "file")
@@ -4276,12 +4277,56 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 @(private = "file")
 updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	ImFDCreateImage: ImFD.CreateTexture : proc "system" (
-		data: ^c.uint8_t,
+		data: [^]c.uint8_t,
 		width, height: c.int,
 		format: c.char,
 	) -> rawptr {
 		context = runtime.default_context()
 		using graphicsContext := engineState.graphicsContext
+
+		imageData: ImFDImageData
+		imageData.format = .B8G8R8A8_SRGB if format == 0 else .R8G8B8A8_SRGB
+		createImage(
+			graphicsContext,
+			&imageData.image,
+			{},
+			.D2,
+			u32(width),
+			u32(height),
+			1,
+			{._1},
+			.OPTIMAL,
+			{.TRANSFER_DST, .SAMPLED},
+			{.DEVICE_LOCAL},
+			.EXCLUSIVE,
+			0,
+			nil,
+		)
+
+		imageData.view = createImageView(
+			graphicsContext,
+			imageData.vkImage,
+			.D2,
+			imageData.format,
+			{.COLOR},
+			1,
+		)
+
+		imageData.sampler = createSampler(
+			graphicsContext,
+			.LINEAR,
+			.LINEAR,
+			.REPEAT,
+			false,
+			1,
+			.INT_OPAQUE_WHITE,
+		)
+
+		imageData.descriptorSet = implVulkan.AddTexture(
+			imageData.image.sampler,
+			imageData.image.view,
+			.SHADER_READ_ONLY_OPTIMAL,
+		)
 
 		textureSize := int(width * height * 4)
 		stagingBuffer: Buffer
@@ -4302,25 +4347,6 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		vk.MapMemory(device, stagingBuffer.memory, 0, vk.DeviceSize(textureSize), {}, &bufferData)
 		mem.copy(bufferData, data, textureSize)
 		vk.UnmapMemory(device, stagingBuffer.memory)
-
-		imageData: ImplVulkanImageData
-		imageData.image.format = .B8G8R8A8_SRGB if format == 0 else .R8G8B8A8_SRGB
-		createImage(
-			graphicsContext,
-			&imageData.image,
-			{},
-			.D2,
-			u32(width),
-			u32(height),
-			1,
-			{._1},
-			.OPTIMAL,
-			{.TRANSFER_DST, .TRANSFER_SRC},
-			{.DEVICE_LOCAL},
-			.EXCLUSIVE,
-			0,
-			nil,
-		)
 
 		commandBuffer := beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
 		transitionImageLayout(
@@ -4353,44 +4379,12 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		)
 		endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 
-		imageData.image.view = createImageView(
-			graphicsContext,
-			imageData.image.vkImage,
-			.D2,
-			imageData.image.format,
-			{.COLOR},
-			1,
-		)
+		append(&imguiData.imfdImages, imageData)
 
-		imageData.image.sampler = createSampler(
-			graphicsContext,
-			.LINEAR,
-			.LINEAR,
-			.REPEAT,
-			false,
-			1,
-			.INT_OPAQUE_WHITE,
-		)
-
-		imageData.descriptorSet = implVulkan.AddTexture(
-			imageData.image.sampler,
-			imageData.image.view,
-			.SHADER_READ_ONLY_OPTIMAL,
-		)
-		return (rawptr)(&imageData)
+		return (rawptr)((uintptr)(imageData.descriptorSet))
 	}
 
-	ImFDDeleteImage: ImFD.DeleteTexture : proc "system" (imagePtr: rawptr) {
-		context = runtime.default_context()
-		using graphicsContext := engineState.graphicsContext
-		imagePtr := (^ImplVulkanImageData)(imagePtr)
-
-		implVulkan.RemoveTexture(imagePtr.descriptorSet)
-		vk.DestroyImageView(device, imagePtr.image.view, nil)
-		vk.DestroyImage(device, imagePtr.image.vkImage, nil)
-		vk.FreeMemory(device, imagePtr.image.memory, nil)
-		vk.DestroySampler(device, imagePtr.image.sampler, nil)
-	}
+	ImFDDeleteImage: ImFD.DeleteTexture : proc "system" (descriptorPtr: rawptr) {}
 
 	imguiData.uiContext = imgui.CreateContext()
 	io := imgui.GetIO()
@@ -4515,8 +4509,7 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 	}
 
-	implInitInfo: implVulkan.InitInfo = {}
-	implInitInfo = {
+	implInitInfo: implVulkan.InitInfo = {
 		Instance                    = instance,
 		PhysicalDevice              = physicalDevice,
 		Device                      = device,
@@ -4552,6 +4545,7 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 
 	ImFD.Init(ImFDCreateImage, ImFDDeleteImage)
+	imguiData.imfdImages = make([dynamic]ImFDImageData)
 }
 
 
@@ -5373,6 +5367,10 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 	imgui.End()
 
 	if ImFD.IsDone("TextureOpenDialog") {
+		if ImFD.HasResult() {
+			file := ImFD.GetResult()
+			log.log(.Info, file)
+		}
 		ImFD.Close()
 	}
 }
@@ -5630,6 +5628,17 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 
 @(private = "file")
 cleanupImgui :: proc(using graphicsContext: ^GraphicsContext) {
+	// This should probably be in ImFDDeleteImage but that causes issues so this is the best solution I have at the moment
+	for imageData, index in imguiData.imfdImages {
+		vk.DestroyImageView(device, imageData.view, nil)
+		vk.DestroyImage(device, imageData.vkImage, nil)
+		vk.FreeMemory(device, imageData.memory, nil)
+		vk.DestroySampler(device, imageData.sampler, nil)
+		implVulkan.RemoveTexture(imageData.descriptorSet)
+	}
+	delete(imguiData.imfdImages)
+	// ----------------------------------------------------
+
 	ImFD.Shutdown()
 	implVulkan.Shutdown()
 	implGLFW.Shutdown()

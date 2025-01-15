@@ -4,11 +4,9 @@ import "core:c"
 
 import "vendor:glfw"
 
-when      ODIN_OS == .Windows { foreign import lib "../imgui_windows_x64.lib" }
-else when ODIN_OS == .Linux   { foreign import lib "../imgui_linux_x64.a" }
-else when ODIN_OS == .Darwin  {
-	when ODIN_ARCH == .amd64 { foreign import lib "../imgui_darwin_x64.a" } else { foreign import lib "../imgui_darwin_arm64.a" }
-}
+when      ODIN_OS == .Windows { when ODIN_ARCH == .amd64 { foreign import lib "../imgui_windows_x64.lib" } else { foreign import lib "../imgui_windows_arm64.lib" } }
+else when ODIN_OS == .Linux   { when ODIN_ARCH == .amd64 { foreign import lib "../imgui_linux_x64.a" }     else { foreign import lib "../imgui_linux_arm64.a" } }
+else when ODIN_OS == .Darwin  { when ODIN_ARCH == .amd64 { foreign import lib "../imgui_darwin_x64.a" }    else { foreign import lib "../imgui_darwin_arm64.a" } }
 
 // imgui_impl_glfw.h
 // Last checked `v1.91.1-docking` (d8c98c)
@@ -41,5 +39,5 @@ foreign lib {
 	MonitorCallback     :: proc(monitor: glfw.MonitorHandle, event: c.int) ---
 
 	// GLFW helpers
-	Sleep :: proc(milliseconds: i32) --- 
+	Sleep :: proc(milliseconds: i32) ---
 }

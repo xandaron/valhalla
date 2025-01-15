@@ -15,7 +15,7 @@ else when ODIN_OS == .Darwin {
 	when ODIN_ARCH == .amd64 {foreign import lib "ImFileDialog_mac_x64.a"} else {foreign import lib "ImFileDialog_mac_arm64.a"}
 }
 
-CreateTexture :: #type proc "system" (data: ^c.uint8_t, width, height: c.int, format: c.char) -> rawptr
+CreateTexture :: #type proc "system" (data: [^]c.uint8_t, width, height: c.int, format: c.char) -> rawptr
 DeleteTexture :: #type proc "system" (imagePtr: rawptr)
 
 @(default_calling_convention = "system")
