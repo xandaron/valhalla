@@ -404,21 +404,9 @@ initVkGraphics :: proc(
 		glfw.SetErrorCallback(glfwErrorCallback)
 	}
 	if !glfw.Init() {
-		log.log(.Fatal, "Failed to initalize glfw, quitting application.")
-		return
+		log.log(.Fatal, "Failed to initalize GLFW!")
+		panic("Failed to init GLFW!")
 	}
-
-	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-	if window = glfw.CreateWindow(1600, 800, "Valhalla", nil, nil); window == nil {
-		log.log(.Fatal, "Failed to create window, quitting application.")
-		return
-	}
-
-	glfw.SetKeyCallback(window, keyCallback)
-	glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
-	glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
-	glfw.SetScrollCallback(window, glfwScrollCallback)
-	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
 
 	vk.load_proc_addresses(rawptr(glfw.GetInstanceProcAddress))
 
@@ -426,7 +414,7 @@ initVkGraphics :: proc(
 	when ODIN_DEBUG {
 		vkSetupDebugMessenger(graphicsContext)
 	}
-	createSurface(graphicsContext)
+	initWindow(graphicsContext)
 	pickPhysicalDevice(graphicsContext)
 	createLogicalDevice(graphicsContext)
 	createSwapchain(graphicsContext)
@@ -556,11 +544,125 @@ createInstance :: proc(using graphicsContext: ^GraphicsContext) {
 }
 
 @(private = "file")
-createSurface :: proc(using graphicsContext: ^GraphicsContext) {
+initWindow :: proc(using graphicsContext: ^GraphicsContext) {
+	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
+	if window = glfw.CreateWindow(1600, 800, "Valhalla", nil, nil); window == nil {
+		log.log(.Fatal, "Failed to create window, quitting application.")
+		return
+	}
+
+	glfw.SetKeyCallback(window, keyCallback)
+	glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
+	glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
+	glfw.SetScrollCallback(window, glfwScrollCallback)
+	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
 	if glfw.CreateWindowSurface(instance, window, nil, &surface) != .SUCCESS {
 		log.log(.Fatal, "Failed to create surface!")
 		panic("Failed to create surface!")
 	}
+}
+
+clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
+	graphicsContext := graphicsContext
+	if vk.DeviceWaitIdle(device) != .SUCCESS {
+		panic("Failed to wait for device idle!")
+	}
+
+	for index in 0 ..< len(scenes) {
+		cleanupScene(graphicsContext, u32(index))
+	}
+	delete(scenes)
+
+	when UI_ENABLED {
+		cleanupImgui(graphicsContext)
+		vk.DestroyDescriptorPool(device, imguiData.descriptorPool, nil)
+	}
+
+	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(mainCommandBuffers))
+	vk.FreeCommandBuffers(device, computeCommandPool, 2, raw_data(computeCommandBuffers))
+	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(uiCommandBuffers))
+
+	vk.DestroyCommandPool(device, graphicsCommandPool, nil)
+	vk.DestroyCommandPool(device, computeCommandPool, nil)
+	delete(mainCommandBuffers)
+	delete(computeCommandBuffers)
+	delete(uiCommandBuffers)
+
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		vk.DestroyFence(device, inFlightFrames[index], nil)
+		vk.DestroySemaphore(device, rendersFinished[index], nil)
+		vk.DestroySemaphore(device, computeFinished[index], nil)
+		vk.DestroySemaphore(device, uiFinished[index], nil)
+		vk.DestroySemaphore(device, imagesAvailable[index], nil)
+	}
+	delete(inFlightFrames)
+	delete(rendersFinished)
+	delete(computeFinished)
+	delete(uiFinished)
+	delete(imagesAvailable)
+
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		vk.DestroyBuffer(device, uniformBuffers[index].buffer, nil)
+		vk.FreeMemory(device, uniformBuffers[index].memory, nil)
+	}
+
+	for index in 0 ..< swapchainImageCount {
+		vk.DestroyFramebuffer(device, pipelines[PipelineIndex.MAIN].frameBuffers[index], nil)
+		vk.DestroyFramebuffer(device, pipelines[PipelineIndex.SHADOW].frameBuffers[index], nil)
+	}
+	delete(pipelines[PipelineIndex.MAIN].frameBuffers)
+	delete(pipelines[PipelineIndex.SHADOW].frameBuffers)
+
+	cleanupSwapchain(graphicsContext)
+
+	// MAIN
+	vk.DestroyImageView(device, pipelines[PipelineIndex.MAIN].colour.view, nil)
+	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].colour.vkImage, nil)
+	vk.FreeMemory(device, pipelines[PipelineIndex.MAIN].colour.memory, nil)
+
+	cleanupImage(graphicsContext, &pipelines[PipelineIndex.MAIN].depth)
+
+	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.MAIN].descriptorPool, nil)
+	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.MAIN].descriptorSetLayout, nil)
+
+	vk.DestroyPipeline(device, pipelines[PipelineIndex.MAIN].pipeline, nil)
+	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.MAIN].layout, nil)
+	vk.DestroyRenderPass(device, pipelines[PipelineIndex.MAIN].renderPass, nil)
+
+	// POST
+	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.POST].descriptorPool, nil)
+	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.POST].descriptorSetLayout, nil)
+
+	vk.DestroyPipeline(device, pipelines[PipelineIndex.POST].pipeline, nil)
+	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.POST].layout, nil)
+
+	// LIGHT
+	vk.DestroyImageView(device, pipelines[PipelineIndex.SHADOW].depth.view, nil)
+	vk.DestroyImage(device, pipelines[PipelineIndex.SHADOW].depth.vkImage, nil)
+	vk.FreeMemory(device, pipelines[PipelineIndex.SHADOW].depth.memory, nil)
+
+	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.SHADOW].descriptorPool, nil)
+	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.SHADOW].descriptorSetLayout, nil)
+
+	vk.DestroyPipeline(device, pipelines[PipelineIndex.SHADOW].pipeline, nil)
+	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.SHADOW].layout, nil)
+	vk.DestroyRenderPass(device, pipelines[PipelineIndex.SHADOW].renderPass, nil)
+
+	delete(pipelines)
+
+	cleanupSamplers(graphicsContext)
+
+	vk.DestroyDevice(device, nil)
+	vk.DestroySurfaceKHR(instance, surface, nil)
+
+	when ODIN_DEBUG {
+		vk.DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nil)
+	}
+
+	vk.DestroyInstance(instance, nil)
+
+	glfw.DestroyWindow(window)
+	glfw.Terminate()
 }
 
 
@@ -1774,6 +1876,7 @@ createSamplers :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 }
 
+@(private = "file")
 cleanupSamplers :: proc(using graphicsContext: ^GraphicsContext) {
 	for &sampler in samplers {
 		vk.DestroySampler(device, sampler, nil)
@@ -5731,113 +5834,4 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 	}
 
 	currentFrame = (currentFrame + 1) % 2
-}
-
-
-// ###################################################################
-// #                             Cleanup                             #
-// ###################################################################
-
-
-clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
-	graphicsContext := graphicsContext
-	if vk.DeviceWaitIdle(device) != .SUCCESS {
-		panic("Failed to wait for device idle!")
-	}
-
-	for index in 0 ..< len(scenes) {
-		cleanupScene(graphicsContext, u32(index))
-	}
-	delete(scenes)
-
-	when UI_ENABLED {
-		cleanupImgui(graphicsContext)
-		vk.DestroyDescriptorPool(device, imguiData.descriptorPool, nil)
-	}
-
-	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(mainCommandBuffers))
-	vk.FreeCommandBuffers(device, computeCommandPool, 2, raw_data(computeCommandBuffers))
-	vk.FreeCommandBuffers(device, graphicsCommandPool, 2, raw_data(uiCommandBuffers))
-
-	vk.DestroyCommandPool(device, graphicsCommandPool, nil)
-	vk.DestroyCommandPool(device, computeCommandPool, nil)
-	delete(mainCommandBuffers)
-	delete(computeCommandBuffers)
-	delete(uiCommandBuffers)
-
-	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyFence(device, inFlightFrames[index], nil)
-		vk.DestroySemaphore(device, rendersFinished[index], nil)
-		vk.DestroySemaphore(device, computeFinished[index], nil)
-		vk.DestroySemaphore(device, uiFinished[index], nil)
-		vk.DestroySemaphore(device, imagesAvailable[index], nil)
-	}
-	delete(inFlightFrames)
-	delete(rendersFinished)
-	delete(computeFinished)
-	delete(uiFinished)
-	delete(imagesAvailable)
-
-	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyBuffer(device, uniformBuffers[index].buffer, nil)
-		vk.FreeMemory(device, uniformBuffers[index].memory, nil)
-	}
-
-	for index in 0 ..< swapchainImageCount {
-		vk.DestroyFramebuffer(device, pipelines[PipelineIndex.MAIN].frameBuffers[index], nil)
-		vk.DestroyFramebuffer(device, pipelines[PipelineIndex.SHADOW].frameBuffers[index], nil)
-	}
-	delete(pipelines[PipelineIndex.MAIN].frameBuffers)
-	delete(pipelines[PipelineIndex.SHADOW].frameBuffers)
-
-	cleanupSwapchain(graphicsContext)
-
-	// MAIN
-	vk.DestroyImageView(device, pipelines[PipelineIndex.MAIN].colour.view, nil)
-	vk.DestroyImage(device, pipelines[PipelineIndex.MAIN].colour.vkImage, nil)
-	vk.FreeMemory(device, pipelines[PipelineIndex.MAIN].colour.memory, nil)
-
-	cleanupImage(graphicsContext, &pipelines[PipelineIndex.MAIN].depth)
-
-	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.MAIN].descriptorPool, nil)
-	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.MAIN].descriptorSetLayout, nil)
-
-	vk.DestroyPipeline(device, pipelines[PipelineIndex.MAIN].pipeline, nil)
-	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.MAIN].layout, nil)
-	vk.DestroyRenderPass(device, pipelines[PipelineIndex.MAIN].renderPass, nil)
-
-	// POST
-	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.POST].descriptorPool, nil)
-	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.POST].descriptorSetLayout, nil)
-
-	vk.DestroyPipeline(device, pipelines[PipelineIndex.POST].pipeline, nil)
-	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.POST].layout, nil)
-
-	// LIGHT
-	vk.DestroyImageView(device, pipelines[PipelineIndex.SHADOW].depth.view, nil)
-	vk.DestroyImage(device, pipelines[PipelineIndex.SHADOW].depth.vkImage, nil)
-	vk.FreeMemory(device, pipelines[PipelineIndex.SHADOW].depth.memory, nil)
-
-	vk.DestroyDescriptorPool(device, pipelines[PipelineIndex.SHADOW].descriptorPool, nil)
-	vk.DestroyDescriptorSetLayout(device, pipelines[PipelineIndex.SHADOW].descriptorSetLayout, nil)
-
-	vk.DestroyPipeline(device, pipelines[PipelineIndex.SHADOW].pipeline, nil)
-	vk.DestroyPipelineLayout(device, pipelines[PipelineIndex.SHADOW].layout, nil)
-	vk.DestroyRenderPass(device, pipelines[PipelineIndex.SHADOW].renderPass, nil)
-
-	delete(pipelines)
-
-	cleanupSamplers(graphicsContext)
-
-	vk.DestroyDevice(device, nil)
-	vk.DestroySurfaceKHR(instance, surface, nil)
-
-	when ODIN_DEBUG {
-		vk.DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nil)
-	}
-
-	vk.DestroyInstance(instance, nil)
-
-	glfw.DestroyWindow(window)
-	glfw.Terminate()
 }
