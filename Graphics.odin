@@ -2754,6 +2754,18 @@ setActiveScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32)
 	updateSceneDescriptorSets(graphicsContext, sceneIndex)
 }
 
+closeScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	if vk.DeviceWaitIdle(device) != .SUCCESS {
+		panic("Failed to wait for device idle?")
+	}
+
+	cleanupScene(graphicsContext, sceneIndex)
+	unordered_remove(&scenes, sceneIndex)
+	if len(scenes) == 0 {
+		createNewScene(graphicsContext)
+	}
+}
+
 // ###################################################################
 // #                        Shader Descriptors                       #
 // ###################################################################
@@ -5410,7 +5422,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 					// Write scene json to new file
 				}
 				if imgui.MenuItem("Close") {
-					cleanupScene(graphicsContext, activeScene, false)
+					closeScene(graphicsContext, activeScene)
 					setActiveScene(graphicsContext, 0)
 				}
 				imgui.EndMenu()
@@ -5640,7 +5652,7 @@ cleanupSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 }
 
 @(private = "file")
-cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32, finalCleanup: b32) {
+cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	vk.DestroyBuffer(device, scenes[sceneIndex].indexBuffer.buffer, nil)
 	vk.FreeMemory(device, scenes[sceneIndex].indexBuffer.memory, nil)
 	vk.DestroyBuffer(device, scenes[sceneIndex].vertexBuffer.buffer, nil)
@@ -5721,12 +5733,6 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32, f
 	}
 	delete(scenes[sceneIndex].cameras)
 	delete(scenes[sceneIndex].name)
-
-
-	if !finalCleanup && len(scenes) == 0 {
-		unordered_remove(&scenes, sceneIndex)
-		createNewScene(graphicsContext)
-	}
 }
 
 @(private = "file")
@@ -5766,7 +5772,7 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 
 	for index in 0 ..< len(scenes) {
-		cleanupScene(graphicsContext, u32(index), true)
+		cleanupScene(graphicsContext, u32(index))
 	}
 	delete(scenes)
 
