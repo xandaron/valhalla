@@ -29,7 +29,9 @@ layout(location = 4) in vec3 inNormal;
 
 layout(location = 0) out vec4 outColour;
 
-#define ambientLight 0.1
+layout(push_constant) uniform PushConstants {
+	float ambientLight;
+} pushConstant;
 
 float textureProj(vec4 shadowCoord, float arrayIndex) {
     if (shadowCoord.z < 0.0) {
@@ -79,5 +81,7 @@ void main() {
         float shadow = filterPCF(vertexPos / vertexPos.w, float(i));
         cumulativeColour += albedo * shadow * lambertainCoefficient * lightBuffer.lights[i].colourIntensity.xyz / lightSquareDistance;
     }
-    outColour =  vec4(clamp(pow(cumulativeColour, vec3(1 / 2.4)), ambientLight, 1.0), 1.0);
+    cumulativeColour = clamp(cumulativeColour, albedo * pushConstant.ambientLight, albedo * 10);
+    cumulativeColour = pow(cumulativeColour, vec3(1 / 2.4));
+    outColour =  vec4(cumulativeColour, 1.0);
 }

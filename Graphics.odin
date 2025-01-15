@@ -286,6 +286,7 @@ Instance :: struct {
 Scene :: struct {
 	name:            cstring,
 	clearColour:     [4]i32,
+	ambientLight:    f32,
 
 	// Scene
 	instances:       [dynamic]Instance,
@@ -2597,6 +2598,8 @@ loadScene :: proc(
 			scene.clearColour = {150 / 255, 150 / 255, 150 / 255, 255 / 255}
 		}
 
+		scene.ambientLight = f32(root["ambient_light"].(json.Float))
+
 		cameras := root["cameras"].(json.Array)
 		scene.cameras = make([dynamic]Camera, len(cameras))
 		for camera, i in cameras {
@@ -4051,14 +4054,20 @@ createGraphicsPipelines :: proc(
 	}
 
 	// MAIN PIPELINE
+	mainPushConstant: vk.PushConstantRange = {
+		stageFlags = {.FRAGMENT},
+		offset     = 0,
+		size       = size_of(f32),
+	}
+
 	mainPipelineLayoutInfo: vk.PipelineLayoutCreateInfo = {
 		sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
 		pNext                  = nil,
 		flags                  = {},
 		setLayoutCount         = 1,
 		pSetLayouts            = &pipelines[PipelineIndex.MAIN].descriptorSetLayout,
-		pushConstantRangeCount = 0,
-		pPushConstantRanges    = nil,
+		pushConstantRangeCount = 1,
+		pPushConstantRanges    = &mainPushConstant,
 	}
 
 	if vk.CreatePipelineLayout(
@@ -5029,6 +5038,15 @@ recordGraphicsBuffer :: proc(
 		)
 		vk.CmdBindPipeline(commandBuffer, .GRAPHICS, pipelines[PipelineIndex.MAIN].pipeline)
 
+		vk.CmdPushConstants(
+			commandBuffer,
+			pipelines[PipelineIndex.MAIN].layout,
+			{.FRAGMENT},
+			0,
+			4,
+			&scenes[activeScene].ambientLight,
+		)
+
 		vk.CmdBindVertexBuffers(
 			commandBuffer,
 			0,
@@ -5385,7 +5403,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 
 				}
 				if imgui.MenuItem("Close") {
-					cleanupScene(graphicsContext, activeScene)
+					cleanupScene(graphicsContext, activeScene, false)
 					setActiveScene(graphicsContext, 0)
 				}
 				imgui.EndMenu()
@@ -5407,6 +5425,8 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 		}
 
 		imgui.InputInt4("Clear Colour", &scenes[activeScene].clearColour)
+
+		imgui.InputFloat("Ambient Light", &scenes[activeScene].ambientLight)
 
 		if imgui.CollapsingHeader("Cameras") {
 			constructCamerasHeader(graphicsContext)
@@ -5613,7 +5633,7 @@ cleanupSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 }
 
 @(private = "file")
-cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32, finalCleanup: b32) {
 	vk.DestroyBuffer(device, scenes[sceneIndex].indexBuffer.buffer, nil)
 	vk.FreeMemory(device, scenes[sceneIndex].indexBuffer.memory, nil)
 	vk.DestroyBuffer(device, scenes[sceneIndex].vertexBuffer.buffer, nil)
@@ -5695,9 +5715,9 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	delete(scenes[sceneIndex].cameras)
 	delete(scenes[sceneIndex].name)
 
-	unordered_remove(&scenes, sceneIndex)
-
-	if len(scenes) == 0 {
+	
+	if !finalCleanup && len(scenes) == 0 {
+		unordered_remove(&scenes, sceneIndex)
 		createNewScene(graphicsContext)
 	}
 }
@@ -5739,7 +5759,7 @@ clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 
 	for index in 0 ..< len(scenes) {
-		cleanupScene(graphicsContext, u32(index))
+		cleanupScene(graphicsContext, u32(index), true)
 	}
 	delete(scenes)
 
