@@ -103,12 +103,12 @@ main :: proc() {
 
 	glfw.SetWindowUserPointer(graphicsContext.window, &graphicsContext)
 
-	if err := loadScene(&graphicsContext, "./assets/scenes/shambler.json"); err != .None {
+	if _, err := loadScene(&graphicsContext, "./assets/scenes/shambler.json"); err != .None {
 		log.logf(.Fatal, "Failed to load scene: {}", err)
 		panic("Failed to load scene")
 	}
 
-	if err := loadScene(&graphicsContext, "./assets/scenes/bunny_box.json"); err != .None {
+	if _, err := loadScene(&graphicsContext, "./assets/scenes/bunny_box.json"); err != .None {
 		log.logf(.Fatal, "Failed to load scene: {}", err)
 		panic("Failed to load scene")
 	}

@@ -226,7 +226,7 @@ ImguiData :: struct {
 	descriptorPool: vk.DescriptorPool,
 	renderPass:     vk.RenderPass,
 	colour:         Image,
-	imfdImages:     [dynamic]ImFDImageData
+	imfdImages:     [dynamic]ImFDImageData,
 }
 
 @(private = "file")
@@ -908,7 +908,7 @@ createLogicalDevice :: proc(using graphicsContext: ^GraphicsContext) {
 createSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	chooseFormat :: proc(formats: []vk.SurfaceFormatKHR) -> vk.SurfaceFormatKHR {
 		for format in formats {
-			if format.format == .R8G8B8A8_UNORM && format.colorSpace == .SRGB_NONLINEAR {
+			if (format.format == .B8G8R8A8_UNORM || format.format == .R8G8B8A8_UNORM) && format.colorSpace == .SRGB_NONLINEAR {
 				return format
 			}
 		}
@@ -2477,42 +2477,11 @@ LoadSceneError :: enum {
 	FailedToLoadTexture,
 }
 
-@(private = "file")
-loadSceneAssets :: proc(
-	using graphicsContext: ^GraphicsContext,
-	sceneIndex: u32,
-) -> (
-	err: LoadSceneError = .None,
-) {
-	loadModels(graphicsContext, sceneIndex, scenes[sceneIndex].modelPaths)
-
-	createVertexBuffer(graphicsContext, sceneIndex)
-	createIndexBuffer(graphicsContext, sceneIndex)
-
-	loadTextures(graphicsContext, &scenes[sceneIndex].textures, scenes[sceneIndex].texturePaths)
-	loadTextures(graphicsContext, &scenes[sceneIndex].normals, scenes[sceneIndex].normalPaths)
-
-	for &instance in scenes[sceneIndex].instances {
-		skeletonLength := len(scenes[sceneIndex].models[instance.modelID].skeleton)
-		scenes[sceneIndex].boneCount += skeletonLength
-		instance.positionKeys = make([]u32, skeletonLength)
-		instance.rotationKeys = make([]u32, skeletonLength)
-		instance.scaleKeys = make([]u32, skeletonLength)
-		instance.animTimer = 0.0
-	}
-	scenes[sceneIndex].boneCount += 1
-
-	createInstanceBuffer(graphicsContext, sceneIndex)
-	createBoneBuffer(graphicsContext, sceneIndex)
-	createLightBuffer(graphicsContext, sceneIndex)
-	createShadowImage(graphicsContext, sceneIndex)
-	return
-}
-
 loadScene :: proc(
 	using graphicsContext: ^GraphicsContext,
 	sceneFile: string,
 ) -> (
+	index: u32,
 	err: LoadSceneError = .None,
 ) {
 	parseJSON :: proc(sceneFile: string) -> (scene: Scene, err: LoadSceneError = .None) {
@@ -2658,19 +2627,50 @@ loadScene :: proc(
 		return
 	}
 
-	sceneCount := len(scenes)
-	newScenes := make([]Scene, sceneCount + 1)
+	loadSceneAssets :: proc(
+		using graphicsContext: ^GraphicsContext,
+		sceneIndex: u32,
+	) -> (
+		err: LoadSceneError = .None,
+	) {
+		loadModels(graphicsContext, sceneIndex, scenes[sceneIndex].modelPaths)
+
+		createVertexBuffer(graphicsContext, sceneIndex)
+		createIndexBuffer(graphicsContext, sceneIndex)
+
+		loadTextures(graphicsContext, &scenes[sceneIndex].textures, scenes[sceneIndex].texturePaths)
+		loadTextures(graphicsContext, &scenes[sceneIndex].normals, scenes[sceneIndex].normalPaths)
+
+		for &instance in scenes[sceneIndex].instances {
+			skeletonLength := len(scenes[sceneIndex].models[instance.modelID].skeleton)
+			scenes[sceneIndex].boneCount += skeletonLength
+			instance.positionKeys = make([]u32, skeletonLength)
+			instance.rotationKeys = make([]u32, skeletonLength)
+			instance.scaleKeys = make([]u32, skeletonLength)
+			instance.animTimer = 0.0
+		}
+		scenes[sceneIndex].boneCount += 1
+
+		createInstanceBuffer(graphicsContext, sceneIndex)
+		createBoneBuffer(graphicsContext, sceneIndex)
+		createLightBuffer(graphicsContext, sceneIndex)
+		createShadowImage(graphicsContext, sceneIndex)
+		return
+	}
+
+	index = u32(len(scenes))
+	newScenes := make([]Scene, index + 1)
 	for &scene, index in scenes {
 		newScenes[index] = scene
 	}
 	delete(scenes)
 	scenes = newScenes
 
-	if scenes[sceneCount], err = parseJSON(sceneFile); err != .None {
+	if scenes[index], err = parseJSON(sceneFile); err != .None {
 		panic("Couldn't parse file")
 	}
 
-	if err = loadSceneAssets(graphicsContext, u32(sceneCount)); err != .None {
+	if err = loadSceneAssets(graphicsContext, index); err != .None {
 		panic("Load error")
 	}
 	return
@@ -5369,7 +5369,8 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 	if ImFD.IsDone("TextureOpenDialog") {
 		if ImFD.HasResult() {
 			file := ImFD.GetResult()
-			log.log(.Info, file)
+			index, err := loadScene(graphicsContext, string(file))
+			setActiveScene(graphicsContext, index)
 		}
 		ImFD.Close()
 	}
