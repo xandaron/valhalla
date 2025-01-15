@@ -27,7 +27,7 @@
 			],
 			"distance": 0.44721401,
 			"fov": 45.00000000,
-			"mode": "PERSPECTIVE"
+			"mode": 0
 		}
 	],
 	"lights": [

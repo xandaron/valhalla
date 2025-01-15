@@ -419,7 +419,27 @@ initVkGraphics :: proc(
 	createLogicalDevice(graphicsContext)
 	createSwapchain(graphicsContext)
 	createCommandBuffers(graphicsContext)
-	createUniformBuffer(graphicsContext)
+	bufferSize := size_of(UniformBuffer)
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		vk.DestroyBuffer(device, uniformBuffers[index].buffer, nil)
+		vk.FreeMemory(device, uniformBuffers[index].memory, nil)
+		createBuffer(
+			graphicsContext,
+			bufferSize,
+			{.UNIFORM_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&uniformBuffers[index].buffer,
+			&uniformBuffers[index].memory,
+		)
+		vk.MapMemory(
+			device,
+			uniformBuffers[index].memory,
+			0,
+			vk.DeviceSize(bufferSize),
+			{},
+			&uniformBuffers[index].mapped,
+		)
+	}
 	createSyncObjects(graphicsContext)
 	createSamplers(graphicsContext)
 	pipelines = make([]Pipeline, len(PipelineIndex))
@@ -551,10 +571,7 @@ initWindow :: proc(using graphicsContext: ^GraphicsContext) {
 		return
 	}
 
-	glfw.SetKeyCallback(window, keyCallback)
-	glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
-	glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
-	glfw.SetScrollCallback(window, glfwScrollCallback)
+	setGLFWCallbacks(graphicsContext)
 	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
 	if glfw.CreateWindowSurface(instance, window, nil, &surface) != .SUCCESS {
 		log.log(.Fatal, "Failed to create surface!")
@@ -562,7 +579,23 @@ initWindow :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 }
 
-clanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
+@(private = "file")
+setGLFWCallbacks :: proc(using graphicsContext: ^GraphicsContext) {
+	glfw.SetKeyCallback(window, keyCallback)
+	glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
+	glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
+	glfw.SetScrollCallback(window, glfwScrollCallback)
+}
+
+@(private = "file")
+unsetGLFWCallbacks :: proc(using graphicsContext: ^GraphicsContext) {
+	glfw.SetKeyCallback(window, nil)
+	glfw.SetMouseButtonCallback(window, nil)
+	glfw.SetCursorPosCallback(window, nil)
+	glfw.SetScrollCallback(window, nil)
+}
+
+cleanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	graphicsContext := graphicsContext
 	if vk.DeviceWaitIdle(device) != .SUCCESS {
 		panic("Failed to wait for device idle!")
@@ -1391,118 +1424,6 @@ loadBufferToGPU :: proc(
 	copyBuffer(graphicsContext, stagingBuffer, dstBuffer^.buffer, bufferSize)
 	vk.DestroyBuffer(device, stagingBuffer, nil)
 	vk.FreeMemory(device, stagingBufferMemory, nil)
-}
-
-@(private = "file")
-createVertexBuffer :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
-	loadBufferToGPU(
-		graphicsContext,
-		size_of(Vertex) * len(scenes[sceneIndex].vertices),
-		raw_data(scenes[sceneIndex].vertices),
-		&scenes[sceneIndex].vertexBuffer,
-		.VERTEX_BUFFER,
-	)
-	scenes[sceneIndex].vertexBuffer.mapped = nil
-}
-
-@(private = "file")
-createIndexBuffer :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
-	loadBufferToGPU(
-		graphicsContext,
-		size_of(u32) * len(scenes[sceneIndex].indices),
-		raw_data(scenes[sceneIndex].indices),
-		&scenes[sceneIndex].indexBuffer,
-		.INDEX_BUFFER,
-	)
-	scenes[sceneIndex].indexBuffer.mapped = nil
-}
-
-@(private = "file")
-createUniformBuffer :: proc(using graphicsContext: ^GraphicsContext) {
-	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		createBuffer(
-			graphicsContext,
-			size_of(UniformBuffer),
-			{.UNIFORM_BUFFER},
-			{.HOST_VISIBLE, .HOST_COHERENT},
-			&uniformBuffers[i].buffer,
-			&uniformBuffers[i].memory,
-		)
-		vk.MapMemory(
-			device,
-			uniformBuffers[i].memory,
-			0,
-			size_of(UniformBuffer),
-			{},
-			&uniformBuffers[i].mapped,
-		)
-	}
-}
-
-@(private = "file")
-createInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
-	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		createBuffer(
-			graphicsContext,
-			size_of(Instance) * len(scenes[sceneIndex].instances),
-			{.STORAGE_BUFFER},
-			{.HOST_VISIBLE, .HOST_COHERENT},
-			&scenes[sceneIndex].instanceBuffers[i].buffer,
-			&scenes[sceneIndex].instanceBuffers[i].memory,
-		)
-		vk.MapMemory(
-			device,
-			scenes[sceneIndex].instanceBuffers[i].memory,
-			0,
-			vk.DeviceSize(size_of(Instance) * len(scenes[sceneIndex].instances)),
-			{},
-			&scenes[sceneIndex].instanceBuffers[i].mapped,
-		)
-	}
-}
-
-@(private = "file")
-createBoneBuffer :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
-	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		createBuffer(
-			graphicsContext,
-			size_of(Mat4) * scenes[sceneIndex].boneCount,
-			{.STORAGE_BUFFER},
-			{.HOST_VISIBLE, .HOST_COHERENT},
-			&scenes[sceneIndex].boneBuffers[i].buffer,
-			&scenes[sceneIndex].boneBuffers[i].memory,
-		)
-		vk.MapMemory(
-			device,
-			scenes[sceneIndex].boneBuffers[i].memory,
-			0,
-			vk.DeviceSize(size_of(Mat4) * scenes[sceneIndex].boneCount),
-			{},
-			&scenes[sceneIndex].boneBuffers[i].mapped,
-		)
-	}
-}
-
-@(private = "file")
-createLightBuffer :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
-	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		createBuffer(
-			graphicsContext,
-			size_of(LightData) * len(scenes[sceneIndex].pointLights),
-			{.STORAGE_BUFFER},
-			{.HOST_VISIBLE, .HOST_COHERENT},
-			&scenes[sceneIndex].lightBuffers[i].buffer,
-			&scenes[sceneIndex].lightBuffers[i].memory,
-		)
-		vk.MapMemory(
-			device,
-			scenes[sceneIndex].lightBuffers[i].memory,
-			0,
-			vk.DeviceSize(size_of(LightData) * len(scenes[sceneIndex].pointLights)),
-			{},
-			&scenes[sceneIndex].lightBuffers[i].mapped,
-		)
-	}
 }
 
 
@@ -2581,27 +2502,92 @@ loadSceneAssets :: proc(
 ) -> (
 	err: LoadSceneError = .None,
 ) {
-	loadModels(graphicsContext, sceneIndex, scenes[sceneIndex].modelPaths[:])
+	scene := &scenes[sceneIndex]
+	loadModels(graphicsContext, sceneIndex, scene.modelPaths[:])
 
-	createVertexBuffer(graphicsContext, sceneIndex)
-	createIndexBuffer(graphicsContext, sceneIndex)
+	loadBufferToGPU(
+		graphicsContext,
+		size_of(Vertex) * len(scene.vertices),
+		raw_data(scene.vertices),
+		&scene.vertexBuffer,
+		.VERTEX_BUFFER,
+	)
+	loadBufferToGPU(
+		graphicsContext,
+		size_of(u32) * len(scene.indices),
+		raw_data(scene.indices),
+		&scene.indexBuffer,
+		.INDEX_BUFFER,
+	)
 
-	loadTextures(graphicsContext, &scenes[sceneIndex].textures, scenes[sceneIndex].texturePaths[:])
-	loadTextures(graphicsContext, &scenes[sceneIndex].normals, scenes[sceneIndex].normalPaths[:])
+	loadTextures(graphicsContext, &scene.textures, scene.texturePaths[:])
+	loadTextures(graphicsContext, &scene.normals, scene.normalPaths[:])
 
-	for &instance in scenes[sceneIndex].instances {
-		skeletonLength := len(scenes[sceneIndex].models[instance.modelID].skeleton)
-		scenes[sceneIndex].boneCount += skeletonLength
+	for &instance in scene.instances {
+		skeletonLength := len(scene.models[instance.modelID].skeleton)
+		scene.boneCount += skeletonLength
 		instance.positionKeys = make([]u32, skeletonLength)
 		instance.rotationKeys = make([]u32, skeletonLength)
 		instance.scaleKeys = make([]u32, skeletonLength)
 		instance.animTimer = 0.0
 	}
-	scenes[sceneIndex].boneCount += 1
+	scene.boneCount += 1
 
-	createInstanceBuffer(graphicsContext, sceneIndex)
-	createBoneBuffer(graphicsContext, sceneIndex)
-	createLightBuffer(graphicsContext, sceneIndex)
+	instanceBufferSize := size_of(Instance) * len(scene.instances)
+	boneBufferSize := size_of(Mat4) * scene.boneCount
+	lightBufferSize := size_of(LightData) * len(scene.pointLights)
+	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		createBuffer(
+			graphicsContext,
+			instanceBufferSize,
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&scene.instanceBuffers[i].buffer,
+			&scene.instanceBuffers[i].memory,
+		)
+		vk.MapMemory(
+			device,
+			scene.instanceBuffers[i].memory,
+			0,
+			vk.DeviceSize(instanceBufferSize),
+			{},
+			&scene.instanceBuffers[i].mapped,
+		)
+
+		createBuffer(
+			graphicsContext,
+			boneBufferSize,
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&scene.boneBuffers[i].buffer,
+			&scene.boneBuffers[i].memory,
+		)
+		vk.MapMemory(
+			device,
+			scene.boneBuffers[i].memory,
+			0,
+			vk.DeviceSize(boneBufferSize),
+			{},
+			&scene.boneBuffers[i].mapped,
+		)
+
+		createBuffer(
+			graphicsContext,
+			lightBufferSize,
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&scene.lightBuffers[i].buffer,
+			&scene.lightBuffers[i].memory,
+		)
+		vk.MapMemory(
+			device,
+			scene.lightBuffers[i].memory,
+			0,
+			vk.DeviceSize(lightBufferSize),
+			{},
+			&scene.lightBuffers[i].mapped,
+		)
+	}
 	createShadowImage(graphicsContext, sceneIndex)
 	return
 }
@@ -2724,7 +2710,7 @@ saveScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 		}
 	}
 
-	json_data, err := json.marshal(sceneInfo, {pretty = true, use_enum_names = true})
+	json_data, err := json.marshal(sceneInfo, {pretty = true})
 	if err != nil {
 		panic("Couldn't marshal data")
 	}
@@ -3440,43 +3426,44 @@ updateComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 
 @(private = "file")
 updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	scene := &scenes[activeScene]
 	instanceBufferInfo: vk.DescriptorBufferInfo = {
 		offset = 0,
-		range  = vk.DeviceSize(size_of(InstanceInfo) * len(scenes[sceneIndex].instances)),
+		range  = vk.DeviceSize(size_of(InstanceInfo) * len(scene.instances)),
 	}
 
 	boneBufferInfo: vk.DescriptorBufferInfo = {
 		offset = 0,
-		range  = vk.DeviceSize(size_of(Mat4) * scenes[sceneIndex].boneCount),
+		range  = vk.DeviceSize(size_of(Mat4) * scene.boneCount),
 	}
 
 	lightsBufferInfo: vk.DescriptorBufferInfo = {
 		offset = 0,
-		range  = vk.DeviceSize(size_of(LightData) * len(scenes[sceneIndex].pointLights)),
+		range  = vk.DeviceSize(size_of(LightData) * len(scene.pointLights)),
 	}
 
 	textureInfo: vk.DescriptorImageInfo = {
-		sampler     = samplers[scenes[sceneIndex].textures.sampler],
-		imageView   = scenes[sceneIndex].textures.view,
+		sampler     = samplers[scene.textures.sampler],
+		imageView   = scene.textures.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
 
 	normalInfo: vk.DescriptorImageInfo = {
-		sampler     = samplers[scenes[sceneIndex].normals.sampler],
-		imageView   = scenes[sceneIndex].normals.view,
+		sampler     = samplers[scene.normals.sampler],
+		imageView   = scene.normals.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
 
 	shadowInfo: vk.DescriptorImageInfo = {
-		sampler     = samplers[scenes[sceneIndex].shadowImages.sampler],
-		imageView   = scenes[sceneIndex].shadowImages.view,
+		sampler     = samplers[scene.shadowImages.sampler],
+		imageView   = scene.shadowImages.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
 
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		instanceBufferInfo.buffer = scenes[sceneIndex].instanceBuffers[index].buffer
-		boneBufferInfo.buffer = scenes[sceneIndex].boneBuffers[index].buffer
-		lightsBufferInfo.buffer = scenes[sceneIndex].lightBuffers[index].buffer
+		instanceBufferInfo.buffer = scene.instanceBuffers[index].buffer
+		boneBufferInfo.buffer = scene.boneBuffers[index].buffer
+		lightsBufferInfo.buffer = scene.lightBuffers[index].buffer
 		descriptorWrites: []vk.WriteDescriptorSet = {
 			{
 				sType = .WRITE_DESCRIPTOR_SET,
@@ -3609,6 +3596,107 @@ updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, scene
 		)
 	}
 }
+
+@(private = "file")
+updateSceneLights :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	scene := &scenes[sceneIndex]
+	cleanupImage(graphicsContext, &scene.shadowImages)
+	createShadowImage(graphicsContext, sceneIndex)
+	
+	bufferSize := size_of(LightData) * len(scene.pointLights)
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		vk.DestroyBuffer(device, scene.lightBuffers[index].buffer, nil)
+		vk.FreeMemory(device, scene.lightBuffers[index].memory, nil)
+		createBuffer(
+			graphicsContext,
+			bufferSize,
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&scene.lightBuffers[index].buffer,
+			&scene.lightBuffers[index].memory,
+		)
+		vk.MapMemory(
+			device,
+			scene.lightBuffers[index].memory,
+			0,
+			vk.DeviceSize(bufferSize),
+			{},
+			&scene.lightBuffers[index].mapped,
+		)
+	}
+
+	shadowImageInfo: vk.DescriptorImageInfo = {
+		sampler     = samplers[scene.shadowImages.sampler],
+		imageView   = scene.shadowImages.view,
+		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+	}
+
+	lightsBufferInfo: vk.DescriptorBufferInfo = {
+		offset = 0,
+		range  = vk.DeviceSize(size_of(LightData) * len(scene.pointLights)),
+	}
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		lightsBufferInfo.buffer = scene.lightBuffers[index].buffer
+		descriptorWrites: []vk.WriteDescriptorSet = {
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.SHADOW].descriptorSets[index],
+				dstBinding = 2,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &lightsBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding = 3,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &lightsBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding = 6,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .COMBINED_IMAGE_SAMPLER,
+				pImageInfo = &shadowImageInfo,
+				pBufferInfo = nil,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.POST].descriptorSets[index],
+				dstBinding = 4,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &lightsBufferInfo,
+				pTexelBufferView = nil,
+			},
+		}
+		vk.UpdateDescriptorSets(
+			device,
+			u32(len(descriptorWrites)),
+			raw_data(descriptorWrites),
+			0,
+			nil,
+		)
+	}
+}
+
 
 // ###################################################################
 // #                         Frame Resources                         #
@@ -4592,7 +4680,10 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 
 	imguiData.uiContext = imgui.CreateContext()
 	io := imgui.GetIO()
-	imgui.StyleColorsDark()
+	when !ODIN_DEBUG {
+		io.ConfigDebugHighlightIdConflicts = false
+	}
+	imgui.StyleColorsClassic()
 
 	implVulkan.LoadFunctions(
 		proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
@@ -5498,6 +5589,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 				setActiveScene(graphicsContext, u32(len(scenes) - 1))
 			}
 			if imgui.MenuItem("Load") {
+				unsetGLFWCallbacks(graphicsContext)
 				ImFD.Open(
 					"SceneOpenDialog",
 					"Open a scene",
@@ -5508,6 +5600,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			}
 			if imgui.MenuItem("Save") {
 				if scenes[activeScene].filePath == "" {
+					unsetGLFWCallbacks(graphicsContext)
 					ImFD.Save(
 						"SceneSaveDialog",
 						"Save Scene",
@@ -5519,6 +5612,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 				}
 			}
 			if imgui.MenuItem("Save AS...") {
+				unsetGLFWCallbacks(graphicsContext)
 				ImFD.Save(
 					"SceneSaveDialog",
 					"Save Scene",
@@ -5535,17 +5629,18 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 
 	constructCamerasHeader :: proc(using graphicsContext: ^GraphicsContext) {
-		for &camera, index in scenes[activeScene].cameras {
+		scene := &scenes[activeScene]
+		for &camera, index in scene.cameras {
 			if !imgui.TreeNode(camera.name) {
 				continue
 			}
-			active := u32(index) == scenes[activeScene].activeCamera
+			active := u32(index) == scene.activeCamera
 			imgui.Checkbox("Active", &active)
 			if active {
-				scenes[activeScene].activeCamera = u32(index)
+				scene.activeCamera = u32(index)
 			}
-			imgui.InputFloat3("Position", &camera.eye)
-			imgui.InputFloat("FOV", &camera.fov)
+			imgui.DragFloat3("Position", &camera.eye, 0.001)
+			imgui.DragFloat("FOV", &camera.fov, 0.5)
 			imgui.Text("Camera Mode:")
 			if imgui.RadioButton("Perspective", camera.mode == .PERSPECTIVE) {
 				camera.mode = .PERSPECTIVE
@@ -5553,21 +5648,42 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			if imgui.RadioButton("Orthographic", camera.mode == .ORTHOGRAPHIC) {
 				camera.mode = .ORTHOGRAPHIC
 			}
+			imgui.BeginDisabled(len(scene.cameras) == 1)
+			if imgui.Button("Delete") {
+				delete(camera.name)
+				unordered_remove(&scene.cameras, index)
+				if active && index == len(scene.cameras) {
+					scene.activeCamera = 0
+				}
+			}
+			imgui.EndDisabled()
 			imgui.TreePop()
 		}
 	}
 
 	constructLightsHeader :: proc(using graphicsContext: ^GraphicsContext) {
-		for &light in scenes[activeScene].pointLights {
+		scene := &scenes[activeScene]
+		for i := len(scene.pointLights) - 1; i >= 0; i -= 1 {
+			light := &scene.pointLights[i]
 			if !imgui.TreeNode(light.name) {
 				continue
 			}
-			imgui.InputFloat3("Position", &light.position)
-			imgui.InputFloat3("Colour", &light.colourIntensity)
-			imgui.InputFloat("FOV", &light.fov)
+			imgui.DragFloat3("Position", &light.position, 0.001)
+			imgui.DragFloat3("Colour", &light.colourIntensity, 0.001)
+			imgui.DragFloat("FOV", &light.fov, 1)
 			imgui.Text("Movement")
-			imgui.InputFloat("Degrees", &light.rotationAngle)
-			imgui.InputFloat3("Axis", &light.rotationAxis)
+			imgui.DragFloat("Degrees", &light.rotationAngle, 0.001)
+			imgui.DragFloat3("Axis", &light.rotationAxis, 0.001)
+			imgui.BeginDisabled(len(scene.pointLights) == 1)
+			if imgui.Button("Delete") {
+				if vk.DeviceWaitIdle(device) != .SUCCESS {
+					panic("Failed to wait for device?")
+				}
+				delete(light.name)
+				unordered_remove(&scene.pointLights, i)
+				updateSceneLights(graphicsContext, activeScene)
+			}
+			imgui.EndDisabled()
 			imgui.TreePop()
 		}
 	}
@@ -5577,14 +5693,15 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			if !imgui.TreeNode(instance.name) {
 				continue
 			}
-			imgui.InputFloat3("Position", &instance.position)
-			imgui.InputFloat3("Rotation", &instance.rotation)
-			imgui.InputFloat3("Scale", &instance.scale)
+			imgui.DragFloat3("Position", &instance.position, 0.001)
+			imgui.DragFloat3("Rotation", &instance.rotation, 0.001)
+			imgui.DragFloat3("Scale", &instance.scale, 0.001)
 			imgui.TreePop()
 		}
 	}
 
 	constructSceneEditor :: proc(using graphicsContext: ^GraphicsContext) {
+		scene := &scenes[activeScene]
 		if imgui.BeginMenuBar() {
 			constructMenuBar(graphicsContext)
 			imgui.EndMenuBar()
@@ -5594,25 +5711,53 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			paused = !paused
 		}
 
-		if imgui.BeginCombo("Scene Selection", scenes[activeScene].name) {
-			for &scene, index in scenes {
-				if activeScene != u32(index) && imgui.Selectable(scene.name, false) {
+		if imgui.BeginCombo("Scene Selection", scene.name) {
+			for &s, index in scenes {
+				if activeScene != u32(index) && imgui.Selectable(s.name, false) {
 					setActiveScene(graphicsContext, u32(index))
 				}
 			}
 			imgui.EndCombo()
 		}
 
-		imgui.InputInt4("Clear Colour", &scenes[activeScene].clearColour)
+		imgui.DragInt4("Clear Colour", &scene.clearColour)
 
-		imgui.InputFloat("Ambient Light", &scenes[activeScene].ambientLight)
+		imgui.DragFloat("Ambient Light", &scene.ambientLight, 0.0001)
 
 		if imgui.CollapsingHeader("Cameras") {
 			constructCamerasHeader(graphicsContext)
+			if imgui.Button("Add New") {
+				newCamera: Camera = {
+					name     = strings.clone_to_cstring("new"),
+					eye      = {0.0, 0.2, -0.4},
+					center   = {0.0, 0.0, 0.0},
+					up       = {0.0, 1.0, 0.0},
+					distance = 1.0,
+					fov      = 45.0,
+					mode     = .PERSPECTIVE,
+				}
+				append(&scene.cameras, newCamera)
+			}
 		}
 
 		if imgui.CollapsingHeader("Lights") {
 			constructLightsHeader(graphicsContext)
+			if imgui.Button("Add New") {
+				if vk.DeviceWaitIdle(device) != .SUCCESS {
+					panic("Failed to wait for device?")
+				}
+				newLight: PointLight = {
+					name            = strings.clone_to_cstring("new light"),
+					position        = {0, 2, 0},
+					direction       = {0, -1, 0},
+					colourIntensity = {1, 1, 1},
+					fov             = 120.0,
+					rotationAngle   = 0,
+					rotationAxis    = {0, 1, 0},
+				}
+				append(&scene.pointLights, newLight)
+				updateSceneLights(graphicsContext, activeScene)
+			}
 		}
 
 		if imgui.CollapsingHeader("Objects") {
@@ -5643,6 +5788,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			index, err := loadScene(graphicsContext, string(file))
 			setActiveScene(graphicsContext, index)
 		}
+		setGLFWCallbacks(graphicsContext)
 		ImFD.Close()
 	}
 	if ImFD.IsDone("SceneSaveDialog") {
@@ -5651,6 +5797,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			scenes[activeScene].filePath = string(file)
 			saveScene(graphicsContext, activeScene)
 		}
+		setGLFWCallbacks(graphicsContext)
 		ImFD.Close()
 	}
 }

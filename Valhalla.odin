@@ -108,7 +108,7 @@ main :: proc() {
 				log.log(.Warning, "Failed to load texture file")
 		}
 	}
-	defer clanupVkGraphics(&graphicsContext)
+	defer cleanupVkGraphics(&graphicsContext)
 
 	glfw.SetWindowUserPointer(graphicsContext.window, &graphicsContext)
 
