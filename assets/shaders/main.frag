@@ -82,6 +82,5 @@ void main() {
         cumulativeColour += albedo * shadow * lambertainCoefficient * lightBuffer.lights[i].colourIntensity.xyz / lightSquareDistance;
     }
     cumulativeColour = clamp(cumulativeColour, albedo * pushConstant.ambientLight, albedo * 10);
-    cumulativeColour = pow(cumulativeColour, vec3(1 / 2.2));
     outColour =  vec4(cumulativeColour, 1.0);
 }

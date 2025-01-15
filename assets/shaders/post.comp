@@ -40,5 +40,5 @@ void main() {
         }
     }
 
-    imageStore(outImage, ivec2(x, y), colour);
+    imageStore(outImage, ivec2(x, y), pow(colour, vec4(1 / 2.2)));
 }
