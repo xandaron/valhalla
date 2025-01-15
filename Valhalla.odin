@@ -98,20 +98,17 @@ main :: proc() {
 
 	graphicsContext: GraphicsContext
 	engineState.graphicsContext = &graphicsContext
-	initVkGraphics(&graphicsContext)
+	if err := initVkGraphics(&graphicsContext, "./assets/scenes/shambler.json"); err != .None {
+		#partial switch err {
+			case .FailedToLoadSceneFile:
+				log.log(.Warning, "Failed to load scene file")
+			case .FailedToLoadModel:
+			case .FailedToLoadTexture:
+		}
+	}
 	defer clanupVkGraphics(&graphicsContext)
 
 	glfw.SetWindowUserPointer(graphicsContext.window, &graphicsContext)
-
-	if _, err := loadScene(&graphicsContext, "./assets/scenes/shambler.json"); err != .None {
-		log.logf(.Fatal, "Failed to load scene: {}", err)
-		panic("Failed to load scene")
-	}
-
-	if _, err := loadScene(&graphicsContext, "./assets/scenes/bunny_box.json"); err != .None {
-		log.logf(.Fatal, "Failed to load scene: {}", err)
-		panic("Failed to load scene")
-	}
 
 	setActiveScene(&graphicsContext, 0)
 

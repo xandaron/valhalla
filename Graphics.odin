@@ -288,22 +288,22 @@ Scene :: struct {
 	clearColour:     [4]i32,
 
 	// Scene
-	instances:       []Instance,
-	pointLights:     []PointLight,
-	cameras:         []Camera,
+	instances:       [dynamic]Instance,
+	pointLights:     [dynamic]PointLight,
+	cameras:         [dynamic]Camera,
 	activeCamera:    u32,
 
 	// Assets
-	modelPaths:      []cstring,
-	models:          []Model,
-	texturePaths:    []cstring,
+	modelPaths:      [dynamic]cstring,
+	models:          [dynamic]Model,
+	texturePaths:    [dynamic]cstring,
 	textures:        Image,
 	textureCount:    u32,
-	normalPaths:     []cstring,
+	normalPaths:     [dynamic]cstring,
 	normals:         Image,
 	normalsCount:    u32,
-	vertices:        []Vertex,
-	indices:         []u32,
+	vertices:        [dynamic]Vertex,
+	indices:         [dynamic]u32,
 	boneCount:       int,
 	shadowImages:    Image,
 
@@ -391,7 +391,12 @@ GraphicsContext :: struct {
 // ###################################################################
 
 
-initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
+initVkGraphics :: proc(
+	using graphicsContext: ^GraphicsContext,
+	sceneFile: string = "",
+) -> (
+	err: LoadSceneError = .None,
+) {
 	when ODIN_DEBUG {
 		glfw.SetErrorCallback(glfwErrorCallback)
 	}
@@ -443,6 +448,17 @@ initVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	framebufferResized = false
 	currentFrame = 0
 	scenes = make([dynamic]Scene)
+
+	if sceneFile == "" {
+		createNewScene(graphicsContext)
+	} else {
+		_, err = loadScene(graphicsContext, sceneFile)
+		if err == .FailedToLoadSceneFile {
+			createNewScene(graphicsContext)
+		}
+	}
+	setActiveScene(graphicsContext, 0)
+	return
 }
 
 @(private = "file")
@@ -909,7 +925,8 @@ createLogicalDevice :: proc(using graphicsContext: ^GraphicsContext) {
 createSwapchain :: proc(using graphicsContext: ^GraphicsContext) {
 	chooseFormat :: proc(formats: []vk.SurfaceFormatKHR) -> vk.SurfaceFormatKHR {
 		for format in formats {
-			if (format.format == .B8G8R8A8_UNORM || format.format == .R8G8B8A8_UNORM) && format.colorSpace == .SRGB_NONLINEAR {
+			if (format.format == .B8G8R8A8_UNORM || format.format == .R8G8B8A8_UNORM) &&
+			   format.colorSpace == .SRGB_NONLINEAR {
 				return format
 			}
 		}
@@ -1989,53 +2006,18 @@ loadModels :: proc(
 	scene := &scenes[sceneIndex]
 
 	modelOffset := len(scene.models)
-	modelCount := modelOffset + len(modelPaths)
-	newModels := make([]Model, modelCount)
-	for &model, index in scene.models {
-		newModels[index] = model
-	}
-	scene.models = newModels
+	resize(&scene.models, len(scene.models) + len(modelPaths))
 
-	vertexCount, indexCount := u32(len(scene.vertices)), u32(len(scene.indices))
-	vertexIndex, indiceIndex := vertexCount, indexCount
 	for path, index in modelPaths {
-		loadFBX(graphicsContext, &scene.models[modelOffset + index], path)
+		vertexCount, indexCount := u32(len(scene.vertices)), u32(len(scene.indices))
+		sceneIndex := modelOffset + index
+		loadFBX(graphicsContext, &scene.models[sceneIndex], path)
 
-		scene.models[modelOffset + index].vertexOffset = vertexCount
-		scene.models[modelOffset + index].indexOffset = indexCount
+		scene.models[sceneIndex].vertexOffset = vertexCount
+		scene.models[sceneIndex].indexOffset = indexCount
 
-		vertexCount += u32(len(scene.models[modelOffset + index].vertices))
-		indexCount += u32(len(scene.models[modelOffset + index].indices))
-	}
-
-	newVertices := make([]Vertex, vertexCount)
-
-	for &vertex, index in scene.vertices {
-		newVertices[index] = vertex
-	}
-	delete(scene.vertices)
-	scene.vertices = newVertices
-
-	newIndices := make([]u32, indexCount)
-	for &indice, index in scene.indices {
-		newIndices[index] = indice
-	}
-	delete(scene.indices)
-	scene.indices = newIndices
-
-
-	for modelIndex in modelOffset ..< modelCount {
-		model := &scene.models[modelIndex]
-
-		for &vertex in model.vertices {
-			scene.vertices[vertexIndex] = vertex
-			vertexIndex += 1
-		}
-
-		for &indice in model.indices {
-			scene.indices[indiceIndex] = indice
-			indiceIndex += 1
-		}
+		append(&scene.vertices, ..scene.models[sceneIndex].vertices)
+		append(&scene.indices, ..scene.models[sceneIndex].indices)
 	}
 }
 
@@ -2478,6 +2460,102 @@ LoadSceneError :: enum {
 	FailedToLoadTexture,
 }
 
+@(private = "file")
+loadSceneAssets :: proc(
+	using graphicsContext: ^GraphicsContext,
+	sceneIndex: u32,
+) -> (
+	err: LoadSceneError = .None,
+) {
+	loadModels(graphicsContext, sceneIndex, scenes[sceneIndex].modelPaths[:])
+
+	createVertexBuffer(graphicsContext, sceneIndex)
+	createIndexBuffer(graphicsContext, sceneIndex)
+
+	loadTextures(graphicsContext, &scenes[sceneIndex].textures, scenes[sceneIndex].texturePaths[:])
+	loadTextures(graphicsContext, &scenes[sceneIndex].normals, scenes[sceneIndex].normalPaths[:])
+
+	for &instance in scenes[sceneIndex].instances {
+		skeletonLength := len(scenes[sceneIndex].models[instance.modelID].skeleton)
+		scenes[sceneIndex].boneCount += skeletonLength
+		instance.positionKeys = make([]u32, skeletonLength)
+		instance.rotationKeys = make([]u32, skeletonLength)
+		instance.scaleKeys = make([]u32, skeletonLength)
+		instance.animTimer = 0.0
+	}
+	scenes[sceneIndex].boneCount += 1
+
+	createInstanceBuffer(graphicsContext, sceneIndex)
+	createBoneBuffer(graphicsContext, sceneIndex)
+	createLightBuffer(graphicsContext, sceneIndex)
+	createShadowImage(graphicsContext, sceneIndex)
+	return
+}
+
+@(private = "file")
+createNewScene :: proc(using graphicsContext: ^GraphicsContext) {
+	index := u32(len(scenes))
+
+	scene: Scene
+
+	scene.name = strings.clone_to_cstring("New Scene")
+	scene.clearColour = {150, 150, 150, 255}
+
+	scene.instances = make([dynamic]Instance, 1)
+	scene.instances[0] = {
+		name = strings.clone_to_cstring("cube"),
+		modelID = 0,
+		textureID = 0,
+		normalID = 0,
+		position = {0, 0, 0},
+		rotation = {0, 0, 0},
+		scale = {0.2, 0.2, 0.2},
+	}
+
+	scene.pointLights = make([dynamic]PointLight, 1)
+	scene.pointLights[0] = {
+		name = strings.clone_to_cstring("white light"),
+		position = {0, 2, 0},
+		direction = {0, -1, 0},
+		colourIntensity = {0.4, 0.4, 0.4},
+		fov = 120.0,
+		rotationAngle = 0,
+		rotationAxis = {0, 1, 0},
+	}
+
+	scene.cameras = make([dynamic]Camera, 1)
+	scene.cameras[0] = {
+		name = strings.clone_to_cstring("main"),
+		eye = {0.0, 0.2, -0.4},
+		center = {0.0, 0.0, 0.0},
+		up = {0.0, 1.0, 0.0},
+		distance = 1.0,
+		fov = 45.0,
+		mode = .PERSPECTIVE,
+	}
+	scene.activeCamera = 0
+
+	scene.modelPaths = make([dynamic]cstring, 1)
+	scene.modelPaths[0] = strings.clone_to_cstring("./assets/models/cube/cube.fbx")
+
+	scene.models = make([dynamic]Model)
+
+	scene.texturePaths = make([dynamic]cstring, 1)
+	scene.texturePaths[0] = strings.clone_to_cstring("./assets/textures/missing_texture.jpg")
+	scene.textureCount = 1
+
+	scene.normalPaths = make([dynamic]cstring, 1)
+	scene.normalPaths[0] = strings.clone_to_cstring("./assets/textures/normal.jpg")
+	scene.normalsCount = 1
+
+	scene.vertices = make([dynamic]Vertex)
+	scene.indices = make([dynamic]u32)
+
+	append(&scenes, scene)
+
+	loadSceneAssets(graphicsContext, index)
+}
+
 loadScene :: proc(
 	using graphicsContext: ^GraphicsContext,
 	sceneFile: string,
@@ -2506,16 +2584,21 @@ loadScene :: proc(
 
 		scene.name = strings.clone_to_cstring(root["name"].(json.String))
 
-		clearColour := root["clear_colour"].(json.Array)
-		scene.clearColour = {
-			i32(clearColour[0].(json.Float)),
-			i32(clearColour[1].(json.Float)),
-			i32(clearColour[2].(json.Float)),
-			i32(clearColour[3].(json.Float)),
+		// TODO: Should do something like this for all values. Could return malformed json error instead of using default values.
+		if value, check := root["clear_colour"]; check {
+			clearColour := value.(json.Array)
+			scene.clearColour = {
+				i32(clearColour[0].(json.Float)),
+				i32(clearColour[1].(json.Float)),
+				i32(clearColour[2].(json.Float)),
+				i32(clearColour[3].(json.Float)),
+			}
+		} else {
+			scene.clearColour = {150 / 255, 150 / 255, 150 / 255, 255 / 255}
 		}
 
 		cameras := root["cameras"].(json.Array)
-		scene.cameras = make([]Camera, len(cameras))
+		scene.cameras = make([dynamic]Camera, len(cameras))
 		for camera, i in cameras {
 			camera := camera.(json.Object)
 			eye := camera["eye"].(json.Array)
@@ -2545,7 +2628,7 @@ loadScene :: proc(
 		}
 
 		lights := root["lights"].(json.Array)
-		scene.pointLights = make([]PointLight, len(lights))
+		scene.pointLights = make([dynamic]PointLight, len(lights))
 		for light, i in lights {
 			light := light.(json.Object)
 			position := light["position"].(json.Array)
@@ -2578,25 +2661,25 @@ loadScene :: proc(
 		}
 
 		models := root["models"].(json.Array)
-		scene.modelPaths = make([]cstring, len(models))
+		scene.modelPaths = make([dynamic]cstring, len(models))
 		for model, i in models {
 			scene.modelPaths[i] = strings.clone_to_cstring(model.(json.String))
 		}
 
 		albedos := root["albedos"].(json.Array)
-		scene.texturePaths = make([]cstring, len(albedos))
+		scene.texturePaths = make([dynamic]cstring, len(albedos))
 		for texture, i in albedos {
 			scene.texturePaths[i] = strings.clone_to_cstring(texture.(json.String))
 		}
 
 		normals := root["normals"].(json.Array)
-		scene.normalPaths = make([]cstring, len(normals))
+		scene.normalPaths = make([dynamic]cstring, len(normals))
 		for normal, i in normals {
 			scene.normalPaths[i] = strings.clone_to_cstring(normal.(json.String))
 		}
 
 		instances := root["instances"].(json.Array)
-		scene.instances = make([]Instance, len(instances))
+		scene.instances = make([dynamic]Instance, len(instances))
 		for instance, i in instances {
 			instance := instance.(json.Object)
 			position := instance["position"].(json.Array)
@@ -2628,47 +2711,28 @@ loadScene :: proc(
 		return
 	}
 
-	loadSceneAssets :: proc(
-		using graphicsContext: ^GraphicsContext,
-		sceneIndex: u32,
-	) -> (
-		err: LoadSceneError = .None,
-	) {
-		loadModels(graphicsContext, sceneIndex, scenes[sceneIndex].modelPaths)
-
-		createVertexBuffer(graphicsContext, sceneIndex)
-		createIndexBuffer(graphicsContext, sceneIndex)
-
-		loadTextures(graphicsContext, &scenes[sceneIndex].textures, scenes[sceneIndex].texturePaths)
-		loadTextures(graphicsContext, &scenes[sceneIndex].normals, scenes[sceneIndex].normalPaths)
-
-		for &instance in scenes[sceneIndex].instances {
-			skeletonLength := len(scenes[sceneIndex].models[instance.modelID].skeleton)
-			scenes[sceneIndex].boneCount += skeletonLength
-			instance.positionKeys = make([]u32, skeletonLength)
-			instance.rotationKeys = make([]u32, skeletonLength)
-			instance.scaleKeys = make([]u32, skeletonLength)
-			instance.animTimer = 0.0
-		}
-		scenes[sceneIndex].boneCount += 1
-
-		createInstanceBuffer(graphicsContext, sceneIndex)
-		createBoneBuffer(graphicsContext, sceneIndex)
-		createLightBuffer(graphicsContext, sceneIndex)
-		createShadowImage(graphicsContext, sceneIndex)
-		return
-	}
-
 	index = u32(len(scenes))
 	scene: Scene
 
+	scene.instances = make([dynamic]Instance)
+	scene.pointLights = make([dynamic]PointLight)
+	scene.cameras = make([dynamic]Camera)
+	scene.modelPaths = make([dynamic]cstring)
+	scene.models = make([dynamic]Model)
+	scene.texturePaths = make([dynamic]cstring)
+	scene.normalPaths = make([dynamic]cstring)
+	scene.vertices = make([dynamic]Vertex)
+	scene.indices = make([dynamic]u32)
+
 	if scene, err = parseJSON(sceneFile); err != .None {
+		// TODO: should load empty/new scene if json malformed/file doesnt exist.
 		panic("Couldn't parse file")
 	}
 
 	append(&scenes, scene)
 
 	if err = loadSceneAssets(graphicsContext, index); err != .None {
+		// TODO: This error should just be info not crashing. Should handle files not existing by using a replacement texture/model?
 		panic("Load error")
 	}
 	return
@@ -4599,7 +4663,9 @@ updateLightBuffer :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 }
 
 @(private = "file")
-updateUniformBuffer :: proc(using graphicsContext: ^GraphicsContext, camera: Camera) {
+updateUniformBuffer :: proc(using graphicsContext: ^GraphicsContext) {
+	scene := scenes[activeScene]
+	camera := scene.cameras[scene.activeCamera]
 	view := lookAt(camera.eye, camera.center, camera.up)
 	projection: Mat4
 	if camera.mode == .PERSPECTIVE {
@@ -5302,6 +5368,10 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 		if imgui.BeginMenuBar() {
 			if imgui.BeginMenu("File") {
 				imgui.SeparatorText("Scene Files")
+				if imgui.MenuItem("New") {
+					createNewScene(graphicsContext)
+					setActiveScene(graphicsContext, u32(len(scenes) - 1))
+				}
 				if imgui.MenuItem("Load") {
 					ImFD.Open(
 						"TextureOpenDialog",
@@ -5406,10 +5476,7 @@ drawFrame :: proc(using graphicsContext: ^GraphicsContext, delta: f32) {
 		drawUI(graphicsContext)
 	}
 
-	updateUniformBuffer(
-		graphicsContext,
-		scenes[activeScene].cameras[scenes[activeScene].activeCamera],
-	)
+	updateUniformBuffer(graphicsContext)
 	updateLightBuffer(graphicsContext, delta)
 	updateInstanceBuffer(graphicsContext, delta)
 
@@ -5631,7 +5698,7 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	unordered_remove(&scenes, sceneIndex)
 
 	if len(scenes) == 0 {
-		// TODO: Need some sort of "empty"/"new" scene
+		createNewScene(graphicsContext)
 	}
 }
 
