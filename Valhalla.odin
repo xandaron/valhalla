@@ -35,6 +35,7 @@ showMetrics := false
 
 EngineState :: struct {
 	graphicsContext: ^GraphicsContext,
+	inMenu:          bool,
 }
 
 engineState: EngineState
@@ -110,7 +111,7 @@ main :: proc() {
 	}
 	defer cleanupVkGraphics(&graphicsContext)
 
-	glfw.SetWindowUserPointer(graphicsContext.window, &graphicsContext)
+	glfw.SetWindowUserPointer(graphicsContext.window, &engineState)
 
 	setActiveScene(&graphicsContext, 0)
 
@@ -190,9 +191,11 @@ calcFrameRate :: proc(window: glfw.WindowHandle) {
 	}
 }
 
-keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
+glfwKeyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	context = runtime.default_context()
 	context.logger = logger
+	engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
+	if engineState.inMenu do return
 	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, glfw.TRUE)
 	}
@@ -265,6 +268,8 @@ keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods:
 }
 
 glfwMouseButtonCallback :: proc "c" (window: glfw.WindowHandle, button, action, mods: i32) {
+	engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
+	if engineState.inMenu do return
 	if button == glfw.MOUSE_BUTTON_MIDDLE && action == glfw.PRESS {
 		if mouseMode {
 			glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_NORMAL)
@@ -276,6 +281,8 @@ glfwMouseButtonCallback :: proc "c" (window: glfw.WindowHandle, button, action, 
 }
 
 glfwCursorPosCallback :: proc "c" (window: glfw.WindowHandle, xpos, ypos: f64) {
+	engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
+	if engineState.inMenu do return
 	newPos: f64Vec2 = {xpos, ypos} * mouseSensitivity
 	vector1 := mousePos
 	mouseDelta = newPos - vector1
@@ -283,10 +290,12 @@ glfwCursorPosCallback :: proc "c" (window: glfw.WindowHandle, xpos, ypos: f64) {
 }
 
 glfwScrollCallback :: proc "c" (window: glfw.WindowHandle, xoffset, yoffset: f64) {
+	engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
+	if engineState.inMenu do return
 	scrollDelta = {xoffset, yoffset}
 }
 
 framebufferResizeCallback :: proc "c" (window: glfw.WindowHandle, width: i32, height: i32) {
-	graphicsContext := (^GraphicsContext)(glfw.GetWindowUserPointer(window))
-	graphicsContext.framebufferResized = true
+	engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
+	engineState.graphicsContext.framebufferResized = true
 }

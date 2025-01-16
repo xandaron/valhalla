@@ -5,17 +5,17 @@ import "vendor:stb/image"
 
 when ODIN_OS == .Windows {
     @(require) foreign import advapi32 "system:advapi32.lib"
-	when ODIN_ARCH == .amd64 {foreign import lib "ImFileDialog_windows_x64.lib"} else {foreign import lib "ImFileDialog_windows_arm64.lib"}
+	when ODIN_ARCH == .amd64 {foreign import lib "ImFileDialog-windows_x64.lib"} else {foreign import lib "ImFileDialog-windows_arm64.lib"}
 } else when ODIN_OS == .Linux {
 	@(require) foreign import stdcpp "system:stdc++"
-	when ODIN_ARCH == .amd64 {foreign import lib "ImFileDialog_linux_x64.a"} else {foreign import lib "ImFileDialog_linux_arm64.a"}
+	when ODIN_ARCH == .amd64 {foreign import lib "ImFileDialog-linux_x64.a"} else {foreign import lib "ImFileDialog-linux_arm64.a"}
 }
 else when ODIN_OS == .Darwin {
 	@(require) foreign import stdcpp "system:c++"
-	when ODIN_ARCH == .amd64 {foreign import lib "ImFileDialog_mac_x64.a"} else {foreign import lib "ImFileDialog_mac_arm64.a"}
+	when ODIN_ARCH == .amd64 {foreign import lib "ImFileDialog-mac_x64.a"} else {foreign import lib "ImFileDialog-mac_arm64.a"}
 }
 
-CreateTexture :: #type proc "system" (data: [^]c.uint8_t, width, height: c.int, format: c.char) -> rawptr
+CreateTexture :: #type proc "system" (data: ^c.uint8_t, width, height: c.int, format: c.char) -> rawptr
 DeleteTexture :: #type proc "system" (imagePtr: rawptr)
 
 @(default_calling_convention = "system")
@@ -37,7 +37,11 @@ foreign lib {
 
 	GetResult :: proc() -> cstring ---
 
+	FreeResult :: proc() ---
+
 	GetResults :: proc(count: ^c.int) -> [^]cstring ---
+
+	FreeResults :: proc() ---
 
 	Close :: proc() ---
 

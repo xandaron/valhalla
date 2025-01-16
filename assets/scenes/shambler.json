@@ -58,16 +58,14 @@
 		}
 	],
 	"models": [
-		"./assets/models/zombie/model.fbx",
-		"./assets/models/cube/cube.fbx"
+		"./assets/models/zombie/model.fbx"
 	],
 	"textures": [
 		"./assets/models/zombie/albedo.png",
 		"./assets/textures/white.jpg"
 	],
 	"normals": [
-		"./assets/models/zombie/normal.png",
-		"./assets/textures/normal.jpg"
+		"./assets/models/zombie/normal.png"
 	],
 	"instances": [
 		{
@@ -93,9 +91,9 @@
 		},
 		{
 			"name": "Floor",
-			"model": 1,
+			"model": -1,
 			"texture": 1,
-			"normal": 1,
+			"normal": -1,
 			"position": [
 				0.00000000,
 				-0.10000000,

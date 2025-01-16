@@ -305,7 +305,7 @@ Scene :: struct {
 	textureCount:    u32,
 	normalPaths:     [dynamic]cstring,
 	normals:         Image,
-	normalsCount:    u32,
+	normalCount:     u32,
 	vertices:        [dynamic]Vertex,
 	indices:         [dynamic]u32,
 	boneCount:       int,
@@ -572,28 +572,15 @@ initWindow :: proc(using graphicsContext: ^GraphicsContext) {
 		return
 	}
 
-	setGLFWCallbacks(graphicsContext)
+	glfw.SetKeyCallback(window, glfwKeyCallback)
+	glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
+	glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
+	glfw.SetScrollCallback(window, glfwScrollCallback)
 	glfw.SetFramebufferSizeCallback(window, framebufferResizeCallback)
 	if glfw.CreateWindowSurface(instance, window, nil, &surface) != .SUCCESS {
 		log.log(.Fatal, "Failed to create surface!")
 		panic("Failed to create surface!")
 	}
-}
-
-@(private = "file")
-setGLFWCallbacks :: proc(using graphicsContext: ^GraphicsContext) {
-	glfw.SetKeyCallback(window, keyCallback)
-	glfw.SetMouseButtonCallback(window, glfwMouseButtonCallback)
-	glfw.SetCursorPosCallback(window, glfwCursorPosCallback)
-	glfw.SetScrollCallback(window, glfwScrollCallback)
-}
-
-@(private = "file")
-unsetGLFWCallbacks :: proc(using graphicsContext: ^GraphicsContext) {
-	glfw.SetKeyCallback(window, nil)
-	glfw.SetMouseButtonCallback(window, nil)
-	glfw.SetCursorPosCallback(window, nil)
-	glfw.SetScrollCallback(window, nil)
 }
 
 cleanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
@@ -1724,10 +1711,16 @@ copyImage :: proc(
 upscaleImage :: proc(
 	commandBuffer: vk.CommandBuffer,
 	src, dst: vk.Image,
-	srcSize, dstSize: vk.Extent3D,
+	srcSize, dstSize: vk.Extent2D,
+	srcLayer, dstLayer: u32,
 ) {
 	blit: vk.ImageBlit = {
-		srcSubresource = {aspectMask = {.COLOR}, mipLevel = 0, baseArrayLayer = 0, layerCount = 1},
+		srcSubresource = {
+			aspectMask = {.COLOR},
+			mipLevel = 0,
+			baseArrayLayer = srcLayer,
+			layerCount = 1,
+		},
 		srcOffsets = {
 			{x = 0, y = 0, z = 0},
 			{x = i32(srcSize.width), y = i32(srcSize.height), z = 1},
@@ -1735,7 +1728,7 @@ upscaleImage :: proc(
 		dstSubresource = {
 			aspectMask = {.COLOR},
 			mipLevel = 0,
-			baseArrayLayer = dstSize.depth,
+			baseArrayLayer = dstLayer,
 			layerCount = 1,
 		},
 		dstOffsets = {
@@ -2071,21 +2064,17 @@ loadModels :: proc(
 }
 
 @(private = "file")
-loadTextures :: proc(
-	using graphicsContext: ^GraphicsContext,
-	texture: ^Image,
-	texturePaths: []cstring,
-) {
-	textureCount := len(texturePaths)
-	texture.format = .R8G8B8A8_SRGB
+loadImages :: proc(using graphicsContext: ^GraphicsContext, image: ^Image, imagePaths: []cstring) {
+	imageCount := u32(len(imagePaths))
+	image.format = .R8G8B8A8_SRGB
 	createImage(
 		graphicsContext,
-		texture,
+		image,
 		{},
 		.D2,
 		u32(IMAGES_RESOLUTION.x),
 		u32(IMAGES_RESOLUTION.y),
-		u32(textureCount),
+		imageCount,
 		{._1},
 		.OPTIMAL,
 		{.TRANSFER_DST, .TRANSFER_SRC, .SAMPLED},
@@ -2099,15 +2088,15 @@ loadTextures :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		texture.vkImage,
+		image.vkImage,
 		.UNDEFINED,
 		.TRANSFER_DST_OPTIMAL,
 		{.COLOR},
-		u32(textureCount),
+		imageCount,
 	)
 	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 
-	for path, index in texturePaths {
+	for path, index in imagePaths {
 		width, height: i32
 		pixels := img.load(path, &width, &height, nil, 4)
 		defer img.image_free(pixels)
@@ -2158,7 +2147,7 @@ loadTextures :: proc(
 			vk.FreeMemory(device, stagingImage.memory, nil)
 		}
 
-		commandBuffer := beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
+		commandBuffer = beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
 		transitionImageLayout(
 			graphicsContext,
 			commandBuffer,
@@ -2191,9 +2180,11 @@ loadTextures :: proc(
 		upscaleImage(
 			commandBuffer,
 			stagingImage.vkImage,
-			texture.vkImage,
-			{u32(width), u32(height), 0},
-			{u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y), u32(index)},
+			image.vkImage,
+			{u32(width), u32(height)},
+			{u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y)},
+			0,
+			u32(index),
 		)
 		endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 	}
@@ -2202,45 +2193,47 @@ loadTextures :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		texture.vkImage,
+		image.vkImage,
 		.TRANSFER_DST_OPTIMAL,
 		.SHADER_READ_ONLY_OPTIMAL,
 		{.COLOR},
-		u32(textureCount),
+		imageCount,
 	)
 	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 
-	texture.view = createImageView(
+	image.view = createImageView(
 		graphicsContext,
-		texture.vkImage,
+		image.vkImage,
 		.D2_ARRAY,
-		texture.format,
+		image.format,
 		{.COLOR},
-		u32(textureCount),
+		imageCount,
 	)
 
-	texture.sampler = 1
+	image.sampler = 1
 }
 
-// MAKE SURE TO UPDATE THE RELEVENT DESCRIPTOR SET
-@(private = "file")
-addTextures :: proc(
+addImages :: proc(
 	using graphicsContext: ^GraphicsContext,
-	texture: ^Image,
-	textureCount: ^u32,
-	texturePaths: []cstring,
+	image: ^Image,
+	imageLayers: u32,
+	imagePaths: []cstring,
 ) {
-	newTexturesCount := u32(len(texturePaths))
-	newTexture: Image
-	newTexture.format = texture.format
+	imageCount := u32(len(imagePaths))
+
+	newImage: Image = {
+		format  = image.format,
+		sampler = image.sampler,
+	}
+
 	createImage(
 		graphicsContext,
-		&newTexture,
+		&newImage,
 		{},
 		.D2,
 		u32(IMAGES_RESOLUTION.x),
 		u32(IMAGES_RESOLUTION.y),
-		textureCount^ + newTexturesCount,
+		imageLayers + imageCount,
 		{._1},
 		.OPTIMAL,
 		{.TRANSFER_DST, .TRANSFER_SRC, .SAMPLED},
@@ -2254,67 +2247,56 @@ addTextures :: proc(
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		texture.vkImage,
+		newImage.vkImage,
+		.UNDEFINED,
+		.TRANSFER_DST_OPTIMAL,
+		{.COLOR},
+		imageLayers + imageCount,
+	)
+
+	transitionImageLayout(
+		graphicsContext,
+		commandBuffer,
+		image.vkImage,
 		.SHADER_READ_ONLY_OPTIMAL,
 		.TRANSFER_SRC_OPTIMAL,
 		{.COLOR},
-		textureCount^,
+		imageLayers,
 	)
 
-	transitionImageLayout(
-		graphicsContext,
-		commandBuffer,
-		newTexture.vkImage,
-		.UNDEFINED,
-		.TRANSFER_DST_OPTIMAL,
-		{.COLOR},
-		textureCount^ + newTexturesCount,
-	)
-
-	vk.CopyImageToImage(
-		device,
-		&vk.CopyImageToImageInfo {
-			sType = .COPY_IMAGE_TO_IMAGE_INFO,
-			pNext = nil,
-			flags = {},
-			srcImage = texture.vkImage,
-			srcImageLayout = .TRANSFER_SRC_OPTIMAL,
-			dstImage = newTexture.vkImage,
-			dstImageLayout = .TRANSFER_DST_OPTIMAL,
-			regionCount = 1,
-			pRegions = &vk.ImageCopy2 {
-				sType = .IMAGE_COPY_2,
-				pNext = nil,
-				srcSubresource = vk.ImageSubresourceLayers {
-					aspectMask = {.COLOR},
-					mipLevel = 1,
-					baseArrayLayer = 0,
-					layerCount = 1,
-				},
-				srcOffset = vk.Offset3D{0, 0, 0},
-				dstSubresource = vk.ImageSubresourceLayers {
-					aspectMask = {.COLOR},
-					mipLevel = 1,
-					baseArrayLayer = 0,
-					layerCount = 1,
-				},
-				dstOffset = vk.Offset3D{0, 0, 0},
-				extent = vk.Extent3D {
-					u32(IMAGES_RESOLUTION.x),
-					u32(IMAGES_RESOLUTION.y),
-					textureCount^,
-				},
-			},
+	copyInfo: vk.ImageCopy = {
+		srcSubresource = {
+			aspectMask = {.COLOR},
+			mipLevel = 0,
+			baseArrayLayer = 0,
+			layerCount = imageLayers,
 		},
+		srcOffset = {0, 0, 0},
+		dstSubresource = {
+			aspectMask = {.COLOR},
+			mipLevel = 0,
+			baseArrayLayer = 0,
+			layerCount = imageLayers,
+		},
+		dstOffset = {0, 0, 0},
+		extent = {u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y), 1},
+	}
+	vk.CmdCopyImage(
+		commandBuffer,
+		image.vkImage,
+		.TRANSFER_SRC_OPTIMAL,
+		newImage.vkImage,
+		.TRANSFER_DST_OPTIMAL,
+		1,
+		&copyInfo,
 	)
 	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 
-	cleanupImage(graphicsContext, texture)
+	cleanupImage(graphicsContext, image)
+	image^ = newImage
 
-	newTexture.sampler = texture.sampler
-	texture^ = newTexture
-
-	for path, index in texturePaths {
+	imageLayers := imageLayers
+	for path in imagePaths {
 		width, height: i32
 		pixels := img.load(path, &width, &height, nil, 4)
 		defer img.image_free(pixels)
@@ -2398,34 +2380,35 @@ addTextures :: proc(
 		upscaleImage(
 			commandBuffer,
 			stagingImage.vkImage,
-			texture.vkImage,
-			{u32(width), u32(height), 0},
-			{u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y), textureCount^ + u32(index)},
+			image.vkImage,
+			{u32(width), u32(height)},
+			{u32(IMAGES_RESOLUTION.x), u32(IMAGES_RESOLUTION.y)},
+			0,
+			imageLayers,
 		)
 		endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
+		imageLayers += 1
 	}
-
-	textureCount^ += newTexturesCount
 
 	commandBuffer = beginSingleTimeCommands(graphicsContext, graphicsCommandPool)
 	transitionImageLayout(
 		graphicsContext,
 		commandBuffer,
-		texture.vkImage,
+		image.vkImage,
 		.TRANSFER_DST_OPTIMAL,
 		.SHADER_READ_ONLY_OPTIMAL,
 		{.COLOR},
-		textureCount^,
+		imageLayers,
 	)
 	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 
-	texture.view = createImageView(
+	image.view = createImageView(
 		graphicsContext,
-		texture.vkImage,
+		image.vkImage,
 		.D2_ARRAY,
-		texture.format,
+		image.format,
 		{.COLOR},
-		textureCount^ + newTexturesCount,
+		imageLayers,
 	)
 }
 
@@ -2438,6 +2421,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 		{},
 	)
 
+	imageLayers := u32(len(scenes[sceneIndex].pointLights))
 	createImage(
 		graphicsContext,
 		&scenes[sceneIndex].shadowImages,
@@ -2445,7 +2429,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 		.D2,
 		u32(SHADOW_RESOLUTION.x),
 		u32(SHADOW_RESOLUTION.y),
-		u32(len(scenes[sceneIndex].pointLights)),
+		imageLayers,
 		{._1},
 		.OPTIMAL,
 		{.TRANSFER_DST, .SAMPLED},
@@ -2463,7 +2447,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 		.UNDEFINED,
 		.SHADER_READ_ONLY_OPTIMAL,
 		{.DEPTH},
-		u32(len(scenes[sceneIndex].pointLights)),
+		imageLayers,
 	)
 	endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 
@@ -2473,7 +2457,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 		.D2_ARRAY,
 		scenes[sceneIndex].shadowImages.format,
 		{.DEPTH},
-		u32(len(scenes[sceneIndex].pointLights)),
+		imageLayers,
 	)
 
 	scenes[sceneIndex].shadowImages.sampler = 0
@@ -2526,8 +2510,11 @@ loadSceneAssets :: proc(
 		.INDEX_BUFFER,
 	)
 
-	loadTextures(graphicsContext, &scene.textures, scene.texturePaths[:])
-	loadTextures(graphicsContext, &scene.normals, scene.normalPaths[:])
+	loadImages(graphicsContext, &scene.textures, scene.texturePaths[:])
+	loadImages(graphicsContext, &scene.normals, scene.normalPaths[:])
+	scene.textureCount = u32(len(scene.texturePaths))
+	scene.normalCount = u32(len(scene.normalPaths))
+
 
 	for &instance in scene.instances {
 		skeletonLength := len(scene.models[instance.modelID].skeleton)
@@ -2656,7 +2643,7 @@ createNewScene :: proc(using graphicsContext: ^GraphicsContext) {
 
 	scene.normalPaths = make([dynamic]cstring, 1)
 	scene.normalPaths[0] = strings.clone_to_cstring("./assets/textures/normal.jpg")
-	scene.normalsCount = 1
+	scene.normalCount = 1
 
 	scene.vertices = make([dynamic]Vertex)
 	scene.indices = make([dynamic]u32)
@@ -2669,9 +2656,9 @@ createNewScene :: proc(using graphicsContext: ^GraphicsContext) {
 @(private = "file")
 InstanceJSON :: struct {
 	name:     cstring,
-	model:    u32,
-	texture:  u32,
-	normal:   u32,
+	model:    i32,
+	texture:  i32,
+	normal:   i32,
 	position: Vec3,
 	rotation: Vec3,
 	scale:    Vec3,
@@ -2709,9 +2696,9 @@ saveScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	for &instance, index in scene.instances {
 		sceneInfo.instances[index] = {
 			name     = instance.name,
-			model    = instance.modelID,
-			texture  = instance.textureID,
-			normal   = instance.normalID,
+			model    = i32(instance.modelID) - 1,
+			texture  = i32(instance.textureID) - 1,
+			normal   = i32(instance.normalID) - 1,
 			position = instance.position,
 			rotation = instance.rotation,
 			scale    = instance.scale,
@@ -2769,14 +2756,19 @@ loadScene :: proc(
 	for &instance, instanceIndex in sceneJson.instances {
 		scene.instances[instanceIndex] = {
 			name      = instance.name,
-			modelID   = instance.model,
-			textureID = instance.texture,
-			normalID  = instance.normal,
+			modelID   = u32(instance.model + 1),
+			textureID = u32(instance.texture + 1),
+			normalID  = u32(instance.normal + 1),
 			position  = instance.position,
 			rotation  = instance.rotation,
 			scale     = instance.scale,
 		}
 	}
+
+	append(&scene.modelPaths, strings.clone_to_cstring("./assets/models/cube/cube.fbx"))
+	append(&scene.texturePaths, strings.clone_to_cstring("./assets/textures/missing_texture.jpg"))
+	append(&scene.normalPaths, strings.clone_to_cstring("./assets/textures/normal.jpg"))
+
 	append(&scene.pointLights, ..sceneJson.lights)
 	append(&scene.cameras, ..sceneJson.cameras)
 	append(&scene.modelPaths, ..sceneJson.models)
@@ -3437,6 +3429,7 @@ updateComputeDescriptorSets :: proc(using graphicsContext: ^GraphicsContext) {
 @(private = "file")
 updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	scene := &scenes[activeScene]
+
 	instanceBufferInfo: vk.DescriptorBufferInfo = {
 		offset = 0,
 		range  = vk.DeviceSize(size_of(InstanceInfo) * len(scene.instances)),
@@ -3452,19 +3445,19 @@ updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, scene
 		range  = vk.DeviceSize(size_of(LightData) * len(scene.pointLights)),
 	}
 
-	textureInfo: vk.DescriptorImageInfo = {
+	textureImageInfo: vk.DescriptorImageInfo = {
 		sampler     = samplers[scene.textures.sampler],
 		imageView   = scene.textures.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
 
-	normalInfo: vk.DescriptorImageInfo = {
+	normalImageInfo: vk.DescriptorImageInfo = {
 		sampler     = samplers[scene.normals.sampler],
 		imageView   = scene.normals.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 	}
 
-	shadowInfo: vk.DescriptorImageInfo = {
+	shadowImageInfo: vk.DescriptorImageInfo = {
 		sampler     = samplers[scene.shadowImages.sampler],
 		imageView   = scene.shadowImages.view,
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
@@ -3555,7 +3548,7 @@ updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, scene
 				dstArrayElement = 0,
 				descriptorCount = 1,
 				descriptorType = .COMBINED_IMAGE_SAMPLER,
-				pImageInfo = &textureInfo,
+				pImageInfo = &textureImageInfo,
 				pBufferInfo = nil,
 				pTexelBufferView = nil,
 			},
@@ -3567,108 +3560,8 @@ updateSceneDescriptorSets :: proc(using graphicsContext: ^GraphicsContext, scene
 				dstArrayElement = 0,
 				descriptorCount = 1,
 				descriptorType = .COMBINED_IMAGE_SAMPLER,
-				pImageInfo = &normalInfo,
+				pImageInfo = &normalImageInfo,
 				pBufferInfo = nil,
-				pTexelBufferView = nil,
-			},
-			{
-				sType = .WRITE_DESCRIPTOR_SET,
-				pNext = nil,
-				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
-				dstBinding = 6,
-				dstArrayElement = 0,
-				descriptorCount = 1,
-				descriptorType = .COMBINED_IMAGE_SAMPLER,
-				pImageInfo = &shadowInfo,
-				pBufferInfo = nil,
-				pTexelBufferView = nil,
-			},
-			{
-				sType = .WRITE_DESCRIPTOR_SET,
-				pNext = nil,
-				dstSet = pipelines[PipelineIndex.POST].descriptorSets[index],
-				dstBinding = 4,
-				dstArrayElement = 0,
-				descriptorCount = 1,
-				descriptorType = .STORAGE_BUFFER,
-				pImageInfo = nil,
-				pBufferInfo = &lightsBufferInfo,
-				pTexelBufferView = nil,
-			},
-		}
-
-		vk.UpdateDescriptorSets(
-			device,
-			u32(len(descriptorWrites)),
-			raw_data(descriptorWrites),
-			0,
-			nil,
-		)
-	}
-}
-
-@(private = "file")
-updateSceneLights :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
-	scene := &scenes[sceneIndex]
-	cleanupImage(graphicsContext, &scene.shadowImages)
-	createShadowImage(graphicsContext, sceneIndex)
-
-	shadowImageInfo: vk.DescriptorImageInfo = {
-		sampler     = samplers[scene.shadowImages.sampler],
-		imageView   = scene.shadowImages.view,
-		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-	}
-
-	bufferSize := size_of(LightData) * len(scene.pointLights)
-	lightsBufferInfo: vk.DescriptorBufferInfo = {
-		offset = 0,
-		range  = vk.DeviceSize(bufferSize),
-	}
-
-	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		cleanupBuffer(graphicsContext, &scene.lightBuffers[index])
-
-		createBuffer(
-			graphicsContext,
-			bufferSize,
-			{.STORAGE_BUFFER},
-			{.HOST_VISIBLE, .HOST_COHERENT},
-			&scene.lightBuffers[index].buffer,
-			&scene.lightBuffers[index].memory,
-		)
-		vk.MapMemory(
-			device,
-			scene.lightBuffers[index].memory,
-			0,
-			vk.DeviceSize(bufferSize),
-			{},
-			&scene.lightBuffers[index].mapped,
-		)
-
-		lightsBufferInfo.buffer = scene.lightBuffers[index].buffer
-		descriptorWrites: []vk.WriteDescriptorSet = {
-			{
-				sType = .WRITE_DESCRIPTOR_SET,
-				pNext = nil,
-				dstSet = pipelines[PipelineIndex.SHADOW].descriptorSets[index],
-				dstBinding = 2,
-				dstArrayElement = 0,
-				descriptorCount = 1,
-				descriptorType = .STORAGE_BUFFER,
-				pImageInfo = nil,
-				pBufferInfo = &lightsBufferInfo,
-				pTexelBufferView = nil,
-			},
-			{
-				sType = .WRITE_DESCRIPTOR_SET,
-				pNext = nil,
-				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
-				dstBinding = 3,
-				dstArrayElement = 0,
-				descriptorCount = 1,
-				descriptorType = .STORAGE_BUFFER,
-				pImageInfo = nil,
-				pBufferInfo = &lightsBufferInfo,
 				pTexelBufferView = nil,
 			},
 			{
@@ -3696,6 +3589,7 @@ updateSceneLights :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 				pTexelBufferView = nil,
 			},
 		}
+
 		vk.UpdateDescriptorSets(
 			device,
 			u32(len(descriptorWrites)),
@@ -3875,6 +3769,198 @@ updateSceneInstanceModel :: proc(using graphicsContext: ^GraphicsContext, sceneI
 				descriptorType = .STORAGE_BUFFER,
 				pImageInfo = nil,
 				pBufferInfo = &boneBufferInfo,
+				pTexelBufferView = nil,
+			},
+		}
+		vk.UpdateDescriptorSets(
+			device,
+			u32(len(descriptorWrites)),
+			raw_data(descriptorWrites),
+			0,
+			nil,
+		)
+	}
+}
+
+@(private = "file")
+updateSceneModels :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	scene := &scenes[sceneIndex]
+
+	cleanupBuffer(graphicsContext, &scene.vertexBuffer)
+	cleanupBuffer(graphicsContext, &scene.indexBuffer)
+
+	loadBufferToGPU(
+		graphicsContext,
+		size_of(Vertex) * len(scene.vertices),
+		raw_data(scene.vertices),
+		&scene.vertexBuffer,
+		.VERTEX_BUFFER,
+	)
+	loadBufferToGPU(
+		graphicsContext,
+		size_of(u32) * len(scene.indices),
+		raw_data(scene.indices),
+		&scene.indexBuffer,
+		.INDEX_BUFFER,
+	)
+}
+
+@(private = "file")
+updateSceneTextures :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	scene := &scenes[sceneIndex]
+
+	textureImageInfo: vk.DescriptorImageInfo = {
+		sampler     = samplers[scene.textures.sampler],
+		imageView   = scene.textures.view,
+		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+	}
+
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		descriptorWrites: []vk.WriteDescriptorSet = {
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding = 4,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .COMBINED_IMAGE_SAMPLER,
+				pImageInfo = &textureImageInfo,
+				pBufferInfo = nil,
+				pTexelBufferView = nil,
+			},
+		}
+		vk.UpdateDescriptorSets(
+			device,
+			u32(len(descriptorWrites)),
+			raw_data(descriptorWrites),
+			0,
+			nil,
+		)
+	}
+}
+
+@(private = "file")
+updateSceneNormals :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	scene := &scenes[sceneIndex]
+
+	normalImageInfo: vk.DescriptorImageInfo = {
+		sampler     = samplers[scene.normals.sampler],
+		imageView   = scene.normals.view,
+		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+	}
+
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		descriptorWrites: []vk.WriteDescriptorSet = {
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding = 5,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .COMBINED_IMAGE_SAMPLER,
+				pImageInfo = &normalImageInfo,
+				pBufferInfo = nil,
+				pTexelBufferView = nil,
+			},
+		}
+		vk.UpdateDescriptorSets(
+			device,
+			u32(len(descriptorWrites)),
+			raw_data(descriptorWrites),
+			0,
+			nil,
+		)
+	}
+}
+
+@(private = "file")
+updateSceneLights :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	scene := &scenes[sceneIndex]
+	cleanupImage(graphicsContext, &scene.shadowImages)
+	createShadowImage(graphicsContext, sceneIndex)
+
+	shadowImageInfo: vk.DescriptorImageInfo = {
+		sampler     = samplers[scene.shadowImages.sampler],
+		imageView   = scene.shadowImages.view,
+		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+	}
+
+	bufferSize := size_of(LightData) * len(scene.pointLights)
+	lightsBufferInfo: vk.DescriptorBufferInfo = {
+		offset = 0,
+		range  = vk.DeviceSize(bufferSize),
+	}
+
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		cleanupBuffer(graphicsContext, &scene.lightBuffers[index])
+
+		createBuffer(
+			graphicsContext,
+			bufferSize,
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&scene.lightBuffers[index].buffer,
+			&scene.lightBuffers[index].memory,
+		)
+		vk.MapMemory(
+			device,
+			scene.lightBuffers[index].memory,
+			0,
+			vk.DeviceSize(bufferSize),
+			{},
+			&scene.lightBuffers[index].mapped,
+		)
+
+		lightsBufferInfo.buffer = scene.lightBuffers[index].buffer
+		descriptorWrites: []vk.WriteDescriptorSet = {
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.SHADOW].descriptorSets[index],
+				dstBinding = 2,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &lightsBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding = 3,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &lightsBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding = 6,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .COMBINED_IMAGE_SAMPLER,
+				pImageInfo = &shadowImageInfo,
+				pBufferInfo = nil,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.POST].descriptorSets[index],
+				dstBinding = 4,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &lightsBufferInfo,
 				pTexelBufferView = nil,
 			},
 		}
@@ -4769,7 +4855,7 @@ initImgui :: proc(using graphicsContext: ^GraphicsContext) {
 @(private = "file")
 updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 	ImFDCreateImage: ImFD.CreateTexture : proc "system" (
-		data: [^]c.uint8_t,
+		data: ^c.uint8_t,
 		width, height: c.int,
 		format: c.char,
 	) -> rawptr {
@@ -5546,8 +5632,10 @@ recordComputeBuffer :: proc(
 		commandBuffer,
 		pipelines[PipelineIndex.MAIN].colour.vkImage,
 		inImage.vkImage,
-		vk.Extent3D{u32(RENDER_SIZE.x), u32(RENDER_SIZE.y), 0},
-		vk.Extent3D{swapchainExtent.width, swapchainExtent.height, 0},
+		{u32(RENDER_SIZE.x), u32(RENDER_SIZE.y)},
+		{swapchainExtent.width, swapchainExtent.height},
+		0,
+		0,
 	)
 
 	transitionImageLayout(
@@ -5780,7 +5868,6 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 				setActiveScene(graphicsContext, u32(len(scenes) - 1))
 			}
 			if imgui.MenuItem("Load") {
-				unsetGLFWCallbacks(graphicsContext)
 				ImFD.Open(
 					"SceneOpenDialog",
 					"Open a scene",
@@ -5788,32 +5875,67 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 					true,
 					"./assets/scenes/",
 				)
+				engineState.inMenu = true
 			}
 			if imgui.MenuItem("Save") {
 				if scenes[activeScene].filePath == "" {
-					unsetGLFWCallbacks(graphicsContext)
 					ImFD.Save(
 						"SceneSaveDialog",
 						"Save Scene",
 						"JSON file (*.json){.json},.*",
 						"./assets/scenes/",
 					)
+					engineState.inMenu = true
 				} else {
 					saveScene(graphicsContext, activeScene)
 				}
 			}
 			if imgui.MenuItem("Save AS...") {
-				unsetGLFWCallbacks(graphicsContext)
 				ImFD.Save(
 					"SceneSaveDialog",
 					"Save Scene",
 					"JSON file (*.json){.json},.*",
 					"./assets/scenes/",
 				)
+				engineState.inMenu = true
 			}
 			if imgui.MenuItem("Close") {
 				closeScene(graphicsContext, activeScene)
 				setActiveScene(graphicsContext, 0)
+			}
+			imgui.SeparatorText("Assets")
+			if imgui.BeginMenu("Import") {
+				if imgui.MenuItem("Model") {
+					ImFD.Open(
+						"LoadModelDialog",
+						"Load Model",
+						"FBX file (*.fbx){.fbx},OBJ file (*.obj){.obj},.*",
+						true,
+						"./assets/models/",
+					)
+					engineState.inMenu = true
+				}
+				if imgui.MenuItem("Texture") {
+					ImFD.Open(
+						"LoadTextureDialog",
+						"Load Texture",
+						"Image file (*.jpg, *.png){.jpg,.png},.*",
+						true,
+						"./assets/textures/",
+					)
+					engineState.inMenu = true
+				}
+				if imgui.MenuItem("Normal Map") {
+					ImFD.Open(
+						"LoadNormalDialog",
+						"Load Normal Map",
+						"Image file (*.jpg *.png){.jpg .png},.*",
+						true,
+						"./assets/textures/",
+					)
+					engineState.inMenu = true
+				}
+				imgui.EndMenu()
 			}
 			imgui.EndMenu()
 		}
@@ -5890,13 +6012,21 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			imgui.DragFloat3("Position", &instance.position, 0.001)
 			imgui.DragFloat3("Rotation", &instance.rotation, 0.001)
 			imgui.DragFloat3("Scale", &instance.scale, 0.001)
-			animations := &scene.models[instance.modelID].animations
 			if imgui.BeginCombo("Model", scene.models[instance.modelID].name) {
 				for &model, i in scene.models {
 					if u32(i) != instance.modelID && imgui.Selectable(model.name) {
 						scene.boneCount -= len(scene.models[instance.modelID].skeleton)
 						instance.modelID = u32(i)
-						scene.boneCount += len(scene.models[instance.modelID].skeleton)
+						skeletonLength := len(scene.models[instance.modelID].skeleton)
+						scene.boneCount += skeletonLength
+
+						delete(instance.positionKeys)
+						delete(instance.rotationKeys)
+						delete(instance.scaleKeys)
+
+						instance.positionKeys = make([]u32, skeletonLength)
+						instance.rotationKeys = make([]u32, skeletonLength)
+						instance.scaleKeys = make([]u32, skeletonLength)
 
 						if vk.DeviceWaitIdle(device) != .SUCCESS {
 							panic("Failed to wait for device idle?")
@@ -5906,6 +6036,23 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 				}
 				imgui.EndCombo()
 			}
+			if imgui.BeginCombo("Texture", scene.texturePaths[instance.textureID]) {
+				for &texture, i in scene.texturePaths {
+					if u32(i) != instance.textureID && imgui.Selectable(texture) {
+						instance.textureID = u32(i)
+					}
+				}
+				imgui.EndCombo()
+			}
+			if imgui.BeginCombo("Normal Map", scene.normalPaths[instance.normalID]) {
+				for &normal, i in scene.normalPaths {
+					if u32(i) != instance.normalID && imgui.Selectable(normal) {
+						instance.normalID = u32(i)
+					}
+				}
+				imgui.EndCombo()
+			}
+			animations := &scene.models[instance.modelID].animations
 			if len(animations) > 0 {
 				imgui.SeparatorText("Animations")
 				if imgui.BeginCombo("Animation Selection", animations[instance.animID].name) {
@@ -6060,23 +6207,133 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 	imgui.End()
 
+	scene := &scenes[activeScene]
 	if ImFD.IsDone("SceneOpenDialog") {
 		if ImFD.HasResult() {
 			file := ImFD.GetResult()
 			index, err := loadScene(graphicsContext, string(file))
 			setActiveScene(graphicsContext, index)
 		}
-		setGLFWCallbacks(graphicsContext)
 		ImFD.Close()
+		engineState.inMenu = false
 	}
 	if ImFD.IsDone("SceneSaveDialog") {
 		if ImFD.HasResult() {
 			file := ImFD.GetResult()
-			scenes[activeScene].filePath = string(file)
+			scene.filePath = string(file)
 			saveScene(graphicsContext, activeScene)
 		}
-		setGLFWCallbacks(graphicsContext)
 		ImFD.Close()
+		engineState.inMenu = false
+	}
+	if ImFD.IsDone("LoadModelDialog") {
+		fileCount: c.int
+		if ImFD.HasResult() {
+			files := ImFD.GetResults(&fileCount)
+			defer ImFD.FreeResults()
+			newFilepaths := make([]cstring, fileCount)
+			defer delete(newFilepaths)
+			count := 0
+			modelInner: for index in 0 ..< fileCount {
+				file := files[index]
+				for &loadedFile in scene.texturePaths {
+					if file == loadedFile {
+						continue modelInner
+					}
+				}
+				stringLen := len(file) + 1
+				// Is this the proper way to clone a cstring?
+				memPtr, err := mem.alloc(stringLen)
+				mem.copy(memPtr, (rawptr)(file), stringLen)
+				newFilepaths[count] = (cstring)(memPtr)
+				count += 1
+			}
+			if count != 0 {
+				loadModels(
+					graphicsContext,
+					activeScene,
+					newFilepaths[:count],
+				)
+				if vk.DeviceWaitIdle(device) != .SUCCESS {
+					panic("Failed to wait for device idle?")
+				}
+				updateSceneModels(graphicsContext, activeScene)
+				append(&scene.texturePaths, ..newFilepaths[:count])
+				scene.textureCount += u32(count)
+			}
+		}
+		ImFD.Close()
+		engineState.inMenu = false
+	}
+	if ImFD.IsDone("LoadTextureDialog") {
+		if ImFD.HasResult() {
+			fileCount: c.int
+			files := ImFD.GetResults(&fileCount)
+			defer ImFD.FreeResults()
+			newFilepaths := make([]cstring, fileCount)
+			defer delete(newFilepaths)
+			count := 0
+			textureInner: for index in 0 ..< fileCount {
+				file := files[index]
+				for &loadedFile in scene.modelPaths {
+					if file == loadedFile {
+						continue textureInner
+					}
+				}
+				stringLen := len(file) + 1
+				// Is this the proper way to clone a cstring?
+				memPtr, err := mem.alloc(stringLen)
+				mem.copy(memPtr, (rawptr)(file), stringLen)
+				newFilepaths[count] = (cstring)(memPtr)
+				count += 1
+			}
+			if count != 0 {
+				addImages(
+					graphicsContext,
+					&scene.textures,
+					scene.textureCount,
+					newFilepaths[:count],
+				)
+				updateSceneTextures(graphicsContext, activeScene)
+				append(&scene.modelPaths, ..newFilepaths[:count])
+			}
+		}
+		ImFD.Close()
+		engineState.inMenu = false
+	}
+	if ImFD.IsDone("LoadNormalDialog") {
+		if ImFD.HasResult() {
+			fileCount: c.int
+			files := ImFD.GetResults(&fileCount)
+			defer ImFD.FreeResults()
+			newFilepaths := make([]cstring, fileCount)
+			defer delete(newFilepaths)
+			count := 0
+			normalInner: for index in 0 ..< fileCount {
+				file := files[index]
+				foundMatch := false
+				for &loadedFile in scene.normalPaths {
+					if file == loadedFile {
+						foundMatch = true
+						continue normalInner
+					}
+				}
+				stringLen := len(file) + 1
+				// Is this the proper way to clone a cstring?
+				memPtr, err := mem.alloc(stringLen)
+				mem.copy(memPtr, (rawptr)(file), stringLen)
+				newFilepaths[count] = (cstring)(memPtr)
+				count += 1
+			}
+			if count != 0 {
+				addImages(graphicsContext, &scene.normals, scene.normalCount, newFilepaths[:count])
+				updateSceneNormals(graphicsContext, activeScene)
+				append(&scene.normalPaths, ..newFilepaths[:count])
+				scene.normalCount += u32(count)
+			}
+		}
+		ImFD.Close()
+		engineState.inMenu = false
 	}
 }
 
