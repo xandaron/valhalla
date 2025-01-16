@@ -2810,6 +2810,8 @@ closeScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 }
 
 setActiveScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	paused = true
+
 	if res := vk.DeviceWaitIdle(device); res != .SUCCESS {
 		panic("Failed to wait for device idle!")
 	}
