@@ -23,20 +23,20 @@ import vk "vendor:vulkan"
 
 
 @(private = "file")
-requestedLayers: []cstring = {"VK_LAYER_KHRONOS_validation"}
+requestedLayers: []cstring : {"VK_LAYER_KHRONOS_validation"}
 
 @(private = "file")
-requiredDeviceExtensions: []cstring = {vk.KHR_SWAPCHAIN_EXTENSION_NAME}
+requiredDeviceExtensions: []cstring : {vk.KHR_SWAPCHAIN_EXTENSION_NAME}
 
 @(private = "file")
-vertexBindingDescription: vk.VertexInputBindingDescription = {
-	binding   = 0,
-	stride    = size_of(Vertex),
+vertexBindingDescription: vk.VertexInputBindingDescription : {
+	binding = 0,
+	stride = size_of(Vertex),
 	inputRate = .VERTEX,
 }
 
 @(private = "file")
-vertexInputAttributeDescriptions: []vk.VertexInputAttributeDescription = {
+vertexInputAttributeDescriptions: []vk.VertexInputAttributeDescription : {
 	{
 		location = 0,
 		binding = 0,
@@ -151,6 +151,7 @@ Animation :: struct {
 
 @(private = "file")
 Model :: struct {
+	name:         cstring,
 	vertices:     []Vertex,
 	vertexOffset: u32,
 	indices:      []u32,
@@ -1017,22 +1018,23 @@ createLogicalDevice :: proc(using graphicsContext: ^GraphicsContext) {
 		inheritedQueries                        = false,
 	}
 
+	requiredDeviceExtensions := requiredDeviceExtensions
 	createInfo: vk.DeviceCreateInfo = {
 		sType                   = .DEVICE_CREATE_INFO,
 		pNext                   = nil,
 		flags                   = {},
 		queueCreateInfoCount    = u32(len(queueCreateInfos)),
-		pQueueCreateInfos       = raw_data(queueCreateInfos[:]),
+		pQueueCreateInfos       = raw_data(queueCreateInfos),
 		enabledLayerCount       = 0,
 		ppEnabledLayerNames     = nil,
 		enabledExtensionCount   = u32(len(requiredDeviceExtensions)),
-		ppEnabledExtensionNames = raw_data(requiredDeviceExtensions[:]),
+		ppEnabledExtensionNames = raw_data(requiredDeviceExtensions),
 		pEnabledFeatures        = &deviceFeatures,
 	}
 
 	when ODIN_DEBUG {
 		createInfo.enabledLayerCount = u32(len(requestedLayers))
-		createInfo.ppEnabledLayerNames = raw_data(requestedLayers[:])
+		createInfo.ppEnabledLayerNames = raw_data(requestedLayers)
 	}
 
 	if vk.CreateDevice(physicalDevice, &createInfo, nil, &device) != .SUCCESS {
@@ -1864,6 +1866,9 @@ loadModels :: proc(
 		model.indices = make([]u32, indexCount)
 		model.indexCount = u32(indexCount)
 
+		// TODO: Surely there is a way to copy a cstring better than this. Might have to copy the data?
+		model.name = strings.clone_to_cstring(string(scene.meshes.data[0].element.name.data))
+
 		vertexOffset, indexOffset, meshIndexOffset: u32 = 0, 0, 0
 		for meshIndex in 0 ..< scene.meshes.count {
 			mesh := scene.meshes.data[meshIndex]
@@ -2661,6 +2666,7 @@ createNewScene :: proc(using graphicsContext: ^GraphicsContext) {
 	loadSceneAssets(graphicsContext, index)
 }
 
+@(private = "file")
 InstanceJSON :: struct {
 	name:     cstring,
 	model:    u32,
@@ -2671,6 +2677,7 @@ InstanceJSON :: struct {
 	scale:    Vec3,
 }
 
+@(private = "file")
 SceneJSON :: struct {
 	name:          cstring,
 	clear_colour:  [4]i32,
@@ -2839,6 +2846,7 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	delete(scene.normalPaths)
 
 	for &model in scene.models {
+		delete(model.name)
 		delete(model.vertices)
 		delete(model.indices)
 		delete(model.skeleton)
@@ -2848,6 +2856,7 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 				delete(node.keyRotations)
 				delete(node.keyScales)
 			}
+			delete(animation.name)
 			delete(animation.nodes)
 		}
 		delete(model.animations)
@@ -3810,6 +3819,73 @@ updateSceneInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext, scene
 	}
 }
 
+@(private = "file")
+updateSceneInstanceModel :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	scene := &scenes[sceneIndex]
+
+	boneBufferSize := size_of(Mat4) * scene.boneCount
+	boneBufferInfo: vk.DescriptorBufferInfo = {
+		offset = 0,
+		range  = vk.DeviceSize(boneBufferSize),
+	}
+
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		cleanupBuffer(graphicsContext, &scene.boneBuffers[index])
+
+		createBuffer(
+			graphicsContext,
+			boneBufferSize,
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&scene.boneBuffers[index].buffer,
+			&scene.boneBuffers[index].memory,
+		)
+		vk.MapMemory(
+			device,
+			scene.boneBuffers[index].memory,
+			0,
+			vk.DeviceSize(boneBufferSize),
+			{},
+			&scene.boneBuffers[index].mapped,
+		)
+
+		boneBufferInfo.buffer = scene.boneBuffers[index].buffer
+		descriptorWrites: []vk.WriteDescriptorSet = {
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.SHADOW].descriptorSets[index],
+				dstBinding = 1,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &boneBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding = 2,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &boneBufferInfo,
+				pTexelBufferView = nil,
+			},
+		}
+		vk.UpdateDescriptorSets(
+			device,
+			u32(len(descriptorWrites)),
+			raw_data(descriptorWrites),
+			0,
+			nil,
+		)
+	}
+}
+
 
 // ###################################################################
 // #                         Frame Resources                         #
@@ -4287,6 +4363,7 @@ createGraphicsPipelines :: proc(
 	}
 	defer vk.DestroyShaderModule(device, shadowShaderStagesInfo.module, nil)
 
+	vertexBindingDescription := vertexBindingDescription
 	pipelineInfos[0] = {
 		sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
 		pNext               = nil,
@@ -5811,18 +5888,34 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			imgui.DragFloat3("Position", &instance.position, 0.001)
 			imgui.DragFloat3("Rotation", &instance.rotation, 0.001)
 			imgui.DragFloat3("Scale", &instance.scale, 0.001)
-			imgui.SeparatorText("Animations")
 			animations := &scene.models[instance.modelID].animations
-			if len(animations) > 0 &&
-			   imgui.BeginCombo("Animation Selection", animations[instance.animID].name) {
-				for &anim, i in animations {
-					if instance.animID != u32(i) && imgui.Selectable(anim.name, false) {
-						instance.animID = u32(i)
+			if imgui.BeginCombo("Model", scene.models[instance.modelID].name) {
+				for &model, i in scene.models {
+					if u32(i) != instance.modelID && imgui.Selectable(model.name) {
+						scene.boneCount -= len(scene.models[instance.modelID].skeleton)
+						instance.modelID = u32(i)
+						scene.boneCount += len(scene.models[instance.modelID].skeleton)
+
+						if vk.DeviceWaitIdle(device) != .SUCCESS {
+							panic("Failed to wait for device idle?")
+						}
+						updateSceneInstanceModel(graphicsContext, activeScene)
 					}
 				}
 				imgui.EndCombo()
 			}
-			imgui.DragScalar("Animation Timer", .Double, &instance.animTimer, 0.01)
+			if len(animations) > 0 {
+				imgui.SeparatorText("Animations")
+				if imgui.BeginCombo("Animation Selection", animations[instance.animID].name) {
+					for &anim, i in animations {
+						if instance.animID != u32(i) && imgui.Selectable(anim.name) {
+							instance.animID = u32(i)
+						}
+					}
+					imgui.EndCombo()
+				}
+				imgui.DragScalar("Animation Timer", .Double, &instance.animTimer, 0.01)
+			}
 			imgui.BeginDisabled(len(scene.instances) == 1)
 			if imgui.Button("Delete") {
 				delete(instance.name)
@@ -5855,7 +5948,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 
 		if imgui.BeginCombo("Scene Selection", scene.name) {
 			for &s, index in scenes {
-				if activeScene != u32(index) && imgui.Selectable(s.name, false) {
+				if activeScene != u32(index) && imgui.Selectable(s.name) {
 					setActiveScene(graphicsContext, u32(index))
 				}
 			}
