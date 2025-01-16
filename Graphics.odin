@@ -4,6 +4,7 @@ import ImFD "ImFileDialog"
 import "base:runtime"
 import "core:c"
 import "core:encoding/json"
+import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:os"
@@ -15,7 +16,6 @@ import fbx "ufbx"
 import "vendor:glfw"
 import img "vendor:stb/image"
 import vk "vendor:vulkan"
-
 
 // ###################################################################
 // #                          Constants                              #
@@ -132,7 +132,7 @@ KeyQuat :: struct {
 }
 
 @(private = "file")
-AnimNode :: struct {
+AnimationNode :: struct {
 	bone:            u32,
 	keyPositions:    []KeyVector,
 	keyRotations:    []KeyQuat,
@@ -143,8 +143,9 @@ AnimNode :: struct {
 }
 
 @(private = "file")
-Anim :: struct {
-	nodes:    []AnimNode,
+Animation :: struct {
+	name:     cstring,
+	nodes:    []AnimationNode,
 	duration: f64,
 }
 
@@ -156,7 +157,7 @@ Model :: struct {
 	indexOffset:  u32,
 	indexCount:   u32,
 	skeleton:     Skeleton,
-	animations:   []Anim,
+	animations:   []Animation,
 }
 
 @(private = "file")
@@ -421,8 +422,7 @@ initVkGraphics :: proc(
 	createCommandBuffers(graphicsContext)
 	bufferSize := size_of(UniformBuffer)
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyBuffer(device, uniformBuffers[index].buffer, nil)
-		vk.FreeMemory(device, uniformBuffers[index].memory, nil)
+		cleanupBuffer(graphicsContext, &uniformBuffers[index])
 		createBuffer(
 			graphicsContext,
 			bufferSize,
@@ -635,8 +635,7 @@ cleanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 	delete(imagesAvailable)
 
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyBuffer(device, uniformBuffers[index].buffer, nil)
-		vk.FreeMemory(device, uniformBuffers[index].memory, nil)
+		cleanupBuffer(graphicsContext, &uniformBuffers[index])
 	}
 
 	for index in 0 ..< swapchainImageCount {
@@ -1396,34 +1395,39 @@ loadBufferToGPU :: proc(
 		endSingleTimeCommands(graphicsContext, commandBuffer, graphicsCommandPool)
 	}
 
-	stagingBuffer: vk.Buffer
-	stagingBufferMemory: vk.DeviceMemory
+	stagingBuffer: Buffer
 	createBuffer(
 		graphicsContext,
 		bufferSize,
 		{.TRANSFER_SRC},
 		{.HOST_VISIBLE, .HOST_COHERENT},
-		&stagingBuffer,
-		&stagingBufferMemory,
+		&stagingBuffer.buffer,
+		&stagingBuffer.memory,
 	)
 
 	data: rawptr
-	vk.MapMemory(device, stagingBufferMemory, 0, (vk.DeviceSize)(bufferSize), {}, &data)
+	vk.MapMemory(device, stagingBuffer.memory, 0, (vk.DeviceSize)(bufferSize), {}, &data)
 	mem.copy(data, srcData, bufferSize)
-	vk.UnmapMemory(device, stagingBufferMemory)
+	vk.UnmapMemory(device, stagingBuffer.memory)
 
 	createBuffer(
 		graphicsContext,
 		bufferSize,
 		{.TRANSFER_DST, bufferType},
 		{.DEVICE_LOCAL},
-		&dstBuffer^.buffer,
-		&dstBuffer^.memory,
+		&dstBuffer.buffer,
+		&dstBuffer.memory,
 	)
 
-	copyBuffer(graphicsContext, stagingBuffer, dstBuffer^.buffer, bufferSize)
-	vk.DestroyBuffer(device, stagingBuffer, nil)
-	vk.FreeMemory(device, stagingBufferMemory, nil)
+	copyBuffer(graphicsContext, stagingBuffer.buffer, dstBuffer.buffer, bufferSize)
+	cleanupBuffer(graphicsContext, &stagingBuffer)
+}
+
+// Useful to have a function for this so I can update allocators easily in the future. 
+@(private = "file")
+cleanupBuffer :: proc(using graphicsContext: ^GraphicsContext, buffer: ^Buffer) {
+	vk.DestroyBuffer(device, buffer.buffer, nil)
+	vk.FreeMemory(device, buffer.memory, nil)
 }
 
 
@@ -1978,7 +1982,7 @@ loadModels :: proc(
 			}
 		}
 
-		model.animations = make([]Anim, scene.anim_stacks.count)
+		model.animations = make([]Animation, scene.anim_stacks.count)
 		for animIndex in 0 ..< scene.anim_stacks.count {
 			stack := scene.anim_stacks.data[animIndex]
 
@@ -1991,8 +1995,10 @@ loadModels :: proc(
 			defer fbx.free_baked_anim(bakedAnim)
 
 			animation := &model.animations[animIndex]
-			animation.duration = bakedAnim^.playback_duration
-			animation.nodes = make([]AnimNode, bakedAnim.nodes.count)
+			// TODO: Surely there is a way to copy a cstring better than this. Might have to copy the data?
+			animation.name = strings.clone_to_cstring(string(stack.element.name.data))
+			animation.duration = bakedAnim.playback_duration
+			animation.nodes = make([]AnimationNode, bakedAnim.nodes.count)
 
 			for bakedIndex in 0 ..< bakedAnim.nodes.count {
 				bakedNode := bakedAnim.nodes.data[bakedIndex]
@@ -2002,16 +2008,14 @@ loadModels :: proc(
 					if bone.name != sceneNode.element.name.data {
 						continue
 					}
-
-					animNode := AnimNode {
-						bone            = u32(boneIndex),
-						keyPositions    = make([]KeyVector, bakedNode.translation_keys.count),
-						keyRotations    = make([]KeyQuat, bakedNode.rotation_keys.count),
-						keyScales       = make([]KeyVector, bakedNode.scale_keys.count),
-						numKeyPositions = bakedNode.translation_keys.count,
-						numKeyRotations = bakedNode.rotation_keys.count,
-						numKeyScales    = bakedNode.scale_keys.count,
-					}
+					animNode := &animation.nodes[bakedIndex]
+					animNode.bone = u32(boneIndex)
+					animNode.keyPositions = make([]KeyVector, bakedNode.translation_keys.count)
+					animNode.keyRotations = make([]KeyQuat, bakedNode.rotation_keys.count)
+					animNode.keyScales = make([]KeyVector, bakedNode.scale_keys.count)
+					animNode.numKeyPositions = bakedNode.translation_keys.count
+					animNode.numKeyRotations = bakedNode.rotation_keys.count
+					animNode.numKeyScales = bakedNode.scale_keys.count
 
 					for index in 0 ..< bakedNode.translation_keys.count {
 						data := bakedNode.translation_keys.data[index]
@@ -2037,8 +2041,6 @@ loadModels :: proc(
 						animNode.keyScales[index].value.y = f32(data.value[1])
 						animNode.keyScales[index].value.z = f32(data.value[2])
 					}
-
-					animation^.nodes[bakedIndex] = animNode
 					break
 				}
 			}
@@ -2120,8 +2122,7 @@ loadTextures :: proc(
 			&stagingBuffer.memory,
 		)
 		defer {
-			vk.DestroyBuffer(device, stagingBuffer.buffer, nil)
-			vk.FreeMemory(device, stagingBuffer.memory, nil)
+			cleanupBuffer(graphicsContext, &stagingBuffer)
 		}
 
 		data: rawptr
@@ -2328,8 +2329,7 @@ addTextures :: proc(
 			&stagingBuffer.memory,
 		)
 		defer {
-			vk.DestroyBuffer(device, stagingBuffer.buffer, nil)
-			vk.FreeMemory(device, stagingBuffer.memory, nil)
+			cleanupBuffer(graphicsContext, &stagingBuffer)
 		}
 
 		data: rawptr
@@ -2474,6 +2474,7 @@ createShadowImage :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 	scenes[sceneIndex].shadowImages.sampler = 0
 }
 
+// Useful to have a function for this so I can update allocators easily in the future. 
 @(private = "file")
 cleanupImage :: proc(using graphicsContext: ^GraphicsContext, image: ^Image) {
 	vk.DestroyImageView(device, image.view, nil)
@@ -2796,7 +2797,6 @@ closeScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 	}
 
 	cleanupScene(graphicsContext, sceneIndex)
-	unordered_remove(&scenes, sceneIndex)
 	if len(scenes) == 0 {
 		createNewScene(graphicsContext)
 	}
@@ -2813,35 +2813,32 @@ setActiveScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32)
 
 @(private = "file")
 cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
-	vk.DestroyBuffer(device, scenes[sceneIndex].indexBuffer.buffer, nil)
-	vk.FreeMemory(device, scenes[sceneIndex].indexBuffer.memory, nil)
-	vk.DestroyBuffer(device, scenes[sceneIndex].vertexBuffer.buffer, nil)
-	vk.FreeMemory(device, scenes[sceneIndex].vertexBuffer.memory, nil)
+	scene := scenes[sceneIndex]
+
+	cleanupBuffer(graphicsContext, &scene.indexBuffer)
+	cleanupBuffer(graphicsContext, &scene.vertexBuffer)
 
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyBuffer(device, scenes[sceneIndex].instanceBuffers[index].buffer, nil)
-		vk.FreeMemory(device, scenes[sceneIndex].instanceBuffers[index].memory, nil)
-		vk.DestroyBuffer(device, scenes[sceneIndex].boneBuffers[index].buffer, nil)
-		vk.FreeMemory(device, scenes[sceneIndex].boneBuffers[index].memory, nil)
-		vk.DestroyBuffer(device, scenes[sceneIndex].lightBuffers[index].buffer, nil)
-		vk.FreeMemory(device, scenes[sceneIndex].lightBuffers[index].memory, nil)
+		cleanupBuffer(graphicsContext, &scene.instanceBuffers[index])
+		cleanupBuffer(graphicsContext, &scene.boneBuffers[index])
+		cleanupBuffer(graphicsContext, &scene.lightBuffers[index])
 	}
 
-	cleanupImage(graphicsContext, &scenes[sceneIndex].textures)
-	cleanupImage(graphicsContext, &scenes[sceneIndex].normals)
-	cleanupImage(graphicsContext, &scenes[sceneIndex].shadowImages)
+	cleanupImage(graphicsContext, &scene.textures)
+	cleanupImage(graphicsContext, &scene.normals)
+	cleanupImage(graphicsContext, &scene.shadowImages)
 
-	for &texturePath in scenes[sceneIndex].texturePaths {
+	for &texturePath in scene.texturePaths {
 		delete(texturePath)
 	}
-	delete(scenes[sceneIndex].texturePaths)
+	delete(scene.texturePaths)
 
-	for &normalPath in scenes[sceneIndex].normalPaths {
+	for &normalPath in scene.normalPaths {
 		delete(normalPath)
 	}
-	delete(scenes[sceneIndex].normalPaths)
+	delete(scene.normalPaths)
 
-	for &model in scenes[sceneIndex].models {
+	for &model in scene.models {
 		delete(model.vertices)
 		delete(model.indices)
 		delete(model.skeleton)
@@ -2855,33 +2852,35 @@ cleanupScene :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
 		}
 		delete(model.animations)
 	}
-	delete(scenes[sceneIndex].vertices)
-	delete(scenes[sceneIndex].indices)
-	delete(scenes[sceneIndex].models)
+	delete(scene.vertices)
+	delete(scene.indices)
+	delete(scene.models)
 
-	for &modelPath in scenes[sceneIndex].modelPaths {
+	for &modelPath in scene.modelPaths {
 		delete(modelPath)
 	}
-	delete(scenes[sceneIndex].modelPaths)
+	delete(scene.modelPaths)
 
-	for &instance in scenes[sceneIndex].instances {
+	for &instance in scene.instances {
 		delete(instance.name)
 		delete(instance.scaleKeys)
 		delete(instance.positionKeys)
 		delete(instance.rotationKeys)
 	}
-	delete(scenes[sceneIndex].instances)
+	delete(scene.instances)
 
-	for &light in scenes[sceneIndex].pointLights {
+	for &light in scene.pointLights {
 		delete(light.name)
 	}
-	delete(scenes[sceneIndex].pointLights)
+	delete(scene.pointLights)
 
-	for &camera in scenes[sceneIndex].cameras {
+	for &camera in scene.cameras {
 		delete(camera.name)
 	}
-	delete(scenes[sceneIndex].cameras)
-	delete(scenes[sceneIndex].name)
+	delete(scene.cameras)
+	delete(scene.name)
+
+	unordered_remove(&scenes, sceneIndex)
 }
 
 
@@ -3602,11 +3601,22 @@ updateSceneLights :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 	scene := &scenes[sceneIndex]
 	cleanupImage(graphicsContext, &scene.shadowImages)
 	createShadowImage(graphicsContext, sceneIndex)
-	
+
+	shadowImageInfo: vk.DescriptorImageInfo = {
+		sampler     = samplers[scene.shadowImages.sampler],
+		imageView   = scene.shadowImages.view,
+		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+	}
+
 	bufferSize := size_of(LightData) * len(scene.pointLights)
+	lightsBufferInfo: vk.DescriptorBufferInfo = {
+		offset = 0,
+		range  = vk.DeviceSize(bufferSize),
+	}
+
 	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroyBuffer(device, scene.lightBuffers[index].buffer, nil)
-		vk.FreeMemory(device, scene.lightBuffers[index].memory, nil)
+		cleanupBuffer(graphicsContext, &scene.lightBuffers[index])
+
 		createBuffer(
 			graphicsContext,
 			bufferSize,
@@ -3623,19 +3633,7 @@ updateSceneLights :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 			{},
 			&scene.lightBuffers[index].mapped,
 		)
-	}
 
-	shadowImageInfo: vk.DescriptorImageInfo = {
-		sampler     = samplers[scene.shadowImages.sampler],
-		imageView   = scene.shadowImages.view,
-		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-	}
-
-	lightsBufferInfo: vk.DescriptorBufferInfo = {
-		offset = 0,
-		range  = vk.DeviceSize(size_of(LightData) * len(scene.pointLights)),
-	}
-	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		lightsBufferInfo.buffer = scene.lightBuffers[index].buffer
 		descriptorWrites: []vk.WriteDescriptorSet = {
 			{
@@ -3684,6 +3682,121 @@ updateSceneLights :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u
 				descriptorType = .STORAGE_BUFFER,
 				pImageInfo = nil,
 				pBufferInfo = &lightsBufferInfo,
+				pTexelBufferView = nil,
+			},
+		}
+		vk.UpdateDescriptorSets(
+			device,
+			u32(len(descriptorWrites)),
+			raw_data(descriptorWrites),
+			0,
+			nil,
+		)
+	}
+}
+
+@(private = "file")
+updateSceneInstanceBuffer :: proc(using graphicsContext: ^GraphicsContext, sceneIndex: u32) {
+	scene := &scenes[sceneIndex]
+
+	instanceBufferSize := size_of(Instance) * len(scene.instances)
+	instanceBufferInfo: vk.DescriptorBufferInfo = {
+		offset = 0,
+		range  = vk.DeviceSize(instanceBufferSize),
+	}
+
+	boneBufferSize := size_of(Mat4) * scene.boneCount
+	boneBufferInfo: vk.DescriptorBufferInfo = {
+		offset = 0,
+		range  = vk.DeviceSize(boneBufferSize),
+	}
+
+	for index in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		cleanupBuffer(graphicsContext, &scene.instanceBuffers[index])
+		cleanupBuffer(graphicsContext, &scene.boneBuffers[index])
+
+		createBuffer(
+			graphicsContext,
+			instanceBufferSize,
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&scene.instanceBuffers[index].buffer,
+			&scene.instanceBuffers[index].memory,
+		)
+		vk.MapMemory(
+			device,
+			scene.instanceBuffers[index].memory,
+			0,
+			vk.DeviceSize(instanceBufferSize),
+			{},
+			&scene.instanceBuffers[index].mapped,
+		)
+		createBuffer(
+			graphicsContext,
+			boneBufferSize,
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+			&scene.boneBuffers[index].buffer,
+			&scene.boneBuffers[index].memory,
+		)
+		vk.MapMemory(
+			device,
+			scene.boneBuffers[index].memory,
+			0,
+			vk.DeviceSize(boneBufferSize),
+			{},
+			&scene.boneBuffers[index].mapped,
+		)
+
+		instanceBufferInfo.buffer = scene.instanceBuffers[index].buffer
+		boneBufferInfo.buffer = scene.boneBuffers[index].buffer
+		descriptorWrites: []vk.WriteDescriptorSet = {
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.SHADOW].descriptorSets[index],
+				dstBinding = 0,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &instanceBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding = 1,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &instanceBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.SHADOW].descriptorSets[index],
+				dstBinding = 1,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &boneBufferInfo,
+				pTexelBufferView = nil,
+			},
+			{
+				sType = .WRITE_DESCRIPTOR_SET,
+				pNext = nil,
+				dstSet = pipelines[PipelineIndex.MAIN].descriptorSets[index],
+				dstBinding = 2,
+				dstArrayElement = 0,
+				descriptorCount = 1,
+				descriptorType = .STORAGE_BUFFER,
+				pImageInfo = nil,
+				pBufferInfo = &boneBufferInfo,
 				pTexelBufferView = nil,
 			},
 		}
@@ -4631,8 +4744,7 @@ updateImgui :: proc(using graphicsContext: ^GraphicsContext) {
 			&stagingBuffer.memory,
 		)
 		defer {
-			vk.DestroyBuffer(device, stagingBuffer.buffer, nil)
-			vk.FreeMemory(device, stagingBuffer.memory, nil)
+			cleanupBuffer(graphicsContext, &stagingBuffer)
 		}
 
 		bufferData: rawptr
@@ -5630,7 +5742,8 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 
 	constructCamerasHeader :: proc(using graphicsContext: ^GraphicsContext) {
 		scene := &scenes[activeScene]
-		for &camera, index in scene.cameras {
+		for index := len(scene.cameras) - 1; index >= 0; index -= 1 {
+			camera := &scene.cameras[index]
 			if !imgui.TreeNode(camera.name) {
 				continue
 			}
@@ -5641,7 +5754,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			}
 			imgui.DragFloat3("Position", &camera.eye, 0.001)
 			imgui.DragFloat("FOV", &camera.fov, 0.5)
-			imgui.Text("Camera Mode:")
+			imgui.SeparatorText("Camera Mode")
 			if imgui.RadioButton("Perspective", camera.mode == .PERSPECTIVE) {
 				camera.mode = .PERSPECTIVE
 			}
@@ -5652,7 +5765,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			if imgui.Button("Delete") {
 				delete(camera.name)
 				unordered_remove(&scene.cameras, index)
-				if active && index == len(scene.cameras) {
+				if active {
 					scene.activeCamera = 0
 				}
 			}
@@ -5663,15 +5776,15 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 
 	constructLightsHeader :: proc(using graphicsContext: ^GraphicsContext) {
 		scene := &scenes[activeScene]
-		for i := len(scene.pointLights) - 1; i >= 0; i -= 1 {
-			light := &scene.pointLights[i]
+		for index := len(scene.pointLights) - 1; index >= 0; index -= 1 {
+			light := &scene.pointLights[index]
 			if !imgui.TreeNode(light.name) {
 				continue
 			}
 			imgui.DragFloat3("Position", &light.position, 0.001)
 			imgui.DragFloat3("Colour", &light.colourIntensity, 0.001)
 			imgui.DragFloat("FOV", &light.fov, 1)
-			imgui.Text("Movement")
+			imgui.SeparatorText("Movement")
 			imgui.DragFloat("Degrees", &light.rotationAngle, 0.001)
 			imgui.DragFloat3("Axis", &light.rotationAxis, 0.001)
 			imgui.BeginDisabled(len(scene.pointLights) == 1)
@@ -5680,7 +5793,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 					panic("Failed to wait for device?")
 				}
 				delete(light.name)
-				unordered_remove(&scene.pointLights, i)
+				unordered_remove(&scene.pointLights, index)
 				updateSceneLights(graphicsContext, activeScene)
 			}
 			imgui.EndDisabled()
@@ -5689,13 +5802,42 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 	}
 
 	constructObjectsHeader :: proc(using graphicsContext: ^GraphicsContext) {
-		for &instance in scenes[activeScene].instances {
+		scene := &scenes[activeScene]
+		for index := len(scene.instances) - 1; index >= 0; index -= 1 {
+			instance := &scene.instances[index]
 			if !imgui.TreeNode(instance.name) {
 				continue
 			}
 			imgui.DragFloat3("Position", &instance.position, 0.001)
 			imgui.DragFloat3("Rotation", &instance.rotation, 0.001)
 			imgui.DragFloat3("Scale", &instance.scale, 0.001)
+			imgui.SeparatorText("Animations")
+			animations := &scene.models[instance.modelID].animations
+			if len(animations) > 0 &&
+			   imgui.BeginCombo("Animation Selection", animations[instance.animID].name) {
+				for &anim, i in animations {
+					if instance.animID != u32(i) && imgui.Selectable(anim.name, false) {
+						instance.animID = u32(i)
+					}
+				}
+				imgui.EndCombo()
+			}
+			imgui.DragScalar("Animation Timer", .Double, &instance.animTimer, 0.01)
+			imgui.BeginDisabled(len(scene.instances) == 1)
+			if imgui.Button("Delete") {
+				delete(instance.name)
+				delete(instance.positionKeys)
+				delete(instance.rotationKeys)
+				delete(instance.scaleKeys)
+				scene.boneCount -= len(scene.models[instance.modelID].skeleton)
+				unordered_remove(&scene.instances, index)
+
+				if vk.DeviceWaitIdle(device) != .SUCCESS {
+					panic("Failed to wait for device idle?")
+				}
+				updateSceneInstanceBuffer(graphicsContext, activeScene)
+			}
+			imgui.EndDisabled()
 			imgui.TreePop()
 		}
 	}
@@ -5727,8 +5869,14 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 		if imgui.CollapsingHeader("Cameras") {
 			constructCamerasHeader(graphicsContext)
 			if imgui.Button("Add New") {
+				count: u32 = 0
+				for &camera in scene.cameras {
+					if strings.compare(string(camera.name)[:len(camera.name) - 3], "Camera") == 0 {
+						count += 1
+					}
+				}
 				newCamera: Camera = {
-					name     = strings.clone_to_cstring("new"),
+					name     = fmt.caprintf("Camera{:3d}", count),
 					eye      = {0.0, 0.2, -0.4},
 					center   = {0.0, 0.0, 0.0},
 					up       = {0.0, 1.0, 0.0},
@@ -5743,11 +5891,17 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 		if imgui.CollapsingHeader("Lights") {
 			constructLightsHeader(graphicsContext)
 			if imgui.Button("Add New") {
+				count: u32 = 0
+				for &light in scene.pointLights {
+					if strings.compare(string(light.name)[:len(light.name) - 3], "Light") == 0 {
+						count += 1
+					}
+				}
 				if vk.DeviceWaitIdle(device) != .SUCCESS {
 					panic("Failed to wait for device?")
 				}
 				newLight: PointLight = {
-					name            = strings.clone_to_cstring("new light"),
+					name            = fmt.caprintf("Light{:3d}", count),
 					position        = {0, 2, 0},
 					direction       = {0, -1, 0},
 					colourIntensity = {1, 1, 1},
@@ -5762,6 +5916,35 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 
 		if imgui.CollapsingHeader("Objects") {
 			constructObjectsHeader(graphicsContext)
+			if imgui.Button("Add New") {
+				count: u32 = 0
+				for &instance in scene.instances {
+					if strings.compare(string(instance.name)[:len(instance.name) - 3], "Object") ==
+					   0 {
+						count += 1
+					}
+				}
+				newInstance: Instance = {
+					name         = fmt.caprintf("Object{:3d}", count),
+					modelID      = 0,
+					animID       = 0,
+					textureID    = 0,
+					normalID     = 0,
+					position     = {0, 0, 0},
+					rotation     = {0, 0, 0},
+					scale        = {0.2, 0.2, 0.2},
+					positionKeys = make([]u32, len(scene.models[0].skeleton)),
+					rotationKeys = make([]u32, len(scene.models[0].skeleton)),
+					scaleKeys    = make([]u32, len(scene.models[0].skeleton)),
+					animTimer    = 0.0,
+				}
+				scene.boneCount += len(scene.models[0].skeleton)
+				append(&scene.instances, newInstance)
+				if vk.DeviceWaitIdle(device) != .SUCCESS {
+					panic("Failed to wait for device idle?")
+				}
+				updateSceneInstanceBuffer(graphicsContext, activeScene)
+			}
 		}
 	}
 
