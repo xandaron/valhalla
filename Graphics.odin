@@ -5720,7 +5720,7 @@ recordComputeBuffer :: proc(
 
 		vk.CmdBlitImage(
 			commandBuffer,
-			outImage.image,
+			outImage.vkImage,
 			.TRANSFER_SRC_OPTIMAL,
 			swapchainImages[imageIndex],
 			.TRANSFER_DST_OPTIMAL,
