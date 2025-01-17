@@ -194,76 +194,81 @@ calcFrameRate :: proc(window: glfw.WindowHandle) {
 glfwKeyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	context = runtime.default_context()
 	context.logger = logger
-	engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
-	if engineState.inMenu do return
-	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
-		glfw.SetWindowShouldClose(window, glfw.TRUE)
-	}
-	if key == glfw.KEY_D {
-		if action == glfw.PRESS {
-			cameraMove.x += 1
-		} else if action == glfw.RELEASE {
-			cameraMove.x -= 1
-		}
-	}
-	if key == glfw.KEY_A {
-		if action == glfw.PRESS {
-			cameraMove.x -= 1
-		} else if action == glfw.RELEASE {
-			cameraMove.x += 1
-		}
-	}
-	if key == glfw.KEY_SPACE {
-		if action == glfw.PRESS {
-			cameraMove.y += 1
-		} else if action == glfw.RELEASE {
-			cameraMove.y -= 1
-		}
-	}
-	if key == glfw.KEY_LEFT_SHIFT {
-		if action == glfw.PRESS {
-			cameraMove.y -= 1
-		} else if action == glfw.RELEASE {
-			cameraMove.y += 1
-		}
-	}
-	if key == glfw.KEY_W {
-		if action == glfw.PRESS {
-			cameraMove.z += 1
-		} else if action == glfw.RELEASE {
-			cameraMove.z -= 1
-		}
-	}
-	if key == glfw.KEY_S {
-		if action == glfw.PRESS {
-			cameraMove.z -= 1
-		} else if action == glfw.RELEASE {
-			cameraMove.z += 1
-		}
-	}
-	if key == glfw.KEY_C && action == glfw.PRESS {
-		graphicsContext := (^GraphicsContext)(glfw.GetWindowUserPointer(window))
-		scene := &graphicsContext.scenes[graphicsContext.activeScene]
-		camera := scene.cameras[scene.activeCamera]
-		log.logf(
-			.Debug,
-			"eye: ({}, {}, {}), center: ({}, {}, {}), up: ({}, {}, {})",
-			camera.eye.x,
-			camera.eye.y,
-			camera.eye.z,
-			camera.center.x,
-			camera.center.y,
-			camera.center.z,
-			camera.up.x,
-			camera.up.y,
-			camera.up.z,
-		)
-	}
-	if key == glfw.KEY_H && action == glfw.PRESS {
-		showDemo = !showDemo
-	}
-	if key == glfw.KEY_M && action == glfw.PRESS {
-		showMetrics = !showMetrics
+	using engineState := (^EngineState)(glfw.GetWindowUserPointer(window))
+	if inMenu do return
+	switch key {
+		case glfw.KEY_ESCAPE:
+			glfw.SetWindowShouldClose(window, glfw.TRUE)
+		case glfw.KEY_P:
+			if action == glfw.PRESS do paused = !paused
+		case glfw.KEY_D:
+			if action == glfw.PRESS {
+				cameraMove.x += 1
+			}
+			else if action == glfw.RELEASE {
+				cameraMove.x -= 1
+			}
+		case glfw.KEY_A:
+			if action == glfw.PRESS {
+				cameraMove.x -= 1
+			}
+			else if action == glfw.RELEASE {
+				cameraMove.x += 1
+			}
+		case glfw.KEY_SPACE:
+			if action == glfw.PRESS {
+				cameraMove.y += 1
+			}
+			else if action == glfw.RELEASE {
+				cameraMove.y -= 1
+			}
+		case glfw.KEY_LEFT_SHIFT:
+			if action == glfw.PRESS {
+				cameraMove.y -= 1
+			}
+			else if action == glfw.RELEASE {
+				cameraMove.y += 1
+			}
+		case glfw.KEY_W:
+			if action == glfw.PRESS {
+				cameraMove.z += 1
+			}
+			else if action == glfw.RELEASE {
+				cameraMove.z -= 1
+			}
+		case glfw.KEY_S:
+			if action == glfw.PRESS {
+				cameraMove.z -= 1
+			}
+			else if action == glfw.RELEASE {
+				cameraMove.z += 1
+			}
+		case glfw.KEY_C:
+			if action == glfw.PRESS {
+				scene := &graphicsContext.scenes[graphicsContext.activeScene]
+				camera := scene.cameras[scene.activeCamera]
+				log.logf(
+					.Debug,
+					"eye: ({}, {}, {}), center: ({}, {}, {}), up: ({}, {}, {})",
+					camera.eye.x,
+					camera.eye.y,
+					camera.eye.z,
+					camera.center.x,
+					camera.center.y,
+					camera.center.z,
+					camera.up.x,
+					camera.up.y,
+					camera.up.z,
+				)
+			}
+		case glfw.KEY_H:
+			if action == glfw.PRESS {
+				showDemo = !showDemo
+			}
+		case glfw.KEY_M:
+			if action == glfw.PRESS {
+				showMetrics = !showMetrics
+			}
 	}
 }
 
