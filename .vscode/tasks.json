@@ -9,7 +9,7 @@
             "command": "cmd",
             "args": [
                 "/C",
-                "if not exist \"./bin\" mkdir \"./bin\""
+                "if not exist ./bin mkdir ./bin"
             ]
         },
         {

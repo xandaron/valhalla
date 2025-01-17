@@ -5983,7 +5983,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 				continue
 			}
 			imgui.DragFloat3("Position", &light.position, 0.001)
-			imgui.DragFloat3("Colour", &light.colourIntensity, 0.001)
+			imgui.DragFloat3("Colour", &light.colourIntensity, 0.001, 0.0, 1.0)
 			imgui.DragFloat("FOV", &light.fov, 1)
 			imgui.SeparatorText("Movement")
 			imgui.DragFloat("Degrees", &light.rotationAngle, 0.001)
@@ -6258,8 +6258,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 					panic("Failed to wait for device idle?")
 				}
 				updateSceneModels(graphicsContext, activeScene)
-				append(&scene.texturePaths, ..newFilepaths[:count])
-				scene.textureCount += u32(count)
+				append(&scene.modelPaths, ..newFilepaths[:count])
 			}
 		}
 		ImFD.Close()
@@ -6272,7 +6271,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			defer ImFD.FreeResults()
 			newFilepaths := make([]cstring, fileCount)
 			defer delete(newFilepaths)
-			count := 0
+			count: u32 = 0
 			textureInner: for index in 0 ..< fileCount {
 				file := files[index]
 				for &loadedFile in scene.modelPaths {
@@ -6295,7 +6294,8 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 					newFilepaths[:count],
 				)
 				updateSceneTextures(graphicsContext, activeScene)
-				append(&scene.modelPaths, ..newFilepaths[:count])
+				append(&scene.texturePaths, ..newFilepaths[:count])
+				scene.textureCount += count
 			}
 		}
 		ImFD.Close()
@@ -6308,7 +6308,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 			defer ImFD.FreeResults()
 			newFilepaths := make([]cstring, fileCount)
 			defer delete(newFilepaths)
-			count := 0
+			count: u32 = 0
 			normalInner: for index in 0 ..< fileCount {
 				file := files[index]
 				foundMatch := false
@@ -6329,7 +6329,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 				addImages(graphicsContext, &scene.normals, scene.normalCount, newFilepaths[:count])
 				updateSceneNormals(graphicsContext, activeScene)
 				append(&scene.normalPaths, ..newFilepaths[:count])
-				scene.normalCount += u32(count)
+				scene.normalCount += count
 			}
 		}
 		ImFD.Close()
