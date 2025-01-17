@@ -62,6 +62,7 @@ odin build . -out:build/build.exe
 - [X] Fully featured GUI with scene save, load and editing with runtime asset import
 - [ ] HDR support
 - [ ] Raytracer
+- [ ] Add precompute step
 - [ ] Implement my own file dialog (ImFileDialog is great but I have issues with it)
 
 ## Contributing
