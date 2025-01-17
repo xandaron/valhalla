@@ -589,7 +589,7 @@ cleanupVkGraphics :: proc(using graphicsContext: ^GraphicsContext) {
 		panic("Failed to wait for device idle!")
 	}
 
-	for index in 0 ..< len(scenes) {
+	for index := len(scenes) - 1; index >= 0; index -= 1 {
 		cleanupScene(graphicsContext, u32(index))
 	}
 	delete(scenes)
@@ -6249,11 +6249,7 @@ drawUI :: proc(using graphicsContext: ^GraphicsContext) {
 				count += 1
 			}
 			if count != 0 {
-				loadModels(
-					graphicsContext,
-					activeScene,
-					newFilepaths[:count],
-				)
+				loadModels(graphicsContext, activeScene, newFilepaths[:count])
 				if vk.DeviceWaitIdle(device) != .SUCCESS {
 					panic("Failed to wait for device idle?")
 				}
