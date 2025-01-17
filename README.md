@@ -59,12 +59,10 @@ odin build . -out:build/build.exe
 - [X] Implement basic rendering pipeline
 - [X] Implement basic lighting
 - [X] Implement shadow mapping
-- [X] Add support for loading scenes
-- [X] Add GUI to edit scene objects and properties
-- [ ] Add support to store scenes
+- [X] Fully featured GUI with scene save, load and editing with runtime asset import
 - [ ] HDR support
 - [ ] Raytracer
-- [ ] Implement my own file dialog
+- [ ] Implement my own file dialog (ImFileDialog is great but I have issues with it)
 
 ## Contributing
 
