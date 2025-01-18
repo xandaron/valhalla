@@ -13,9 +13,10 @@ layout(binding = 3) readonly uniform UniformBuffer {
 } uniformBuffer;
 
 struct Light {
-    mat4 mvp;
     vec4 position;
     vec4 colourIntensity;
+    float near;
+    float far;
 };
 
 layout(binding = 4) readonly buffer LightBuffer {
@@ -34,7 +35,7 @@ void main() {
     for (uint i = 0; i < uniformBuffer.lightCount; i++) {
         vec4 lightPosition = uniformBuffer.viewProjection * lightBuffer.lights[i].position;
         lightPosition /= lightPosition.w;
-        if (texture(sceneDepth, screenPosition).r > lightPosition.z) {
+        if (lightPosition.z <= texture(sceneDepth, screenPosition).r) {
             float distanceFromLight = length(lightPosition.xy - (2 * screenPosition - 1));
             colour += (1 - lightPosition.z) * lightBuffer.lights[i].colourIntensity / distanceFromLight;
         }

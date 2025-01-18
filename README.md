@@ -38,6 +38,10 @@ odin build . -out:build/build.exe
 
 ## Demo
 
+![RGB Bunny Box](demo/RGB_Bunny_Box.gif)
+
+*The RGB Bunny Box showcases a rendered scene of the Stanford bunny inside a box, lit by Red, Green, and Blue point lights rotating around the Y-axis.*
+
 ![GUI Demo](demo/GUI_Demo.gif)
 
 *A demo of imgui in action.*
@@ -49,10 +53,6 @@ odin build . -out:build/build.exe
 ![CMY Bunny](demo/CMY_Bunny.gif)
 
 *The CMY Bunny demonstrates a rendered scene of the Stanford bunny illuminated by rotating Cyan, Magenta, and Yellow point lights around the Z-axis.*
-
-![RGB Bunny Box](demo/RGB_Bunny_Box.gif)
-
-*The RGB Bunny Box showcases a rendered scene of the Stanford bunny inside a box, lit by Red, Green, and Blue point lights rotating around the Y-axis.*
 
 ## Roadmap
 

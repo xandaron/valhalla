@@ -1,192 +1,171 @@
 {
-    "name": "Bunny Box",
-    "clear_colour": [
-        150,
-        150,
-        150,
-        255
-    ],
-    "ambient_light": 0.01,
-    "cameras": [
-        {
-            "name": "Main",
-            "eye": [
-                0.0,
-                0.2,
-                -0.4
-            ],
-            "center": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "up": [
-                0.0,
-                1.0,
-                0.0
-            ],
-            "distance": 0.447214,
-            "fov": 45.0,
-            "mode": 0
-        },
-        {
-            "name": "Secondary",
-            "eye": [
-                0.0,
-                0.2,
-                0.4
-            ],
-            "center": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "up": [
-                0.0,
-                1.0,
-                0.0
-            ],
-            "distance": 0.447214,
-            "fov": 45.0,
-            "mode": 0
-        }
-    ],
-    "lights": [
-        {
-            "name": "Red",
-            "position": [
-                0.0,
-                0.3,
-                0.2
-            ],
-            "direction": [
-                0.0,
-                -0.3,
-                -0.2
-            ],
-            "colour": [
-                1.0,
-                0.0,
-                0.0
-            ],
-            "intensity": 0.04,
-            "fov": 120.0,
-            "rotation_angle": 30.0,
-            "rotation_axis": [
-                0.0,
-                1.0,
-                0.0
-            ],
-            "type": 0
-        },
-        {
-            "name": "Green",
-            "position": [
-                0.1732050808,
-                0.3,
-                -0.1
-            ],
-            "direction": [
-                -0.1732050808,
-                -0.3,
-                0.1
-            ],
-            "colour": [
-                0.0,
-                1.0,
-                0.0
-            ],
-            "intensity": 0.04,
-            "fov": 120.0,
-            "rotation_angle": 30.0,
-            "rotation_axis": [
-                0.0,
-                1.0,
-                0.0
-            ],
-            "type": 0
-        },
-        {
-            "name": "Blue",
-            "position": [
-                -0.1732050808,
-                0.3,
-                -0.1
-            ],
-            "direction": [
-                0.1732050808,
-                0.3,
-                0.1
-            ],
-            "colour": [
-                0.0,
-                0.0,
-                1.0
-            ],
-            "intensity": 0.04,
-            "fov": 120.0,
-            "rotation_angle": 30.0,
-            "rotation_axis": [
-                0.0,
-                1.0,
-                0.0
-            ],
-            "type": 0
-        }
-    ],
-    "models": [
-        "./assets/models/bunny/bunny.fbx",
-        "./assets/models/cube/cube_inverted.fbx"
-    ],
-    "textures": [
-        "./assets/textures/white.jpg",
-        "./assets/models/cube/texture.jpg"
-    ],
-    "normals": [
-        "./assets/textures/normal.jpg"
-    ],
-    "instances": [
-        {
-            "name": "Bunny",
-            "model": 0,
-            "texture": 0,
-            "normal": 0,
-            "position": [
-                -0.02,
-                -0.1,
-                0.0
-            ],
-            "rotation": [
-                0.0,
-                180.0,
-                0.0
-            ],
-            "scale": [
-                1.0,
-                1.0,
-                1.0
-            ]
-        },
-        {
-            "name": "Box",
-            "model": 1,
-            "texture": 1,
-            "normal": 0,
-            "position": [
-                0.0,
-                0.14,
-                0.0
-            ],
-            "rotation": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "scale": [
-                0.2,
-                0.2,
-                0.2
-            ]
-        }
-    ]
+	"name": "Bunny Box",
+	"clear_colour": [
+		150,
+		150,
+		150,
+		255
+	],
+	"ambient_light": 0.01000000,
+	"cameras": [
+		{
+			"name": "Main",
+			"eye": [
+				0.09258774,
+				0.60162020,
+				-0.62369311
+			],
+			"center": [
+				0.00000000,
+				0.00000000,
+				0.00000000
+			],
+			"up": [
+				0.03743258,
+				0.95317811,
+				0.30009875
+			],
+			"distance": 0.87149370,
+			"fov": 45.00000000,
+			"mode": 0
+		},
+		{
+			"name": "Secondary",
+			"eye": [
+				0.00000000,
+				0.20000000,
+				0.40000001
+			],
+			"center": [
+				0.00000000,
+				0.00000000,
+				0.00000000
+			],
+			"up": [
+				0.00000000,
+				1.00000000,
+				0.00000000
+			],
+			"distance": 0.44721401,
+			"fov": 45.00000000,
+			"mode": 0
+		}
+	],
+	"lights": [
+		{
+			"name": "Blue",
+			"position": [
+				-0.14648424,
+				0.20000000,
+				-0.10458340
+			],
+			"colourIntensity": [
+				0.00000000,
+				0.00000000,
+				0.03000000
+			],
+			"fov": 120.00000000,
+			"rotationAngle": 10.00000000,
+			"rotationAxis": [
+				0.00000000,
+				1.00000000,
+				0.00000000
+			]
+		},
+		{
+			"name": "Red",
+			"position": [
+				0.15662837,
+				0.20000000,
+				-0.08870728
+			],
+			"colourIntensity": [
+				0.03000000,
+				0.00000000,
+				0.00000000
+			],
+			"fov": 120.00000000,
+			"rotationAngle": 10.00000000,
+			"rotationAxis": [
+				0.00000000,
+				1.00000000,
+				0.00000000
+			]
+		},
+		{
+			"name": "Green",
+			"position": [
+				0.00000000,
+				0.20000000,
+				0.18000001
+			],
+			"colourIntensity": [
+				0.00000000,
+				0.03000000,
+				0.00000000
+			],
+			"fov": 120.00000000,
+			"rotationAngle": 10.00000000,
+			"rotationAxis": [
+				0.00000000,
+				1.00000000,
+				0.00000000
+			]
+		}
+	],
+	"models": [
+		"./assets/models/bunny/bunny.fbx",
+		"./assets/models/cube/cube_inverted.fbx"
+	],
+	"textures": [
+		"./assets/textures/white.jpg",
+		"./assets/models/cube/texture.jpg"
+	],
+	"normals": [
+		"./assets/textures/normal.jpg"
+	],
+	"instances": [
+		{
+			"name": "Bunny",
+			"model": 0,
+			"texture": 0,
+			"normal": 0,
+			"position": [
+				-0.02000000,
+				-0.10000000,
+				0.00000000
+			],
+			"rotation": [
+				0.00000000,
+				180.00000000,
+				0.00000000
+			],
+			"scale": [
+				1.00000000,
+				1.00000000,
+				1.00000000
+			]
+		},
+		{
+			"name": "Box",
+			"model": 1,
+			"texture": 1,
+			"normal": 0,
+			"position": [
+				0.00000000,
+				0.14000000,
+				0.00000000
+			],
+			"rotation": [
+				0.00000000,
+				0.00000000,
+				0.00000000
+			],
+			"scale": [
+				0.20000000,
+				0.20000000,
+				0.20000000
+			]
+		}
+	]
 }

@@ -23,9 +23,10 @@ layout(binding = 2) readonly buffer BoneBuffer {
 } boneBuffer;
 
 struct Light {
-    mat4 mvp;
     vec4 position;
     vec4 colourIntensity;
+    float near;
+    float far;
 };
 
 layout(binding = 3) readonly buffer LightBuffer {
@@ -40,25 +41,27 @@ layout(location = 4) in vec4 inWeights;
 
 layout(location = 0) out vec4 outPosition;
 layout(location = 1) out vec2 outUV;
-layout(location = 2) out float outAlbedoTexture;
-layout(location = 3) out float outNormalTexture;
-layout(location = 4) out vec3 outNormal;
+layout(location = 2) out vec3 outNormal;
+layout(location = 3) out float outAlbedoIndex;
+layout(location = 4) out float outNormalIndex;
 
 void main() {
+    // This computation is being done 6 * #lights + 1 times per render.
+    // This should be done as part of a precompute step ---------------------------------------
     mat4 boneTransform = mat4(0.0);
     uint boneOffset = instanceBuffer.instanceInfo[gl_InstanceIndex].boneOffset;
-    
     boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[0]] * inWeights[0];
     boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[1]] * inWeights[1];
     boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[2]] * inWeights[2];
     boneTransform += boneBuffer.boneTransforms[boneOffset + inBones[3]] * inWeights[3];
-
     mat4 vertexTransform = instanceBuffer.instanceInfo[gl_InstanceIndex].model * boneTransform;
-    outPosition = vertexTransform * vec4(inPosition, 1.0);
+    // ----------------------------------------------------------------------------------------
 
+    outPosition = vertexTransform * vec4(inPosition, 1.0);
     gl_Position = uniformBuffer.viewProjection * outPosition;
+
     outUV = inUV.xy;
-    outAlbedoTexture = instanceBuffer.instanceInfo[gl_InstanceIndex].albedoSamplerOffset;
-    outNormalTexture = instanceBuffer.instanceInfo[gl_InstanceIndex].normalSamplerOffset;
     outNormal = normalize(mat3(vertexTransform) * inNormal);
+    outAlbedoIndex = instanceBuffer.instanceInfo[gl_InstanceIndex].albedoSamplerOffset;
+    outNormalIndex = instanceBuffer.instanceInfo[gl_InstanceIndex].normalSamplerOffset;
 }
